@@ -253,6 +253,13 @@ function textOfFirst(parent, tagName) {
   return node ? node.textContent.trim() : "";
 }
 
+function getDirectChild(parent, tagName) {
+  for (const node of parent.children || []) {
+    if (node.tagName === tagName) return node;
+  }
+  return null;
+}
+
 /* -----------------------------
    KML color = aabbggrr
 ----------------------------- */
@@ -293,13 +300,20 @@ function getLabelStyle(featureStyle) {
 }
 
 function getIconStyle(featureStyle) {
-  const base = kmlColorToCss(featureStyle?.iconColor, "#ffff00", 1);
+  const rawColor =
+    featureStyle?.iconColor ||
+    featureStyle?.lineColor ||
+    featureStyle?.labelColor ||
+    "#ffff00";
+
+  const base = kmlColorToCss(rawColor, "#ffff00", 1);
   const scale = Number(featureStyle?.iconScale || 1);
 
   return {
     color: base.color || "#ffff00",
     opacity: isFinite(base.opacity) ? base.opacity : 1,
-    scale: isFinite(scale) && scale > 0 ? scale : 1
+    scale: isFinite(scale) && scale > 0 ? scale : 1,
+    href: featureStyle?.iconHref || ""
   };
 }
 
@@ -408,62 +422,50 @@ function isSameCoord(a, b, tolerance = 0.15) {
   return latDiff <= tolerance && lonDiff <= tolerance;
 }
 
-function getRouteEndpoints(features) {
-  const routeLines = features.filter(f =>
-    f.type === "LineString" &&
-    Array.isArray(f.coords) &&
-    f.coords.length >= 2 &&
-    (
-      (f.style?.lineColor || "").toLowerCase().includes("ffd400") ||
-      (f.style?.lineColor || "").toLowerCase().includes("00d4ff")
-    )
+function isSpecialIconFeature(feature) {
+  const href = String(feature?.style?.iconHref || "").toLowerCase();
+  if (!href) return false;
+
+  return (
+    href.includes("airports") ||
+    href.includes("airplane") ||
+    href.includes("plane") ||
+    href.includes("track") ||
+    href.includes("aircraft")
   );
+}
 
-  if (!routeLines.length) {
-    const fallbackLines = features.filter(f =>
-      f.type === "LineString" &&
-      Array.isArray(f.coords) &&
-      f.coords.length >= 2
-    );
+function getRoutePointSequence(pointFeatures) {
+  return pointFeatures.filter(f =>
+    !isAirspaceLabelFeature(f) &&
+    !isSpecialIconFeature(f)
+  );
+}
 
-    if (!fallbackLines.length) {
-      return {
-        departureCoord: null,
-        destinationCoord: null
-      };
-    }
+function getRouteEndpointsFromPoints(pointFeatures) {
+  const routePoints = getRoutePointSequence(pointFeatures);
 
-    let longestFallback = fallbackLines[0];
-    for (const lf of fallbackLines) {
-      if (lf.coords.length > longestFallback.coords.length) {
-        longestFallback = lf;
-      }
-    }
-
+  if (!routePoints.length) {
     return {
-      departureCoord: longestFallback.coords[0],
-      destinationCoord: longestFallback.coords[longestFallback.coords.length - 1]
+      departureFeature: null,
+      destinationFeature: null,
+      departureCoord: null,
+      destinationCoord: null
     };
   }
 
-  let mainLine = routeLines[0];
-
-  for (const lf of routeLines) {
-    if (lf.coords.length > mainLine.coords.length) {
-      mainLine = lf;
-    }
-  }
-
   return {
-    departureCoord: mainLine.coords[0],
-    destinationCoord: mainLine.coords[mainLine.coords.length - 1]
+    departureFeature: routePoints[0],
+    destinationFeature: routePoints[routePoints.length - 1],
+    departureCoord: routePoints[0].coords,
+    destinationCoord: routePoints[routePoints.length - 1].coords
   };
 }
 
 function isEndpointPointFeature(feature, routeEndpoints) {
   return (
-    isSameCoord(feature.coords, routeEndpoints?.departureCoord) ||
-    isSameCoord(feature.coords, routeEndpoints?.destinationCoord)
+    feature === routeEndpoints?.departureFeature ||
+    feature === routeEndpoints?.destinationFeature
   );
 }
 
@@ -565,6 +567,53 @@ function parseCoordinates(coordText) {
     .filter(p => !isBadCoord(p.lat, p.lon));
 }
 
+function parseStyleNode(styleNode) {
+  if (!styleNode) return {};
+
+  const lineStyleNode = styleNode.getElementsByTagName("LineStyle")[0];
+  const polyStyleNode = styleNode.getElementsByTagName("PolyStyle")[0];
+  const labelStyleNode = styleNode.getElementsByTagName("LabelStyle")[0];
+  const iconStyleNode = styleNode.getElementsByTagName("IconStyle")[0];
+
+  const style = {};
+
+  if (lineStyleNode) {
+    style.lineColor = textOfFirst(lineStyleNode, "color");
+    style.lineWidth = parseFloat(textOfFirst(lineStyleNode, "width")) || 3;
+  }
+
+  if (polyStyleNode) {
+    style.polyColor = textOfFirst(polyStyleNode, "color");
+    const fillText = textOfFirst(polyStyleNode, "fill");
+    const outlineText = textOfFirst(polyStyleNode, "outline");
+    style.fill = fillText === "" ? true : fillText !== "0";
+    style.outline = outlineText === "" ? true : outlineText !== "0";
+  }
+
+  if (labelStyleNode) {
+    style.labelColor = textOfFirst(labelStyleNode, "color");
+    style.labelScale = parseFloat(textOfFirst(labelStyleNode, "scale")) || 1;
+  }
+
+  if (iconStyleNode) {
+    style.iconColor = textOfFirst(iconStyleNode, "color");
+    style.iconScale = parseFloat(textOfFirst(iconStyleNode, "scale")) || 1;
+    const iconNode = iconStyleNode.getElementsByTagName("Icon")[0];
+    if (iconNode) {
+      style.iconHref = textOfFirst(iconNode, "href");
+    }
+  }
+
+  return style;
+}
+
+function mergeStyles(baseStyle, overrideStyle) {
+  return {
+    ...(baseStyle || {}),
+    ...(overrideStyle || {})
+  };
+}
+
 function buildStyleIndex(xml) {
   const styleMap = {};
   const styleNodes = [...xml.getElementsByTagName("Style")];
@@ -572,42 +621,7 @@ function buildStyleIndex(xml) {
   styleNodes.forEach(styleNode => {
     const id = styleNode.getAttribute("id");
     if (!id) return;
-
-    const lineStyleNode = styleNode.getElementsByTagName("LineStyle")[0];
-    const polyStyleNode = styleNode.getElementsByTagName("PolyStyle")[0];
-    const labelStyleNode = styleNode.getElementsByTagName("LabelStyle")[0];
-    const iconStyleNode = styleNode.getElementsByTagName("IconStyle")[0];
-
-    const style = {};
-
-    if (lineStyleNode) {
-      style.lineColor = textOfFirst(lineStyleNode, "color");
-      style.lineWidth = parseFloat(textOfFirst(lineStyleNode, "width")) || 3;
-    }
-
-    if (polyStyleNode) {
-      style.polyColor = textOfFirst(polyStyleNode, "color");
-      const fillText = textOfFirst(polyStyleNode, "fill");
-      const outlineText = textOfFirst(polyStyleNode, "outline");
-      style.fill = fillText === "" ? true : fillText !== "0";
-      style.outline = outlineText === "" ? true : outlineText !== "0";
-    }
-
-    if (labelStyleNode) {
-      style.labelColor = textOfFirst(labelStyleNode, "color");
-      style.labelScale = parseFloat(textOfFirst(labelStyleNode, "scale")) || 1;
-    }
-
-    if (iconStyleNode) {
-      style.iconColor = textOfFirst(iconStyleNode, "color");
-      style.iconScale = parseFloat(textOfFirst(iconStyleNode, "scale")) || 1;
-      const iconNode = iconStyleNode.getElementsByTagName("Icon")[0];
-      if (iconNode) {
-        style.iconHref = textOfFirst(iconNode, "href");
-      }
-    }
-
-    styleMap["#" + id] = style;
+    styleMap["#" + id] = parseStyleNode(styleNode);
   });
 
   return styleMap;
@@ -678,7 +692,11 @@ function extractKMLFeatures(text) {
       styleUrl = styleMapIndex[styleUrl];
     }
 
-    const style = styleIndex[styleUrl] || {};
+    const sharedStyle = styleIndex[styleUrl] || {};
+    const inlineStyleNode = getDirectChild(pm, "Style");
+    const inlineStyle = parseStyleNode(inlineStyleNode);
+    const style = mergeStyles(sharedStyle, inlineStyle);
+
     const extraRows = buildExtendedDataRows(pm);
 
     const pointNodes = pm.getElementsByTagName("Point");
@@ -786,6 +804,24 @@ function drawKMLPoint(feature) {
     return;
   }
 
+  if (iconStyle.href) {
+    const iconSize = Math.max(18, Math.round(22 * iconStyle.scale));
+    const customIcon = L.icon({
+      iconUrl: iconStyle.href,
+      iconSize: [iconSize, iconSize],
+      iconAnchor: [iconSize / 2, iconSize / 2],
+      popupAnchor: [0, -12]
+    });
+
+    const marker = L.marker(latlng, {
+      icon: customIcon
+    }).addTo(map);
+
+    marker.bindPopup(popupHtml, { maxWidth: 360 });
+    drawn.addLayer(marker);
+    return;
+  }
+
   const markerColor = iconStyle.color || "#ffff00";
   const markerOpacity = iconStyle.opacity || 1;
   const markerRadius = Math.max(4, 4 * iconStyle.scale);
@@ -860,11 +896,11 @@ function drawKMLPolygon(feature) {
 function drawRouteEndpointMarkers(routeEndpoints) {
   if (!routeEndpoints) return;
 
-  const dep = routeEndpoints.departureCoord;
-  const dest = routeEndpoints.destinationCoord;
+  const depFeature = routeEndpoints.departureFeature;
+  const destFeature = routeEndpoints.destinationFeature;
 
-  if (dep) {
-    const depLatLng = [dep.lat, normalizePacificLon(dep.lon)];
+  if (depFeature?.coords) {
+    const depLatLng = [depFeature.coords.lat, normalizePacificLon(depFeature.coords.lon)];
 
     const departureIcon = L.icon({
       iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
@@ -878,12 +914,16 @@ function drawRouteEndpointMarkers(routeEndpoints) {
       zIndexOffset: 1000
     }).addTo(map);
 
-    depMarker.bindPopup(buildPopupHtml("Departure", "", []), { maxWidth: 260 });
+    depMarker.bindPopup(
+      buildPopupHtml(depFeature.name || "Departure", depFeature.description || "", depFeature.extraRows || []),
+      { maxWidth: 360 }
+    );
+
     drawn.addLayer(depMarker);
   }
 
-  if (dest) {
-    const destLatLng = [dest.lat, normalizePacificLon(dest.lon)];
+  if (destFeature?.coords) {
+    const destLatLng = [destFeature.coords.lat, normalizePacificLon(destFeature.coords.lon)];
 
     const destMarker = L.circleMarker(destLatLng, {
       radius: 7,
@@ -893,7 +933,11 @@ function drawRouteEndpointMarkers(routeEndpoints) {
       fillOpacity: 1
     }).addTo(map);
 
-    destMarker.bindPopup(buildPopupHtml("Destination", "", []), { maxWidth: 260 });
+    destMarker.bindPopup(
+      buildPopupHtml(destFeature.name || "Destination", destFeature.description || "", destFeature.extraRows || []),
+      { maxWidth: 360 }
+    );
+
     drawn.addLayer(destMarker);
   }
 }
@@ -906,7 +950,7 @@ function drawKMLFeatures(features, sourceName) {
   const pointFeatures = features.filter(f => f.type === "Point");
   const lineFeatures = features.filter(f => f.type === "LineString");
   const polygonFeatures = features.filter(f => f.type === "Polygon");
-  const routeEndpoints = getRouteEndpoints(features);
+  const routeEndpoints = getRouteEndpointsFromPoints(pointFeatures);
 
   lineFeatures.forEach(drawKMLLine);
   polygonFeatures.forEach(drawKMLPolygon);
@@ -925,6 +969,8 @@ function drawKMLFeatures(features, sourceName) {
     points: pointFeatures.length,
     lines: lineFeatures.length,
     polygons: polygonFeatures.length,
+    departureName: routeEndpoints.departureFeature?.name || "",
+    destinationName: routeEndpoints.destinationFeature?.name || "",
     departureCoord: routeEndpoints.departureCoord,
     destinationCoord: routeEndpoints.destinationCoord
   });
