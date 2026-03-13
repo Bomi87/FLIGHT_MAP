@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Flight Route Viewer</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -56,26 +56,18 @@ Loading route.gpx ...
 
 <script>
 
-const map = L.map('map').setView([42,160],3);
+const map=L.map('map').setView([42,160],3);
 
 L.tileLayer(
 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-{
-maxZoom:18,
-attribution:'© OpenStreetMap'
-}
+{maxZoom:18}
 ).addTo(map);
 
 const status=document.getElementById("status");
 
 function normalizeLon(lon){
-
-if(lon<0){
-return lon+360;
-}
-
+if(lon<0)return lon+360;
 return lon;
-
 }
 
 function parseGPX(xmlText){
@@ -100,6 +92,52 @@ return {lat,lon,name};
 
 }
 
+const waypointLabels=[];
+
+function updateLabels(points){
+
+const zoom=map.getZoom();
+
+waypointLabels.forEach(l=>map.removeLayer(l));
+waypointLabels.length=0;
+
+points.forEach((p,i)=>{
+
+let show=false;
+
+if(zoom<=3){
+show=(i===0||i===points.length-1);
+}
+
+else if(zoom<=5){
+show=(i===0||i===points.length-1||i%4===0);
+}
+
+else{
+show=true;
+}
+
+if(show){
+
+const latlng=[p.lat,normalizeLon(p.lon)];
+
+const label=L.marker(latlng,{
+interactive:false,
+icon:L.divIcon({
+className:"label",
+html:p.name,
+iconSize:null
+})
+}).addTo(map);
+
+waypointLabels.push(label);
+
+}
+
+});
+
+}
+
 fetch("route.gpx?v="+Date.now())
 
 .then(res=>{
@@ -110,10 +148,6 @@ return res.text();
 .then(text=>{
 
 const points=parseGPX(text);
-
-if(points.length<2){
-throw new Error("No route points");
-}
 
 const latlngs=points.map(p=>[p.lat,normalizeLon(p.lon)]);
 
@@ -127,17 +161,9 @@ points.forEach((p,i)=>{
 const latlng=[p.lat,normalizeLon(p.lon)];
 
 let iconColor="yellow";
-let label=p.name;
 
-if(i===0){
-iconColor="green";
-label="🛫 "+(p.name||"DEP");
-}
-
-if(i===points.length-1){
-iconColor="red";
-label="🛬 "+(p.name||"ARR");
-}
+if(i===0)iconColor="green";
+if(i===points.length-1)iconColor="red";
 
 const marker=L.circleMarker(latlng,{
 radius:5,
@@ -147,24 +173,15 @@ fillColor:iconColor,
 fillOpacity:1
 }).addTo(map);
 
-marker.bindPopup(label);
-
-if(i===0||i===points.length-1||i%4===0){
-
-L.marker(latlng,{
-interactive:false,
-icon:L.divIcon({
-className:"label",
-html:label,
-iconSize:null
-})
-}).addTo(map);
-
-}
+marker.bindPopup(p.name||"Waypoint");
 
 });
 
 map.fitBounds(route.getBounds(),{padding:[20,20]});
+
+updateLabels(points);
+
+map.on("zoomend",()=>updateLabels(points));
 
 status.innerHTML=
 "<b>Flight Route Loaded</b><br>"+
@@ -174,7 +191,6 @@ status.innerHTML=
 
 .catch(err=>{
 status.innerHTML="Error: "+err.message;
-console.error(err);
 });
 
 </script>
