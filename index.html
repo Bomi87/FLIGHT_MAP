@@ -1060,11 +1060,28 @@ function drawKMLFeatures(features, sourceName) {
   lineFeatures.forEach(drawKMLLine);
   polygonFeatures.forEach(drawKMLPolygon);
 
-  pointFeatures.forEach(f => {
-    if (!isEndpointPointFeature(f, routeEndpoints)) {
-      drawKMLPoint(f);
+ let lastAirspaceLabelName = "";
+
+pointFeatures.forEach(f => {
+  if (isEndpointPointFeature(f, routeEndpoints)) {
+    return;
+  }
+
+  if (isAirspaceLabelFeature(f)) {
+    const currentName = String(f.name || "").trim();
+
+    if (currentName && currentName === lastAirspaceLabelName) {
+      return;
     }
-  });
+
+    lastAirspaceLabelName = currentName;
+    drawKMLPoint(f);
+    return;
+  }
+
+  lastAirspaceLabelName = "";
+  drawKMLPoint(f);
+});
 
   drawRouteEndpointMarkers(routeEndpoints);
 
