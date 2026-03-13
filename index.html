@@ -26,20 +26,6 @@ html, body {
   width: 100%;
 }
 
-.panel {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 1000;
-  background: rgba(255,255,255,0.95);
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  max-width: 360px;
-  line-height: 1.45;
-}
-
 .popup-body {
   font-size: 12px;
   line-height: 1.45;
@@ -82,7 +68,6 @@ html, body {
 <body>
 
 <div id="map"></div>
-<div class="panel" id="status">Loading...</div>
 
 <script>
 const map = L.map('map', {
@@ -105,7 +90,6 @@ map.setMaxBounds([
   [85, 360]
 ]);
 
-const status = document.getElementById("status");
 const drawn = L.featureGroup().addTo(map);
 
 function getRequestedFile() {
@@ -137,7 +121,7 @@ function isBadCoord(lat, lon) {
   if (!isFinite(lat) || !isFinite(lon)) return true;
   if (Math.abs(lat) > 90) return true;
   if (Math.abs(lon) > 360) return true;
-  if (Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001) return true; // 0,0 제거
+  if (Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001) return true;
   return false;
 }
 
@@ -345,12 +329,7 @@ function drawGPXRoute(points, sourceName) {
   });
 
   fitDrawnBounds();
-
-  status.innerHTML =
-    "<b>Flight Route Loaded</b><br>" +
-    "File: " + escapeHtml(sourceName) + "<br>" +
-    "Type: GPX<br>" +
-    "Waypoints: " + points.length;
+  console.log("Flight Route Loaded:", sourceName, "GPX", points.length);
 }
 
 /* -----------------------------
@@ -591,14 +570,11 @@ function drawKMLFeatures(features, sourceName) {
   pointFeatures.forEach((f, i) => drawKMLPoint(f, i, pointFeatures.length));
 
   fitDrawnBounds();
-
-  status.innerHTML =
-    "<b>Flight Route Loaded</b><br>" +
-    "File: " + escapeHtml(sourceName) + "<br>" +
-    "Type: KML<br>" +
-    "Points: " + pointFeatures.length + "<br>" +
-    "Lines: " + lineFeatures.length + "<br>" +
-    "Polygons: " + polygonFeatures.length;
+  console.log("Flight Route Loaded:", sourceName, "KML", {
+    points: pointFeatures.length,
+    lines: lineFeatures.length,
+    polygons: polygonFeatures.length
+  });
 }
 
 /* -----------------------------
@@ -650,8 +626,8 @@ async function init() {
       await autoLoadDefault();
     }
   } catch (err) {
-    status.innerHTML = "Error: " + escapeHtml(err.message || err);
     console.error(err);
+    alert("Error: " + (err.message || err));
   }
 }
 
