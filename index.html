@@ -420,9 +420,29 @@ function getRouteEndpoints(features) {
   );
 
   if (!routeLines.length) {
+    const fallbackLines = features.filter(f =>
+      f.type === "LineString" &&
+      Array.isArray(f.coords) &&
+      f.coords.length >= 2
+    );
+
+    if (!fallbackLines.length) {
+      return {
+        departureCoord: null,
+        destinationCoord: null
+      };
+    }
+
+    let longestFallback = fallbackLines[0];
+    for (const lf of fallbackLines) {
+      if (lf.coords.length > longestFallback.coords.length) {
+        longestFallback = lf;
+      }
+    }
+
     return {
-      departureCoord: null,
-      destinationCoord: null
+      departureCoord: longestFallback.coords[0],
+      destinationCoord: longestFallback.coords[longestFallback.coords.length - 1]
     };
   }
 
@@ -438,6 +458,13 @@ function getRouteEndpoints(features) {
     departureCoord: mainLine.coords[0],
     destinationCoord: mainLine.coords[mainLine.coords.length - 1]
   };
+}
+
+function isEndpointPointFeature(feature, routeEndpoints) {
+  return (
+    isSameCoord(feature.coords, routeEndpoints?.departureCoord) ||
+    isSameCoord(feature.coords, routeEndpoints?.destinationCoord)
+  );
 }
 
 /* -----------------------------
@@ -721,7 +748,7 @@ function extractKMLFeatures(text) {
    KML draw
 ----------------------------- */
 
-function drawKMLPoint(feature, routeEndpoints) {
+function drawKMLPoint(feature) {
   const popupHtml = buildPopupHtml(
     feature.name || "Waypoint",
     feature.description || "",
@@ -731,75 +758,8 @@ function drawKMLPoint(feature, routeEndpoints) {
   const latlng = [feature.coords.lat, normalizePacificLon(feature.coords.lon)];
   const labelStyle = getLabelStyle(feature.style);
   const iconStyle = getIconStyle(feature.style);
-
-  const isDeparture = isSameCoord(feature.coords, routeEndpoints?.departureCoord);
-  const isDestination = isSameCoord(feature.coords, routeEndpoints?.destinationCoord);
   const isAirspaceLabel = isAirspaceLabelFeature(feature);
 
-  /* 출발지 먼저 */
-  if (isDeparture) {
-    const departureIcon = L.icon({
-      iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
-      popupAnchor: [0, -14]
-    });
-
-    const marker = L.marker(latlng, {
-      icon: departureIcon
-    }).addTo(map);
-
-    marker.bindPopup(popupHtml, { maxWidth: 360 });
-
-    if (feature.name) {
-      const fontSize = Math.max(12, Math.round(16 * labelStyle.scale));
-      const labelHtml =
-        `<span class="kml-label-text" style="color:${labelStyle.color}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(feature.name)}</span>`;
-
-      marker.bindTooltip(labelHtml, {
-        permanent: true,
-        direction: "right",
-        offset: [10, 0],
-        className: "kml-label",
-        opacity: 1
-      });
-    }
-
-    drawn.addLayer(marker);
-    return;
-  }
-
-  /* 목적지 다음 */
-  if (isDestination) {
-    const marker = L.circleMarker(latlng, {
-      radius: Math.max(5, 4 * iconStyle.scale),
-      color: "#222",
-      weight: 1,
-      fillColor: "#0000ff",
-      fillOpacity: 1
-    }).addTo(map);
-
-    marker.bindPopup(popupHtml, { maxWidth: 360 });
-
-    if (feature.name) {
-      const fontSize = Math.max(12, Math.round(16 * labelStyle.scale));
-      const labelHtml =
-        `<span class="kml-label-text" style="color:${labelStyle.color}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(feature.name)}</span>`;
-
-      marker.bindTooltip(labelHtml, {
-        permanent: true,
-        direction: "right",
-        offset: [10, 0],
-        className: "kml-label",
-        opacity: 1
-      });
-    }
-
-    drawn.addLayer(marker);
-    return;
-  }
-
-  /* 그 외 영공 라벨 */
   if (isAirspaceLabel) {
     const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
     const fontSize = Math.max(12, Math.round(16 * labelStyle.scale));
@@ -826,7 +786,6 @@ function drawKMLPoint(feature, routeEndpoints) {
     return;
   }
 
-  /* 일반 waypoint */
   const markerColor = iconStyle.color || "#ffff00";
   const markerOpacity = iconStyle.opacity || 1;
   const markerRadius = Math.max(4, 4 * iconStyle.scale);
@@ -898,6 +857,47 @@ function drawKMLPolygon(feature) {
   drawn.addLayer(polygon);
 }
 
+function drawRouteEndpointMarkers(routeEndpoints) {
+  if (!routeEndpoints) return;
+
+  const dep = routeEndpoints.departureCoord;
+  const dest = routeEndpoints.destinationCoord;
+
+  if (dep) {
+    const depLatLng = [dep.lat, normalizePacificLon(dep.lon)];
+
+    const departureIcon = L.icon({
+      iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+      popupAnchor: [0, -14]
+    });
+
+    const depMarker = L.marker(depLatLng, {
+      icon: departureIcon,
+      zIndexOffset: 1000
+    }).addTo(map);
+
+    depMarker.bindPopup(buildPopupHtml("Departure", "", []), { maxWidth: 260 });
+    drawn.addLayer(depMarker);
+  }
+
+  if (dest) {
+    const destLatLng = [dest.lat, normalizePacificLon(dest.lon)];
+
+    const destMarker = L.circleMarker(destLatLng, {
+      radius: 7,
+      color: "#222",
+      weight: 1,
+      fillColor: "#0000ff",
+      fillOpacity: 1
+    }).addTo(map);
+
+    destMarker.bindPopup(buildPopupHtml("Destination", "", []), { maxWidth: 260 });
+    drawn.addLayer(destMarker);
+  }
+}
+
 function drawKMLFeatures(features, sourceName) {
   if (!features.length) {
     throw new Error("No valid features in KML");
@@ -910,7 +910,14 @@ function drawKMLFeatures(features, sourceName) {
 
   lineFeatures.forEach(drawKMLLine);
   polygonFeatures.forEach(drawKMLPolygon);
-  pointFeatures.forEach(f => drawKMLPoint(f, routeEndpoints));
+
+  pointFeatures.forEach(f => {
+    if (!isEndpointPointFeature(f, routeEndpoints)) {
+      drawKMLPoint(f);
+    }
+  });
+
+  drawRouteEndpointMarkers(routeEndpoints);
 
   fitDrawnBounds();
 
