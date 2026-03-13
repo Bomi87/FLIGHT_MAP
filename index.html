@@ -410,23 +410,28 @@ function isSameCoord(a, b, tolerance = 0.05) {
 }
 
 function getRouteEndpoints(features) {
-  const lineFeatures = features.filter(f =>
+
+  const routeLines = features.filter(f =>
     f.type === "LineString" &&
     Array.isArray(f.coords) &&
-    f.coords.length >= 2
+    f.coords.length >= 2 &&
+    (
+      f.style?.lineColor?.toLowerCase().includes("ffd400") ||
+      f.style?.lineColor?.toLowerCase().includes("00d4ff")
+    )
   );
 
-  if (!lineFeatures.length) {
+  if (!routeLines.length) {
     return {
       departureCoord: null,
       destinationCoord: null
     };
   }
 
-  let mainLine = lineFeatures[0];
+  let mainLine = routeLines[0];
 
-  for (const lf of lineFeatures) {
-    if ((lf.coords?.length || 0) > (mainLine.coords?.length || 0)) {
+  for (const lf of routeLines) {
+    if (lf.coords.length > mainLine.coords.length) {
       mainLine = lf;
     }
   }
@@ -436,6 +441,7 @@ function getRouteEndpoints(features) {
     destinationCoord: mainLine.coords[mainLine.coords.length - 1]
   };
 }
+
 
 /* -----------------------------
    GPX
