@@ -1,60 +1,265 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-<meta charset="utf-8">
-<title>Flight Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flight Route Map</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-omnivore/leaflet-omnivore.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<style>
-#map { height:100vh; }
-</style>
-</head>
+  <!-- GPX/KML -> GeoJSON 변환용 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
 
-<body>
+  <!-- 대권항로(geodesic) 표시용 -->
+  <script src="https://cdn.jsdelivr.net/npm/leaflet.geodesic@2.7.2/dist/leaflet.geodesic.umd.min.js"></script>
 
-<div id="map"></div>
-
-<script>
-
-var map = L.map('map').setView([40,160],3);
-
-L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-).addTo(map);
-
-function loadKML(){
-    var layer = omnivore.kml('route.kml')
-    .on('ready', function(){
-        map.fitBounds(layer.getBounds());
-    })
-    .addTo(map);
-}
-
-function loadGPX(){
-    new L.GPX('route.gpx',{
-        async:true
-    }).on('loaded',function(e){
-        map.fitBounds(e.target.getBounds());
-    }).addTo(map);
-}
-
-fetch("route.kml")
-.then(r=>{
-    if(r.ok){
-        loadKML();
-    } else {
-        loadGPX();
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
     }
-})
-.catch(()=>{
-    loadGPX();
-});
 
-</script>
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
 
+    .panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(255,255,255,0.95);
+      padding: 10px 12px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 320px;
+    }
+
+    .status {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(255,255,255,0.95);
+      padding: 8px 10px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+      font-size: 13px;
+      max-width: 340px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="panel">
+    <div><b>Flight Route Viewer</b></div>
+    <div>• route.kml 또는 route.gpx 중 하나만 업로드</div>
+    <div>• 항공 루트는 geodesic(대권항로)로 표시</div>
+    <div>• waypoint / polygon도 함께 표시</div>
+  </div>
+
+  <div class="status" id="status">파일을 찾는 중...</div>
+
+  <script>
+    const map = L.map('map', {
+      worldCopyJump: false,
+      preferCanvas: true
+    }).setView([38, 140], 3);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const statusEl = document.getElementById('status');
+    const boundsGroup = L.featureGroup().addTo(map);
+
+    function setStatus(msg) {
+      statusEl.innerHTML = msg;
+    }
+
+    function addBoundsLayer(layer) {
+      boundsGroup.addLayer(layer);
+      try {
+        const b = boundsGroup.getBounds();
+        if (b.isValid()) {
+          map.fitBounds(b, { padding: [20, 20] });
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    function normalizeLng(lng) {
+      let x = lng;
+      while (x > 180) x -= 360;
+      while (x < -180) x += 360;
+      return x;
+    }
+
+    function coordsToLatLngs(coords) {
+      return coords.map(c => [c[1], normalizeLng(c[0])]);
+    }
+
+    function drawPoint(feature, coords) {
+      const latlng = [coords[1], normalizeLng(coords[0])];
+      const name = (feature.properties && (feature.properties.name || feature.properties.title)) || 'Waypoint';
+
+      const marker = L.circleMarker(latlng, {
+        radius: 5,
+        color: '#333',
+        weight: 2,
+        fillColor: '#ffcc00',
+        fillOpacity: 1
+      }).bindPopup(`<b>${name}</b>`);
+
+      marker.addTo(map);
+      addBoundsLayer(marker);
+    }
+
+    function drawLine(feature, coords) {
+      const latlngs = coordsToLatLngs(coords);
+
+      const geodesic = L.geodesic(latlngs, {
+        wrap: false,
+        steps: 128,
+        color: '#ffd400',
+        weight: 4,
+        opacity: 0.95
+      }).addTo(map);
+
+      const name = (feature.properties && (feature.properties.name || feature.properties.title)) || 'Route';
+      geodesic.bindPopup(`<b>${name}</b>`);
+      addBoundsLayer(geodesic);
+    }
+
+    function drawMultiLine(feature, multiCoords) {
+      multiCoords.forEach(line => drawLine(feature, line));
+    }
+
+    function drawPolygon(feature, rings) {
+      // polygon은 일반 leaflet polygon으로 그림
+      // 항공 루트 핵심 문제는 line이라 polygon은 기본 처리
+      const latlngRings = rings.map(ring => coordsToLatLngs(ring));
+
+      const polygon = L.polygon(latlngRings, {
+        color: '#00aa55',
+        weight: 2,
+        opacity: 0.9,
+        fillColor: '#00cc66',
+        fillOpacity: 0.2
+      }).addTo(map);
+
+      const name = (feature.properties && (feature.properties.name || feature.properties.title)) || 'Polygon';
+      polygon.bindPopup(`<b>${name}</b>`);
+      addBoundsLayer(polygon);
+    }
+
+    function drawMultiPolygon(feature, polygons) {
+      polygons.forEach(poly => drawPolygon(feature, poly));
+    }
+
+    function renderGeoJSON(geojson) {
+      if (!geojson || !geojson.features || !geojson.features.length) {
+        setStatus('표시할 feature가 없습니다.');
+        return;
+      }
+
+      let lineCount = 0;
+      let pointCount = 0;
+      let polyCount = 0;
+
+      geojson.features.forEach(feature => {
+        if (!feature.geometry) return;
+
+        const type = feature.geometry.type;
+        const coords = feature.geometry.coordinates;
+
+        if (type === 'Point') {
+          drawPoint(feature, coords);
+          pointCount++;
+        } else if (type === 'LineString') {
+          drawLine(feature, coords);
+          lineCount++;
+        } else if (type === 'MultiLineString') {
+          drawMultiLine(feature, coords);
+          lineCount++;
+        } else if (type === 'Polygon') {
+          drawPolygon(feature, coords);
+          polyCount++;
+        } else if (type === 'MultiPolygon') {
+          drawMultiPolygon(feature, coords);
+          polyCount++;
+        } else if (type === 'GeometryCollection' && feature.geometry.geometries) {
+          feature.geometry.geometries.forEach(g => {
+            if (g.type === 'Point') {
+              drawPoint(feature, g.coordinates);
+              pointCount++;
+            } else if (g.type === 'LineString') {
+              drawLine(feature, g.coordinates);
+              lineCount++;
+            } else if (g.type === 'MultiLineString') {
+              drawMultiLine(feature, g.coordinates);
+              lineCount++;
+            } else if (g.type === 'Polygon') {
+              drawPolygon(feature, g.coordinates);
+              polyCount++;
+            } else if (g.type === 'MultiPolygon') {
+              drawMultiPolygon(feature, g.coordinates);
+              polyCount++;
+            }
+          });
+        }
+      });
+
+      setStatus(
+        `불러오기 완료<br>` +
+        `• Route: ${lineCount}<br>` +
+        `• Waypoint: ${pointCount}<br>` +
+        `• Polygon: ${polyCount}`
+      );
+    }
+
+    async function loadXmlFile(filename) {
+      const res = await fetch(filename + '?v=' + Date.now());
+      if (!res.ok) {
+        throw new Error(filename + ' not found');
+      }
+      const text = await res.text();
+      const parser = new DOMParser();
+      return parser.parseFromString(text, 'text/xml');
+    }
+
+    async function tryLoadRoute() {
+      try {
+        const gpxDoc = await loadXmlFile('route.gpx');
+        const geojson = toGeoJSON.gpx(gpxDoc);
+        renderGeoJSON(geojson);
+        setStatus('GPX 불러오기 완료');
+        return;
+      } catch (e1) {
+        try {
+          const kmlDoc = await loadXmlFile('route.kml');
+          const geojson = toGeoJSON.kml(kmlDoc);
+          renderGeoJSON(geojson);
+          setStatus('KML 불러오기 완료');
+          return;
+        } catch (e2) {
+          console.error(e1);
+          console.error(e2);
+          setStatus('route.gpx 또는 route.kml 파일을 찾지 못했습니다.');
+        }
+      }
+    }
+
+    tryLoadRoute();
+  </script>
 </body>
 </html>
