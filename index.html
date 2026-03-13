@@ -1,113 +1,183 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Flight Map</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Flight Route Viewer</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-    }
+<style>
 
-    #map {
-      width: 100%;
-      height: 100vh;
-    }
+html,body{
+margin:0;
+padding:0;
+height:100%;
+width:100%;
+}
 
-    .info {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 1000;
-      background: rgba(255,255,255,0.95);
-      padding: 8px 10px;
-      border-radius: 8px;
-      font-size: 13px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-    }
-  </style>
+#map{
+height:100vh;
+width:100%;
+}
+
+.panel{
+position:absolute;
+top:10px;
+left:10px;
+z-index:1000;
+background:rgba(255,255,255,0.95);
+padding:10px 12px;
+border-radius:8px;
+font-size:13px;
+box-shadow:0 2px 8px rgba(0,0,0,0.2);
+}
+
+.label{
+background:white;
+border:1px solid #666;
+padding:1px 4px;
+font-size:11px;
+border-radius:4px;
+white-space:nowrap;
+}
+
+</style>
 </head>
+
 <body>
-  <div id="map"></div>
-  <div class="info" id="info">Loading route.gpx ...</div>
 
-  <script>
-    const map = L.map('map').setView([40, 160], 3);
+<div id="map"></div>
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+<div class="panel" id="status">
+Loading route.gpx ...
+</div>
 
-    const info = document.getElementById('info');
+<script>
 
-    function parseGPX(xmlText) {
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(xmlText, "text/xml");
-      const rtepts = Array.from(xml.getElementsByTagName("rtept"));
+const map = L.map('map').setView([42,160],3);
 
-      return rtepts.map(pt => {
-        const lat = parseFloat(pt.getAttribute("lat"));
-        const lon = parseFloat(pt.getAttribute("lon"));
-        const nameNode = pt.getElementsByTagName("name")[0];
-        const name = nameNode ? nameNode.textContent : "";
-        return { lat, lon, name };
-      });
-    }
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{
+maxZoom:18,
+attribution:'© OpenStreetMap'
+}
+).addTo(map);
 
-    function normalizeLon(lon) {
-      if (lon < 0) return lon + 360;
-      return lon;
-    }
+const status=document.getElementById("status");
 
-    fetch("route.gpx?v=" + Date.now())
-      .then(res => {
-        if (!res.ok) throw new Error("route.gpx not found");
-        return res.text();
-      })
-      .then(text => {
-        const points = parseGPX(text);
+function normalizeLon(lon){
 
-        if (!points.length) {
-          throw new Error("No rtept found in route.gpx");
-        }
+if(lon<0){
+return lon+360;
+}
 
-        const latlngs = points.map(p => [p.lat, normalizeLon(p.lon)]);
+return lon;
 
-        const polyline = L.polyline(latlngs, {
-          color: "blue",
-          weight: 4
-        }).addTo(map);
+}
 
-        points.forEach((p, i) => {
-          const marker = L.circleMarker([p.lat, normalizeLon(p.lon)], {
-            radius: 4,
-            color: "#222",
-            weight: 1,
-            fillColor: "yellow",
-            fillOpacity: 1
-          }).addTo(map);
+function parseGPX(xmlText){
 
-          if (i === 0 || i === points.length - 1 || i % 4 === 0) {
-            marker.bindPopup((p.name || "Waypoint") + "<br>" + p.lat + ", " + p.lon);
-          }
-        });
+const parser=new DOMParser();
+const xml=parser.parseFromString(xmlText,"text/xml");
 
-        map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
-        info.innerHTML = "Loaded route.gpx (" + points.length + " points)";
-      })
-      .catch(err => {
-        console.error(err);
-        info.innerHTML = "Error: " + err.message;
-        alert("GPX load failed: " + err.message);
-      });
-  </script>
+const pts=[...xml.getElementsByTagName("rtept")];
+
+return pts.map(p=>{
+
+const lat=parseFloat(p.getAttribute("lat"));
+const lon=parseFloat(p.getAttribute("lon"));
+
+const nameNode=p.getElementsByTagName("name")[0];
+
+const name=nameNode?nameNode.textContent:"";
+
+return {lat,lon,name};
+
+});
+
+}
+
+fetch("route.gpx?v="+Date.now())
+
+.then(res=>{
+if(!res.ok)throw new Error("route.gpx not found");
+return res.text();
+})
+
+.then(text=>{
+
+const points=parseGPX(text);
+
+if(points.length<2){
+throw new Error("No route points");
+}
+
+const latlngs=points.map(p=>[p.lat,normalizeLon(p.lon)]);
+
+const route=L.polyline(latlngs,{
+color:"#FFD400",
+weight:5
+}).addTo(map);
+
+points.forEach((p,i)=>{
+
+const latlng=[p.lat,normalizeLon(p.lon)];
+
+let iconColor="yellow";
+let label=p.name;
+
+if(i===0){
+iconColor="green";
+label="🛫 "+(p.name||"DEP");
+}
+
+if(i===points.length-1){
+iconColor="red";
+label="🛬 "+(p.name||"ARR");
+}
+
+const marker=L.circleMarker(latlng,{
+radius:5,
+color:"#222",
+weight:1,
+fillColor:iconColor,
+fillOpacity:1
+}).addTo(map);
+
+marker.bindPopup(label);
+
+if(i===0||i===points.length-1||i%4===0){
+
+L.marker(latlng,{
+interactive:false,
+icon:L.divIcon({
+className:"label",
+html:label,
+iconSize:null
+})
+}).addTo(map);
+
+}
+
+});
+
+map.fitBounds(route.getBounds(),{padding:[20,20]});
+
+status.innerHTML=
+"<b>Flight Route Loaded</b><br>"+
+"Waypoints: "+points.length;
+
+})
+
+.catch(err=>{
+status.innerHTML="Error: "+err.message;
+console.error(err);
+});
+
+</script>
+
 </body>
 </html>
