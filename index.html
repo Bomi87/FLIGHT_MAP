@@ -838,6 +838,24 @@ function drawKMLPoint(feature) {
     return;
   }
 
+  if (iconStyle.href) {
+   const iconSize = Math.max(12, Math.round(16 * iconStyle.scale));
+    const customIcon = L.icon({
+      iconUrl: iconStyle.href,
+      iconSize: [iconSize, iconSize],
+      iconAnchor: [iconSize / 2, iconSize / 2],
+      popupAnchor: [0, -12]
+    });
+
+    const marker = L.marker(latlng, {
+      icon: customIcon
+    }).addTo(map);
+
+    marker.bindPopup(popupHtml, { maxWidth: 360 });
+    drawn.addLayer(marker);
+    return;
+  }
+
   const markerColor = iconStyle.color || "#ffff00";
   const markerOpacity = iconStyle.opacity || 1;
   const markerRadius = Math.max(4, 4 * iconStyle.scale);
@@ -853,7 +871,6 @@ function drawKMLPoint(feature) {
   marker.bindPopup(popupHtml, { maxWidth: 360 });
   drawn.addLayer(marker);
 }
-
 
 function drawKMLLine(feature) {
   const lineStyle = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
@@ -919,12 +936,12 @@ function drawRouteEndpointMarkers(routeEndpoints) {
   if (depFeature?.coords) {
     const depLatLng = [depFeature.coords.lat, normalizePacificLon(depFeature.coords.lon)];
 
-    const departureIcon = L.icon({
-      iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
-      popupAnchor: [0, -14]
-    });
+const departureIcon = L.icon({
+  iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+  popupAnchor: [0, -10]
+});
 
     const depMarker = L.marker(depLatLng, {
       icon: departureIcon,
