@@ -3,12 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Flight Route Map</title>
+  <title>Pacific Flight Route</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/leaflet.geodesic@2.7.2/dist/leaflet.geodesic.umd.min.js"></script>
 
   <style>
     html, body {
@@ -37,27 +35,14 @@
       max-width: 340px;
     }
 
-    .status {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      z-index: 1000;
-      background: rgba(255,255,255,0.95);
-      padding: 8px 10px;
-      border-radius: 10px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.18);
-      font-size: 13px;
-      max-width: 360px;
-    }
-
-    .waypoint-label {
-      background: rgba(255,255,255,0.85);
+    .label {
+      background: rgba(255,255,255,0.88);
       border: 1px solid #666;
       border-radius: 4px;
       padding: 1px 4px;
       font-size: 11px;
       color: #111;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      white-space: nowrap;
     }
   </style>
 </head>
@@ -65,247 +50,157 @@
   <div id="map"></div>
 
   <div class="panel">
-    <div><b>Flight Route Viewer</b></div>
-    <div>• route.kml 또는 route.gpx 중 하나만 업로드</div>
-    <div>• waypoint 기준으로 항공 루트 재구성</div>
-    <div>• 날짜변경선(180°) 자동 분할</div>
+    <div><b>Pacific Flight Route Viewer</b></div>
+    <div>• route.gpx 전용</div>
+    <div>• 날짜변경선(180°) 분할 처리</div>
+    <div>• 태평양 중심 표시</div>
   </div>
-
-  <div class="status" id="status">파일 읽는 중...</div>
 
   <script>
     const map = L.map('map', {
-      worldCopyJump: false,
-      preferCanvas: true
-    }).setView([40, 160], 3);
+      worldCopyJump: false
+    }).setView([45, 180], 3);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
+      noWrap: false,
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    const statusEl = document.getElementById('status');
-    const boundsGroup = L.featureGroup().addTo(map);
+    function parseGPX(xmlText) {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlText, "text/xml");
+      const rtepts = [...xml.getElementsByTagName("rtept")];
 
-    function setStatus(msg) {
-      statusEl.innerHTML = msg;
+      return rtepts.map(pt => {
+        const lat = parseFloat(pt.getAttribute("lat"));
+        const lon = parseFloat(pt.getAttribute("lon"));
+        const nameEl = pt.getElementsByTagName("name")[0];
+        const name = nameEl ? nameEl.textContent : "";
+        return { lat, lon, name };
+      });
     }
 
-    function addToBounds(layer) {
-      boundsGroup.addLayer(layer);
-      try {
-        const b = boundsGroup.getBounds();
-        if (b.isValid()) {
-          map.fitBounds(b, { padding: [20, 20] });
-        }
-      } catch (e) {
-        console.warn(e);
+    function crossAntimeridian(lon1, lon2) {
+      return Math.abs(lon2 - lon1) > 180;
+    }
+
+    function interpolateCrossing(p1, p2) {
+      const lon1 = p1.lon;
+      const lon2 = p2.lon;
+
+      let targetLon;
+      let adjustedLon2 = lon2;
+
+      if (lon1 > 0 && lon2 < 0) {
+        targetLon = 180;
+        adjustedLon2 = lon2 + 360;
+      } else if (lon1 < 0 && lon2 > 0) {
+        targetLon = -180;
+        adjustedLon2 = lon2 - 360;
+      } else {
+        return null;
       }
+
+      const t = (targetLon - lon1) / (adjustedLon2 - lon1);
+      const lat = p1.lat + (p2.lat - p1.lat) * t;
+
+      return { lat, lon: targetLon };
     }
 
-    function normalizeLng(lng) {
-      let x = lng;
-      while (x > 180) x -= 360;
-      while (x < -180) x += 360;
-      return x;
-    }
-
-    function signedLngDiff(a, b) {
-      let d = b - a;
-      while (d > 180) d -= 360;
-      while (d < -180) d += 360;
-      return d;
-    }
-
-    function splitAntimeridian(latlngs) {
-      if (!latlngs || latlngs.length < 2) return [latlngs];
+    function splitRoute(points) {
+      if (points.length < 2) return [points];
 
       const segments = [];
-      let current = [latlngs[0]];
+      let current = [points[0]];
 
-      for (let i = 1; i < latlngs.length; i++) {
-        const p1 = latlngs[i - 1];
-        const p2 = latlngs[i];
+      for (let i = 1; i < points.length; i++) {
+        const prev = points[i - 1];
+        const curr = points[i];
 
-        const lat1 = p1[0], lon1 = normalizeLng(p1[1]);
-        const lat2 = p2[0], lon2 = normalizeLng(p2[1]);
+        if (crossAntimeridian(prev.lon, curr.lon)) {
+          const crossing = interpolateCrossing(prev, curr);
 
-        let rawDiff = lon2 - lon1;
-        let wrappedDiff = signedLngDiff(lon1, lon2);
+          if (crossing) {
+            current.push(crossing);
+            segments.push(current);
 
-        // 180도 경선 넘는 경우
-        if (Math.abs(rawDiff) > 180) {
-          const crossingLon1 = rawDiff > 0 ? -180 : 180;
-          const crossingLon2 = rawDiff > 0 ? 180 : -180;
-
-          const adjustedLon2 = lon1 + wrappedDiff;
-          const t = (crossingLon1 - lon1) / (adjustedLon2 - lon1);
-          const crossingLat = lat1 + (lat2 - lat1) * t;
-
-          current.push([crossingLat, crossingLon1]);
-          segments.push(current);
-
-          current = [[crossingLat, crossingLon2], [lat2, lon2]];
+            const restartLon = crossing.lon === 180 ? -180 : 180;
+            current = [
+              { lat: crossing.lat, lon: restartLon, name: "" },
+              curr
+            ];
+          } else {
+            current.push(curr);
+          }
         } else {
-          current.push([lat2, lon2]);
+          current.push(curr);
         }
       }
 
-      if (current.length > 0) {
-        segments.push(current);
-      }
-
+      if (current.length > 0) segments.push(current);
       return segments;
     }
 
-    function drawWaypoint(lat, lng, name) {
-      const latlng = [lat, normalizeLng(lng)];
-
-      const marker = L.circleMarker(latlng, {
-        radius: 5,
-        color: '#333',
-        weight: 2,
-        fillColor: '#ffd400',
-        fillOpacity: 1
-      }).bindPopup(`<b>${name || 'Waypoint'}</b>`).addTo(map);
-
-      // 상시 라벨
-      L.marker(latlng, {
-        interactive: false,
-        icon: L.divIcon({
-          className: 'waypoint-label',
-          html: name || '',
-          iconSize: null
-        })
-      }).addTo(map);
-
-      addToBounds(marker);
-    }
-
-    function drawRouteFromWaypoints(points) {
-      if (!points || points.length < 2) return;
-
-      const latlngs = points.map(p => [p.lat, normalizeLng(p.lng)]);
-      const segments = splitAntimeridian(latlngs);
+    function drawRoute(points) {
+      const segments = splitRoute(points);
 
       segments.forEach(seg => {
-        const geodesic = L.geodesic(seg, {
-          wrap: false,
-          steps: 128,
-          color: '#ffd400',
+        const latlngs = seg.map(p => [p.lat, p.lon]);
+        L.polyline(latlngs, {
+          color: '#1565ff',
           weight: 4,
           opacity: 0.95
         }).addTo(map);
-
-        addToBounds(geodesic);
       });
     }
 
-    function drawPolygon(coords, name) {
-      const latlngRings = coords.map(ring =>
-        ring.map(c => [c[1], normalizeLng(c[0])])
-      );
+    function drawWaypoints(points) {
+      points.forEach((p, idx) => {
+        const marker = L.circleMarker([p.lat, p.lon], {
+          radius: 4,
+          color: '#222',
+          weight: 1.5,
+          fillColor: '#ffd400',
+          fillOpacity: 1
+        }).addTo(map);
 
-      const polygon = L.polygon(latlngRings, {
-        color: '#00aa55',
-        weight: 2,
-        opacity: 0.9,
-        fillColor: '#00cc66',
-        fillOpacity: 0.2
-      }).bindPopup(`<b>${name || 'Polygon'}</b>`).addTo(map);
-
-      addToBounds(polygon);
-    }
-
-    function extractWaypointsAndShapes(geojson) {
-      const waypoints = [];
-      let polygonCount = 0;
-
-      geojson.features.forEach(feature => {
-        if (!feature.geometry) return;
-
-        const type = feature.geometry.type;
-        const coords = feature.geometry.coordinates;
-        const name = (feature.properties && (feature.properties.name || feature.properties.title)) || '';
-
-        if (type === 'Point') {
-          waypoints.push({
-            lat: coords[1],
-            lng: coords[0],
-            name: name
-          });
-        } else if (type === 'Polygon') {
-          drawPolygon(coords, name);
-          polygonCount++;
-        } else if (type === 'MultiPolygon') {
-          coords.forEach(poly => {
-            drawPolygon(poly, name);
-            polygonCount++;
-          });
-        } else if (type === 'GeometryCollection' && feature.geometry.geometries) {
-          feature.geometry.geometries.forEach(g => {
-            if (g.type === 'Point') {
-              waypoints.push({
-                lat: g.coordinates[1],
-                lng: g.coordinates[0],
-                name: name
-              });
-            } else if (g.type === 'Polygon') {
-              drawPolygon(g.coordinates, name);
-              polygonCount++;
-            } else if (g.type === 'MultiPolygon') {
-              g.coordinates.forEach(poly => {
-                drawPolygon(poly, name);
-                polygonCount++;
-              });
-            }
-          });
+        if (idx === 0 || idx === points.length - 1 || idx % 3 === 0) {
+          L.marker([p.lat, p.lon], {
+            interactive: false,
+            icon: L.divIcon({
+              className: 'label',
+              html: p.name || '',
+              iconSize: null
+            })
+          }).addTo(map);
         }
+
+        marker.bindPopup(`<b>${p.name || 'Waypoint'}</b><br>${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`);
       });
-
-      // waypoint 표시
-      waypoints.forEach(p => drawWaypoint(p.lat, p.lng, p.name));
-
-      // waypoint 순서대로 route 생성
-      drawRouteFromWaypoints(waypoints);
-
-      setStatus(
-        `불러오기 완료<br>` +
-        `• Waypoints: ${waypoints.length}<br>` +
-        `• Polygons: ${polygonCount}<br>` +
-        `• Route: waypoint 기반 재구성`
-      );
     }
 
-    async function loadXmlFile(filename) {
-      const res = await fetch(filename + '?v=' + Date.now());
-      if (!res.ok) throw new Error(filename + ' not found');
-      const text = await res.text();
-      const parser = new DOMParser();
-      return parser.parseFromString(text, 'text/xml');
-    }
+    fetch('route.gpx?v=' + Date.now())
+      .then(res => {
+        if (!res.ok) throw new Error('route.gpx not found');
+        return res.text();
+      })
+      .then(text => {
+        const points = parseGPX(text);
+        if (!points.length) throw new Error('No route points found');
 
-    async function tryLoad() {
-      try {
-        const gpxDoc = await loadXmlFile('route.gpx');
-        const geojson = toGeoJSON.gpx(gpxDoc);
-        extractWaypointsAndShapes(geojson);
-        return;
-      } catch (e1) {
-        try {
-          const kmlDoc = await loadXmlFile('route.kml');
-          const geojson = toGeoJSON.kml(kmlDoc);
-          extractWaypointsAndShapes(geojson);
-          return;
-        } catch (e2) {
-          console.error(e1);
-          console.error(e2);
-          setStatus('route.kml 또는 route.gpx 파일을 찾지 못했습니다.');
-        }
-      }
-    }
+        drawRoute(points);
+        drawWaypoints(points);
 
-    tryLoad();
+        // 태평양 중심에 맞게 수동 범위
+        const bounds = L.latLngBounds(points.map(p => [p.lat, p.lon]));
+        map.fitBounds(bounds.pad(0.2));
+        map.setView([48, 180], 3);
+      })
+      .catch(err => {
+        console.error(err);
+        alert('route.gpx를 불러오지 못했습니다.');
+      });
   </script>
 </body>
 </html>
