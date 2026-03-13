@@ -508,13 +508,14 @@ function bindWaypointZoomLabel(layer, feature) {
 
     if (zoom >= 6) {
       if (!labelBound) {
-        layer.bindTooltip(labelHtml, {
-          permanent: true,
-          direction: "right",
-          offset: [8, 0],
-          className: "waypoint-label",
-          opacity: 1
-        });
+      layer.bindTooltip(labelHtml, {
+  permanent: true,
+  direction: "top",
+  offset: [0, -6],
+  className: "waypoint-label",
+  opacity: 1
+});
+
         labelBound = true;
       }
 
