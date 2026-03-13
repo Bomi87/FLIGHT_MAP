@@ -392,6 +392,52 @@ function splitPacificSegments(latlngs) {
 }
 
 /* -----------------------------
+   route endpoint helpers
+----------------------------- */
+
+function isSameCoord(a, b, tolerance = 0.05) {
+  if (!a || !b) return false;
+
+  const latDiff = Math.abs(Number(a.lat) - Number(b.lat));
+
+  const lonA = normalizePacificLon(Number(a.lon));
+  const lonB = normalizePacificLon(Number(b.lon));
+
+  let lonDiff = Math.abs(lonA - lonB);
+  lonDiff = Math.min(lonDiff, 360 - lonDiff);
+
+  return latDiff <= tolerance && lonDiff <= tolerance;
+}
+
+function getRouteEndpoints(features) {
+  const lineFeatures = features.filter(f =>
+    f.type === "LineString" &&
+    Array.isArray(f.coords) &&
+    f.coords.length >= 2
+  );
+
+  if (!lineFeatures.length) {
+    return {
+      departureCoord: null,
+      destinationCoord: null
+    };
+  }
+
+  let mainLine = lineFeatures[0];
+
+  for (const lf of lineFeatures) {
+    if ((lf.coords?.length || 0) > (mainLine.coords?.length || 0)) {
+      mainLine = lf;
+    }
+  }
+
+  return {
+    departureCoord: mainLine.coords[0],
+    destinationCoord: mainLine.coords[mainLine.coords.length - 1]
+  };
+}
+
+/* -----------------------------
    GPX
 ----------------------------- */
 
@@ -672,7 +718,7 @@ function extractKMLFeatures(text) {
    KML draw
 ----------------------------- */
 
-function drawKMLPoint(feature, index, total) {
+function drawKMLPoint(feature, routeEndpoints) {
   const popupHtml = buildPopupHtml(
     feature.name || "Waypoint",
     feature.description || "",
@@ -710,43 +756,45 @@ function drawKMLPoint(feature, index, total) {
     return;
   }
 
+  const isDeparture = isSameCoord(feature.coords, routeEndpoints?.departureCoord);
+  const isDestination = isSameCoord(feature.coords, routeEndpoints?.destinationCoord);
+
+  if (isDeparture) {
+    const departureIcon = L.icon({
+      iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+      popupAnchor: [0, -14]
+    });
+
+    const marker = L.marker(latlng, {
+      icon: departureIcon
+    }).addTo(map);
+
+    marker.bindPopup(popupHtml, { maxWidth: 360 });
+    drawn.addLayer(marker);
+    return;
+  }
+
   let markerColor = iconStyle.color || "#ffff00";
-let markerOpacity = iconStyle.opacity || 1;
-let markerRadius = Math.max(4, 4 * iconStyle.scale);
+  let markerOpacity = iconStyle.opacity || 1;
+  let markerRadius = Math.max(4, 4 * iconStyle.scale);
 
-if (index === 0) {
-  const departureIcon = L.icon({
-    iconUrl: 'https://maps.google.com/mapfiles/kml/shapes/airports.png',
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -12]
-  });
+  if (isDestination) {
+    markerColor = "#0000ff";
+    markerOpacity = 1;
+  }
 
-  const marker = L.marker(latlng, {
-    icon: departureIcon
+  const marker = L.circleMarker(latlng, {
+    radius: markerRadius,
+    color: "#222",
+    weight: 1,
+    fillColor: markerColor,
+    fillOpacity: markerOpacity
   }).addTo(map);
 
   marker.bindPopup(popupHtml, { maxWidth: 360 });
   drawn.addLayer(marker);
-  return;
-}
-
-if (index === total - 1) {
-  markerColor = "#0000ff";
-  markerOpacity = 1;
-}
-
-const marker = L.circleMarker(latlng, {
-  radius: markerRadius,
-  color: "#222",
-  weight: 1,
-  fillColor: markerColor,
-  fillOpacity: markerOpacity
-}).addTo(map);
-
-marker.bindPopup(popupHtml, { maxWidth: 360 });
-drawn.addLayer(marker);
-
 }
 
 function drawKMLLine(feature) {
@@ -812,17 +860,20 @@ function drawKMLFeatures(features, sourceName) {
   const pointFeatures = features.filter(f => f.type === "Point");
   const lineFeatures = features.filter(f => f.type === "LineString");
   const polygonFeatures = features.filter(f => f.type === "Polygon");
+  const routeEndpoints = getRouteEndpoints(features);
 
   lineFeatures.forEach(drawKMLLine);
   polygonFeatures.forEach(drawKMLPolygon);
-  pointFeatures.forEach((f, i) => drawKMLPoint(f, i, pointFeatures.length));
+  pointFeatures.forEach(f => drawKMLPoint(f, routeEndpoints));
 
   fitDrawnBounds();
 
   console.log("Flight Route Loaded:", sourceName, "KML", {
     points: pointFeatures.length,
     lines: lineFeatures.length,
-    polygons: polygonFeatures.length
+    polygons: polygonFeatures.length,
+    departureCoord: routeEndpoints.departureCoord,
+    destinationCoord: routeEndpoints.destinationCoord
   });
 }
 
