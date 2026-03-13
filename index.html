@@ -9,241 +9,605 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-html,body{
-  margin:0;
-  padding:0;
-  height:100%;
-  width:100%;
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
 }
-#map{
-  height:100vh;
-  width:100%;
+
+#map {
+  height: 100vh;
+  width: 100%;
 }
-.panel{
-  position:absolute;
-  top:10px;
-  left:10px;
-  z-index:1000;
-  background:rgba(255,255,255,0.95);
-  padding:10px 12px;
-  border-radius:8px;
-  font-size:13px;
-  box-shadow:0 2px 8px rgba(0,0,0,0.2);
-  max-width:320px;
+
+.panel {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  background: rgba(255,255,255,0.95);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  max-width: 360px;
+  line-height: 1.45;
 }
 </style>
 </head>
-
 <body>
 
 <div id="map"></div>
-
-<div class="panel" id="status">
-Loading...
-</div>
+<div class="panel" id="status">Loading...</div>
 
 <script>
-const map = L.map('map').setView([42,160],3);
+const map = L.map('map').setView([42, 160], 3);
 
 L.tileLayer(
   'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  { maxZoom:18, attribution:'© OpenStreetMap' }
+  {
+    maxZoom: 18,
+    attribution: '© OpenStreetMap'
+  }
 ).addTo(map);
 
 const status = document.getElementById("status");
+const allLayers = L.featureGroup().addTo(map);
 
-function normalizeLon(lon){
-  return lon < 0 ? lon + 360 : lon;
-}
+/* -----------------------------
+   공통 유틸
+----------------------------- */
 
-function getRequestedFile(){
+function getRequestedFile() {
   const params = new URLSearchParams(window.location.search);
   const file = params.get("file");
   return file ? file.trim() : "";
 }
 
-function getExtension(filename){
-  const lower = filename.toLowerCase();
-  if(lower.endsWith(".gpx")) return "gpx";
-  if(lower.endsWith(".kml")) return "kml";
+function getExtension(filename) {
+  const f = filename.toLowerCase();
+  if (f.endsWith(".gpx")) return "gpx";
+  if (f.endsWith(".kml")) return "kml";
   return "";
 }
 
-function parseGPX(xmlText){
-  const parser = new DOMParser();
-  const xml = parser.parseFromString(xmlText, "text/xml");
+function normalizeLon(lon) {
+  let x = lon;
+  while (x > 180) x -= 360;
+  while (x < -180) x += 360;
+  return x;
+}
+
+function normalizeLonForPacific(lon) {
+  return lon < 0 ? lon + 360 : lon;
+}
+
+function fitAllBounds() {
+  try {
+    const bounds = allLayers.getBounds();
+    if (bounds && bounds.isValid && bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+async function fetchTextFile(filename) {
+  const res = await fetch(filename + "?v=" + Date.now());
+  if (!res.ok) {
+    throw new Error(filename + " not found");
+  }
+  return await res.text();
+}
+
+function parseXml(text) {
+  return new DOMParser().parseFromString(text, "text/xml");
+}
+
+/* -----------------------------
+   KML color 변환
+   KML color = aabbggrr
+----------------------------- */
+function kmlColorToCss(kmlColor, fallbackColor, fallbackOpacity) {
+  if (!kmlColor || typeof kmlColor !== "string") {
+    return { color: fallbackColor, opacity: fallbackOpacity };
+  }
+
+  const s = kmlColor.trim().replace("#", "");
+  if (s.length !== 8) {
+    return { color: fallbackColor, opacity: fallbackOpacity };
+  }
+
+  const aa = s.substring(0, 2);
+  const bb = s.substring(2, 4);
+  const gg = s.substring(4, 6);
+  const rr = s.substring(6, 8);
+
+  const opacity = parseInt(aa, 16) / 255;
+  const color = "#" + rr + gg + bb;
+
+  return {
+    color,
+    opacity: isNaN(opacity) ? fallbackOpacity : opacity
+  };
+}
+
+/* -----------------------------
+   경계선(180도) 분할
+   line만 적용
+----------------------------- */
+function splitAntimeridianLatLngs(latlngs, pacificMode = false) {
+  if (!latlngs || latlngs.length < 2) return [latlngs];
+
+  const segments = [];
+  let current = [latlngs[0]];
+
+  for (let i = 1; i < latlngs.length; i++) {
+    const p1 = latlngs[i - 1];
+    const p2 = latlngs[i];
+
+    let lat1 = p1[0];
+    let lon1 = p1[1];
+    let lat2 = p2[0];
+    let lon2 = p2[1];
+
+    if (pacificMode) {
+      lon1 = normalizeLonForPacific(lon1);
+      lon2 = normalizeLonForPacific(lon2);
+
+      if (Math.abs(lon2 - lon1) > 180) {
+        const crossingLon = lon1 < lon2 ? 180 : 360;
+        const adjustedLon2 = lon2;
+        const t = (crossingLon - lon1) / (adjustedLon2 - lon1);
+        const crossingLat = lat1 + (lat2 - lat1) * t;
+
+        current.push([crossingLat, crossingLon]);
+        segments.push(current);
+
+        const restartLon = crossingLon === 180 ? 180 : 0;
+        current = [[crossingLat, restartLon], [lat2, lon2]];
+      } else {
+        current.push([lat2, lon2]);
+      }
+    } else {
+      lon1 = normalizeLon(lon1);
+      lon2 = normalizeLon(lon2);
+
+      const diff = lon2 - lon1;
+      if (Math.abs(diff) > 180) {
+        const targetLon1 = diff > 0 ? -180 : 180;
+        const adjustedLon2 = diff > 0 ? lon2 - 360 : lon2 + 360;
+        const t = (targetLon1 - lon1) / (adjustedLon2 - lon1);
+        const crossingLat = lat1 + (lat2 - lat1) * t;
+
+        current.push([crossingLat, targetLon1]);
+        segments.push(current);
+
+        const targetLon2 = targetLon1 === 180 ? -180 : 180;
+        current = [[crossingLat, targetLon2], [lat2, lon2]];
+      } else {
+        current.push([lat2, lon2]);
+      }
+    }
+  }
+
+  if (current.length > 0) segments.push(current);
+  return segments;
+}
+
+/* -----------------------------
+   GPX 처리
+----------------------------- */
+function parseGPX(xmlText) {
+  const xml = parseXml(xmlText);
   const pts = [...xml.getElementsByTagName("rtept")];
 
   return pts.map(p => {
     const lat = parseFloat(p.getAttribute("lat"));
     const lon = parseFloat(p.getAttribute("lon"));
     const nameNode = p.getElementsByTagName("name")[0];
-    const name = nameNode ? nameNode.textContent : "";
+    const name = nameNode ? nameNode.textContent.trim() : "";
     return { lat, lon, name };
   }).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
 }
 
-function parseKML(xmlText){
-  const parser = new DOMParser();
-  const xml = parser.parseFromString(xmlText, "text/xml");
-  const placemarks = [...xml.getElementsByTagName("Placemark")];
+function drawWaypointMarker(lat, lon, name, index, total) {
+  const latlng = [lat, normalizeLonForPacific(lon)];
 
-  const points = [];
-  let lineCoords = [];
+  let iconColor = "yellow";
+  let popupText = name || "Waypoint";
 
-  placemarks.forEach(pm => {
-    const nameNode = pm.getElementsByTagName("name")[0];
-    const name = nameNode ? nameNode.textContent.trim() : "";
-
-    const pointNode = pm.getElementsByTagName("Point")[0];
-    if(pointNode){
-      const coordNode = pointNode.getElementsByTagName("coordinates")[0];
-      if(coordNode){
-        const raw = coordNode.textContent.trim();
-        const parts = raw.split(",");
-        const lon = parseFloat(parts[0]);
-        const lat = parseFloat(parts[1]);
-        if(!isNaN(lat) && !isNaN(lon)){
-          points.push({ lat, lon, name });
-        }
-      }
-    }
-
-    const lineNode = pm.getElementsByTagName("LineString")[0];
-    if(lineNode){
-      const coordNode = lineNode.getElementsByTagName("coordinates")[0];
-      if(coordNode){
-        const raw = coordNode.textContent.trim();
-        const rows = raw.split(/\s+/);
-        const parsed = rows.map(r => {
-          const parts = r.split(",");
-          return {
-            lon: parseFloat(parts[0]),
-            lat: parseFloat(parts[1]),
-            name: ""
-          };
-        }).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
-
-        if(parsed.length > 1 && lineCoords.length === 0){
-          lineCoords = parsed;
-        }
-      }
-    }
-  });
-
-  return { points, lineCoords };
-}
-
-function drawRouteAndMarkers(points, sourceName){
-  if(!points || points.length < 2){
-    throw new Error("No valid route points");
+  if (index === 0) {
+    iconColor = "green";
+    popupText = "🛫 " + (name || "Departure");
+  } else if (index === total - 1) {
+    iconColor = "red";
+    popupText = "🛬 " + (name || "Arrival");
   }
 
-  const latlngs = points.map(p => [p.lat, normalizeLon(p.lon)]);
-
-  const route = L.polyline(latlngs, {
-    color:"#FFD400",
-    weight:5
+  const marker = L.circleMarker(latlng, {
+    radius: 5,
+    color: "#222",
+    weight: 1,
+    fillColor: iconColor,
+    fillOpacity: 1
   }).addTo(map);
 
-  points.forEach((p, i) => {
-    const latlng = [p.lat, normalizeLon(p.lon)];
-    let iconColor = "yellow";
-    let popupText = p.name || "Waypoint";
+  marker.bindPopup(popupText);
+  allLayers.addLayer(marker);
+}
 
-    if(i === 0){
-      iconColor = "green";
-      popupText = "🛫 " + (p.name || "Departure");
-    }
+function drawGPXRoute(points, sourceName) {
+  if (!points || points.length < 2) {
+    throw new Error("No valid route points in GPX");
+  }
 
-    if(i === points.length - 1){
-      iconColor = "red";
-      popupText = "🛬 " + (p.name || "Arrival");
-    }
+  const latlngs = points.map(p => [p.lat, normalizeLonForPacific(p.lon)]);
+  const segments = splitAntimeridianLatLngs(latlngs, true);
 
-    const marker = L.circleMarker(latlng, {
-      radius:5,
-      color:"#222",
-      weight:1,
-      fillColor:iconColor,
-      fillOpacity:1
+  segments.forEach(seg => {
+    const line = L.polyline(seg, {
+      color: "#FFD400",
+      weight: 5
     }).addTo(map);
-
-    marker.bindPopup(popupText);
+    allLayers.addLayer(line);
   });
 
-  map.fitBounds(route.getBounds(), { padding:[20,20] });
+  points.forEach((p, i) => {
+    drawWaypointMarker(p.lat, p.lon, p.name, i, points.length);
+  });
+
+  fitAllBounds();
 
   status.innerHTML =
     "<b>Flight Route Loaded</b><br>" +
     "File: " + sourceName + "<br>" +
+    "Type: GPX<br>" +
     "Waypoints: " + points.length;
 }
 
-async function fetchTextFile(filename){
-  const res = await fetch(filename + "?v=" + Date.now());
-  if(!res.ok){
-    throw new Error(filename + " not found");
-  }
-  return await res.text();
+/* -----------------------------
+   KML 처리
+----------------------------- */
+
+function textOfFirst(parent, tagName) {
+  const node = parent.getElementsByTagName(tagName)[0];
+  return node ? node.textContent.trim() : "";
 }
 
-async function loadByFilename(filename){
-  const ext = getExtension(filename);
+function parseCoordinates(coordText) {
+  if (!coordText) return [];
+  return coordText
+    .trim()
+    .split(/\s+/)
+    .map(row => {
+      const parts = row.split(",");
+      const lon = parseFloat(parts[0]);
+      const lat = parseFloat(parts[1]);
+      const alt = parts.length > 2 ? parseFloat(parts[2]) : null;
+      return { lat, lon, alt };
+    })
+    .filter(p => !isNaN(p.lat) && !isNaN(p.lon));
+}
 
-  if(!ext){
+function getLocalName(node) {
+  return node.localName || node.nodeName;
+}
+
+function getDirectChildByLocalName(parent, localName) {
+  for (const child of parent.children) {
+    if (getLocalName(child) === localName) return child;
+  }
+  return null;
+}
+
+function getChildrenByLocalName(parent, localName) {
+  return [...parent.children].filter(c => getLocalName(c) === localName);
+}
+
+function buildStyleIndex(xml) {
+  const styleMap = {};
+  const styleNodes = [...xml.getElementsByTagName("Style")];
+
+  styleNodes.forEach(styleNode => {
+    const id = styleNode.getAttribute("id");
+    if (!id) return;
+
+    const lineStyleNode = styleNode.getElementsByTagName("LineStyle")[0];
+    const polyStyleNode = styleNode.getElementsByTagName("PolyStyle")[0];
+    const iconStyleNode = styleNode.getElementsByTagName("IconStyle")[0];
+
+    const style = {};
+
+    if (lineStyleNode) {
+      style.lineColor = textOfFirst(lineStyleNode, "color");
+      style.lineWidth = parseFloat(textOfFirst(lineStyleNode, "width")) || 3;
+    }
+
+    if (polyStyleNode) {
+      style.polyColor = textOfFirst(polyStyleNode, "color");
+      const fillText = textOfFirst(polyStyleNode, "fill");
+      const outlineText = textOfFirst(polyStyleNode, "outline");
+      style.fill = fillText === "" ? true : fillText !== "0";
+      style.outline = outlineText === "" ? true : outlineText !== "0";
+    }
+
+    if (iconStyleNode) {
+      style.iconHref = textOfFirst(iconStyleNode, "href");
+      style.iconScale = parseFloat(textOfFirst(iconStyleNode, "scale")) || 1;
+      style.iconColor = textOfFirst(iconStyleNode, "color");
+    }
+
+    styleMap["#" + id] = style;
+  });
+
+  return styleMap;
+}
+
+function extractKMLFeatures(xmlText) {
+  const xml = parseXml(xmlText);
+  const styleIndex = buildStyleIndex(xml);
+  const placemarks = [...xml.getElementsByTagName("Placemark")];
+
+  const features = [];
+
+  placemarks.forEach(pm => {
+    const name = textOfFirst(pm, "name");
+    const styleUrl = textOfFirst(pm, "styleUrl");
+    const style = styleIndex[styleUrl] || {};
+
+    const pointNodes = pm.getElementsByTagName("Point");
+    const lineNodes = pm.getElementsByTagName("LineString");
+    const polyNodes = pm.getElementsByTagName("Polygon");
+    const multiGeometryNodes = pm.getElementsByTagName("MultiGeometry");
+
+    const used = {
+      point: false,
+      line: false,
+      polygon: false
+    };
+
+    if (pointNodes.length && !used.point) {
+      [...pointNodes].forEach(node => {
+        const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+        if (coords.length) {
+          features.push({
+            type: "Point",
+            name,
+            style,
+            coords: coords[0]
+          });
+        }
+      });
+      used.point = true;
+    }
+
+    if (lineNodes.length && !used.line) {
+      [...lineNodes].forEach(node => {
+        const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+        if (coords.length >= 2) {
+          features.push({
+            type: "LineString",
+            name,
+            style,
+            coords
+          });
+        }
+      });
+      used.line = true;
+    }
+
+    if (polyNodes.length && !used.polygon) {
+      [...polyNodes].forEach(node => {
+        const outer = node.getElementsByTagName("outerBoundaryIs")[0];
+        const innerNodes = [...node.getElementsByTagName("innerBoundaryIs")];
+
+        const rings = [];
+
+        if (outer) {
+          const outerCoords = parseCoordinates(textOfFirst(outer, "coordinates"));
+          if (outerCoords.length >= 3) rings.push(outerCoords);
+        }
+
+        innerNodes.forEach(inner => {
+          const innerCoords = parseCoordinates(textOfFirst(inner, "coordinates"));
+          if (innerCoords.length >= 3) rings.push(innerCoords);
+        });
+
+        if (rings.length) {
+          features.push({
+            type: "Polygon",
+            name,
+            style,
+            rings
+          });
+        }
+      });
+      used.polygon = true;
+    }
+
+    if (multiGeometryNodes.length) {
+      [...multiGeometryNodes].forEach(mg => {
+        [...mg.getElementsByTagName("Point")].forEach(node => {
+          const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+          if (coords.length) {
+            features.push({
+              type: "Point",
+              name,
+              style,
+              coords: coords[0]
+            });
+          }
+        });
+
+        [...mg.getElementsByTagName("LineString")].forEach(node => {
+          const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+          if (coords.length >= 2) {
+            features.push({
+              type: "LineString",
+              name,
+              style,
+              coords
+            });
+          }
+        });
+
+        [...mg.getElementsByTagName("Polygon")].forEach(node => {
+          const outer = node.getElementsByTagName("outerBoundaryIs")[0];
+          const innerNodes = [...node.getElementsByTagName("innerBoundaryIs")];
+          const rings = [];
+
+          if (outer) {
+            const outerCoords = parseCoordinates(textOfFirst(outer, "coordinates"));
+            if (outerCoords.length >= 3) rings.push(outerCoords);
+          }
+
+          innerNodes.forEach(inner => {
+            const innerCoords = parseCoordinates(textOfFirst(inner, "coordinates"));
+            if (innerCoords.length >= 3) rings.push(innerCoords);
+          });
+
+          if (rings.length) {
+            features.push({
+              type: "Polygon",
+              name,
+              style,
+              rings
+            });
+          }
+        });
+      });
+    }
+  });
+
+  return features;
+}
+
+function drawKMLPoint(feature, pointIndex, pointCount) {
+  const c = feature.coords;
+  drawWaypointMarker(c.lat, c.lon, feature.name, pointIndex, pointCount);
+}
+
+function drawKMLLine(feature) {
+  const lineColor = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
+  const weight = feature.style.lineWidth || 4;
+
+  const latlngs = feature.coords.map(c => [c.lat, normalizeLon(c.lon)]);
+  const segments = splitAntimeridianLatLngs(latlngs, false);
+
+  segments.forEach(seg => {
+    const line = L.polyline(seg, {
+      color: lineColor.color,
+      weight: weight,
+      opacity: lineColor.opacity
+    }).addTo(map);
+
+    if (feature.name) {
+      line.bindPopup(feature.name);
+    }
+
+    allLayers.addLayer(line);
+  });
+}
+
+function drawKMLPolygon(feature) {
+  const lineStyle = kmlColorToCss(feature.style.lineColor, "#666666", 0.9);
+  const fillStyle = kmlColorToCss(feature.style.polyColor, "#00CC66", 0.25);
+
+  const rings = feature.rings.map(ring =>
+    ring.map(c => [c.lat, normalizeLon(c.lon)])
+  );
+
+  const polygon = L.polygon(rings, {
+    color: lineStyle.color,
+    opacity: feature.style.outline === false ? 0 : lineStyle.opacity,
+    weight: feature.style.outline === false ? 0 : (feature.style.lineWidth || 2),
+    fillColor: fillStyle.color,
+    fillOpacity: feature.style.fill === false ? 0 : fillStyle.opacity
+  }).addTo(map);
+
+  if (feature.name) {
+    polygon.bindPopup(feature.name);
+  }
+
+  allLayers.addLayer(polygon);
+}
+
+function drawKMLFeatures(features, sourceName) {
+  if (!features.length) {
+    throw new Error("No valid features in KML");
+  }
+
+  const pointFeatures = features.filter(f => f.type === "Point");
+  const lineFeatures = features.filter(f => f.type === "LineString");
+  const polygonFeatures = features.filter(f => f.type === "Polygon");
+
+  lineFeatures.forEach(drawKMLLine);
+  polygonFeatures.forEach(drawKMLPolygon);
+  pointFeatures.forEach((f, i) => drawKMLPoint(f, i, pointFeatures.length));
+
+  fitAllBounds();
+
+  status.innerHTML =
+    "<b>Flight Route Loaded</b><br>" +
+    "File: " + sourceName + "<br>" +
+    "Type: KML<br>" +
+    "Points: " + pointFeatures.length + "<br>" +
+    "Lines: " + lineFeatures.length + "<br>" +
+    "Polygons: " + polygonFeatures.length;
+}
+
+/* -----------------------------
+   로딩
+----------------------------- */
+
+async function loadByFilename(filename) {
+  const ext = getExtension(filename);
+  if (!ext) {
     throw new Error("Only .gpx or .kml supported");
   }
 
   const text = await fetchTextFile(filename);
 
-  if(ext === "gpx"){
+  if (ext === "gpx") {
     const points = parseGPX(text);
-    drawRouteAndMarkers(points, filename);
+    drawGPXRoute(points, filename);
     return;
   }
 
-  if(ext === "kml"){
-    const parsed = parseKML(text);
-
-    if(parsed.points.length >= 2){
-      drawRouteAndMarkers(parsed.points, filename);
-      return;
-    }
-
-    if(parsed.lineCoords.length >= 2){
-      drawRouteAndMarkers(parsed.lineCoords, filename);
-      return;
-    }
-
-    throw new Error("No valid Point or LineString in KML");
+  if (ext === "kml") {
+    const features = extractKMLFeatures(text);
+    drawKMLFeatures(features, filename);
+    return;
   }
 }
 
-async function autoLoadDefault(){
-  try{
+async function autoLoadDefault() {
+  try {
     await loadByFilename("route.gpx");
     return;
-  }catch(e1){
-    try{
+  } catch (e1) {
+    try {
       await loadByFilename("route.kml");
       return;
-    }catch(e2){
+    } catch (e2) {
       throw new Error("No default route.gpx or route.kml found");
     }
   }
 }
 
-async function init(){
-  try{
+async function init() {
+  try {
     const requested = getRequestedFile();
 
-    if(requested){
+    if (requested) {
       await loadByFilename(requested);
-    }else{
+    } else {
       await autoLoadDefault();
     }
-  }catch(err){
+  } catch (err) {
     status.innerHTML = "Error: " + err.message;
     console.error(err);
   }
