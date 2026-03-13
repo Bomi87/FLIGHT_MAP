@@ -338,6 +338,15 @@ function extractCountryFromPlacemarkName(name) {
   return cleaned;
 }
 
+function extractAirportCode(name) {
+  const match = String(name || "").match(/\(([A-Z0-9]{4})\)/);
+  return match ? match[1] : "";
+}
+
+function hasAirportCodeName(feature) {
+  return !!extractAirportCode(feature?.name || "");
+}
+
 function isAirspaceLabelFeature(feature) {
   const country = extractCountryFromPlacemarkName(feature?.name || "");
   if (!country) return false;
@@ -406,7 +415,7 @@ function splitPacificSegments(latlngs) {
 }
 
 /* -----------------------------
-   route endpoint helpers
+   endpoint helpers
 ----------------------------- */
 
 function isSameCoord(a, b, tolerance = 0.15) {
@@ -435,30 +444,55 @@ function isSpecialIconFeature(feature) {
   );
 }
 
-function getRoutePointSequence(pointFeatures) {
-  return pointFeatures.filter(f =>
+function compressConsecutiveByName(features) {
+  const result = [];
+  for (const f of features) {
+    if (!result.length || result[result.length - 1].name !== f.name) {
+      result.push(f);
+    }
+  }
+  return result;
+}
+
+function getRouteEndpoints(pointFeatures) {
+  const airportLabelCandidates = compressConsecutiveByName(
+    pointFeatures.filter(f => hasAirportCodeName(f))
+  );
+
+  if (airportLabelCandidates.length >= 2) {
+    const depFeature = airportLabelCandidates[0];
+    const destFeature = airportLabelCandidates[airportLabelCandidates.length - 1];
+
+    return {
+      departureFeature: depFeature,
+      destinationFeature: destFeature,
+      departureCoord: depFeature.coords,
+      destinationCoord: destFeature.coords
+    };
+  }
+
+  const routePoints = pointFeatures.filter(f =>
     !isAirspaceLabelFeature(f) &&
     !isSpecialIconFeature(f)
   );
-}
 
-function getRouteEndpointsFromPoints(pointFeatures) {
-  const routePoints = getRoutePointSequence(pointFeatures);
+  if (routePoints.length >= 2) {
+    const depFeature = routePoints[0];
+    const destFeature = routePoints[routePoints.length - 1];
 
-  if (!routePoints.length) {
     return {
-      departureFeature: null,
-      destinationFeature: null,
-      departureCoord: null,
-      destinationCoord: null
+      departureFeature: depFeature,
+      destinationFeature: destFeature,
+      departureCoord: depFeature.coords,
+      destinationCoord: destFeature.coords
     };
   }
 
   return {
-    departureFeature: routePoints[0],
-    destinationFeature: routePoints[routePoints.length - 1],
-    departureCoord: routePoints[0].coords,
-    destinationCoord: routePoints[routePoints.length - 1].coords
+    departureFeature: null,
+    destinationFeature: null,
+    departureCoord: null,
+    destinationCoord: null
   };
 }
 
@@ -915,7 +949,7 @@ function drawRouteEndpointMarkers(routeEndpoints) {
     }).addTo(map);
 
     depMarker.bindPopup(
-      buildPopupHtml(depFeature.name || "Departure", depFeature.description || "", depFeature.extraRows || []),
+      buildPopupHtml(depFeature.name || "", depFeature.description || "", depFeature.extraRows || []),
       { maxWidth: 360 }
     );
 
@@ -934,7 +968,7 @@ function drawRouteEndpointMarkers(routeEndpoints) {
     }).addTo(map);
 
     destMarker.bindPopup(
-      buildPopupHtml(destFeature.name || "Destination", destFeature.description || "", destFeature.extraRows || []),
+      buildPopupHtml(destFeature.name || "", destFeature.description || "", destFeature.extraRows || []),
       { maxWidth: 360 }
     );
 
@@ -950,7 +984,7 @@ function drawKMLFeatures(features, sourceName) {
   const pointFeatures = features.filter(f => f.type === "Point");
   const lineFeatures = features.filter(f => f.type === "LineString");
   const polygonFeatures = features.filter(f => f.type === "Polygon");
-  const routeEndpoints = getRouteEndpointsFromPoints(pointFeatures);
+  const routeEndpoints = getRouteEndpoints(pointFeatures);
 
   lineFeatures.forEach(drawKMLLine);
   polygonFeatures.forEach(drawKMLPolygon);
