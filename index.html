@@ -838,24 +838,6 @@ function drawKMLPoint(feature) {
     return;
   }
 
-  if (iconStyle.href) {
-    const iconSize = Math.max(18, Math.round(22 * iconStyle.scale));
-    const customIcon = L.icon({
-      iconUrl: iconStyle.href,
-      iconSize: [iconSize, iconSize],
-      iconAnchor: [iconSize / 2, iconSize / 2],
-      popupAnchor: [0, -12]
-    });
-
-    const marker = L.marker(latlng, {
-      icon: customIcon
-    }).addTo(map);
-
-    marker.bindPopup(popupHtml, { maxWidth: 360 });
-    drawn.addLayer(marker);
-    return;
-  }
-
   const markerColor = iconStyle.color || "#ffff00";
   const markerOpacity = iconStyle.opacity || 1;
   const markerRadius = Math.max(4, 4 * iconStyle.scale);
@@ -871,6 +853,7 @@ function drawKMLPoint(feature) {
   marker.bindPopup(popupHtml, { maxWidth: 360 });
   drawn.addLayer(marker);
 }
+
 
 function drawKMLLine(feature) {
   const lineStyle = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
