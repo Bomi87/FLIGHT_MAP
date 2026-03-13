@@ -395,11 +395,10 @@ function splitPacificSegments(latlngs) {
    route endpoint helpers
 ----------------------------- */
 
-function isSameCoord(a, b, tolerance = 0.05) {
+function isSameCoord(a, b, tolerance = 0.15) {
   if (!a || !b) return false;
 
   const latDiff = Math.abs(Number(a.lat) - Number(b.lat));
-
   const lonA = normalizePacificLon(Number(a.lon));
   const lonB = normalizePacificLon(Number(b.lon));
 
@@ -410,14 +409,13 @@ function isSameCoord(a, b, tolerance = 0.05) {
 }
 
 function getRouteEndpoints(features) {
-
   const routeLines = features.filter(f =>
     f.type === "LineString" &&
     Array.isArray(f.coords) &&
     f.coords.length >= 2 &&
     (
-      f.style?.lineColor?.toLowerCase().includes("ffd400") ||
-      f.style?.lineColor?.toLowerCase().includes("00d4ff")
+      (f.style?.lineColor || "").toLowerCase().includes("ffd400") ||
+      (f.style?.lineColor || "").toLowerCase().includes("00d4ff")
     )
   );
 
@@ -441,7 +439,6 @@ function getRouteEndpoints(features) {
     destinationCoord: mainLine.coords[mainLine.coords.length - 1]
   };
 }
-
 
 /* -----------------------------
    GPX
@@ -734,8 +731,75 @@ function drawKMLPoint(feature, routeEndpoints) {
   const latlng = [feature.coords.lat, normalizePacificLon(feature.coords.lon)];
   const labelStyle = getLabelStyle(feature.style);
   const iconStyle = getIconStyle(feature.style);
+
+  const isDeparture = isSameCoord(feature.coords, routeEndpoints?.departureCoord);
+  const isDestination = isSameCoord(feature.coords, routeEndpoints?.destinationCoord);
   const isAirspaceLabel = isAirspaceLabelFeature(feature);
 
+  /* 출발지 먼저 */
+  if (isDeparture) {
+    const departureIcon = L.icon({
+      iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+      popupAnchor: [0, -14]
+    });
+
+    const marker = L.marker(latlng, {
+      icon: departureIcon
+    }).addTo(map);
+
+    marker.bindPopup(popupHtml, { maxWidth: 360 });
+
+    if (feature.name) {
+      const fontSize = Math.max(12, Math.round(16 * labelStyle.scale));
+      const labelHtml =
+        `<span class="kml-label-text" style="color:${labelStyle.color}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(feature.name)}</span>`;
+
+      marker.bindTooltip(labelHtml, {
+        permanent: true,
+        direction: "right",
+        offset: [10, 0],
+        className: "kml-label",
+        opacity: 1
+      });
+    }
+
+    drawn.addLayer(marker);
+    return;
+  }
+
+  /* 목적지 다음 */
+  if (isDestination) {
+    const marker = L.circleMarker(latlng, {
+      radius: Math.max(5, 4 * iconStyle.scale),
+      color: "#222",
+      weight: 1,
+      fillColor: "#0000ff",
+      fillOpacity: 1
+    }).addTo(map);
+
+    marker.bindPopup(popupHtml, { maxWidth: 360 });
+
+    if (feature.name) {
+      const fontSize = Math.max(12, Math.round(16 * labelStyle.scale));
+      const labelHtml =
+        `<span class="kml-label-text" style="color:${labelStyle.color}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(feature.name)}</span>`;
+
+      marker.bindTooltip(labelHtml, {
+        permanent: true,
+        direction: "right",
+        offset: [10, 0],
+        className: "kml-label",
+        opacity: 1
+      });
+    }
+
+    drawn.addLayer(marker);
+    return;
+  }
+
+  /* 그 외 영공 라벨 */
   if (isAirspaceLabel) {
     const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
     const fontSize = Math.max(12, Math.round(16 * labelStyle.scale));
@@ -762,34 +826,10 @@ function drawKMLPoint(feature, routeEndpoints) {
     return;
   }
 
-  const isDeparture = isSameCoord(feature.coords, routeEndpoints?.departureCoord);
-  const isDestination = isSameCoord(feature.coords, routeEndpoints?.destinationCoord);
-
-  if (isDeparture) {
-    const departureIcon = L.icon({
-      iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
-      popupAnchor: [0, -14]
-    });
-
-    const marker = L.marker(latlng, {
-      icon: departureIcon
-    }).addTo(map);
-
-    marker.bindPopup(popupHtml, { maxWidth: 360 });
-    drawn.addLayer(marker);
-    return;
-  }
-
-  let markerColor = iconStyle.color || "#ffff00";
-  let markerOpacity = iconStyle.opacity || 1;
-  let markerRadius = Math.max(4, 4 * iconStyle.scale);
-
-  if (isDestination) {
-    markerColor = "#0000ff";
-    markerOpacity = 1;
-  }
+  /* 일반 waypoint */
+  const markerColor = iconStyle.color || "#ffff00";
+  const markerOpacity = iconStyle.opacity || 1;
+  const markerRadius = Math.max(4, 4 * iconStyle.scale);
 
   const marker = L.circleMarker(latlng, {
     radius: markerRadius,
