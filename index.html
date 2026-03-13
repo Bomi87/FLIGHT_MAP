@@ -87,6 +87,32 @@ html, body {
      1px  1px 0 #000,
      0 0 4px rgba(0,0,0,0.65);
 }
+
+.waypoint-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.waypoint-label:before {
+  display: none !important;
+}
+
+.waypoint-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-weight: 700;
+  color: #ffd400;
+  font-size: 11px;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0,0,0,0.7);
+}
 </style>
 </head>
 <body>
@@ -345,7 +371,6 @@ function hasParenthesesName(name) {
 function isAirspaceLabelFeature(feature) {
   const rawName = String(feature?.name || "").trim();
   if (!rawName) return false;
-
   if (!hasParenthesesName(rawName)) return false;
 
   const country = extractCountryFromPlacemarkName(rawName);
@@ -461,6 +486,50 @@ function isEndpointPointFeature(feature, routeEndpoints) {
   );
 }
 
+function isWaypointLabelFeature(feature) {
+  if (!feature || feature.type !== "Point") return false;
+  if (isAirspaceLabelFeature(feature)) return false;
+  if (!feature.name || !String(feature.name).trim()) return false;
+  return true;
+}
+
+function bindWaypointZoomLabel(layer, feature) {
+  if (!layer || !feature || !feature.name) return;
+  if (!isWaypointLabelFeature(feature)) return;
+
+  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(feature.name)}</span>`;
+  let labelBound = false;
+
+  function updateLabel() {
+    const zoom = map.getZoom();
+
+    if (zoom >= 6) {
+      if (!labelBound) {
+        layer.bindTooltip(labelHtml, {
+          permanent: true,
+          direction: "right",
+          offset: [8, 0],
+          className: "waypoint-label",
+          opacity: 1
+        });
+        labelBound = true;
+      }
+
+      if (layer.openTooltip) {
+        layer.openTooltip();
+      }
+    } else {
+      if (labelBound && layer.unbindTooltip) {
+        layer.unbindTooltip();
+        labelBound = false;
+      }
+    }
+  }
+
+  map.on("zoomend", updateLabel);
+  updateLabel();
+}
+
 /* -----------------------------
    GPX
 ----------------------------- */
@@ -502,6 +571,16 @@ function drawWaypointMarker(lat, lon, popupHtml, index, total) {
   }).addTo(map);
 
   marker.bindPopup(popupHtml, { maxWidth: 360 });
+
+  // GPX도 waypoint 이름 확대 시 표시
+  if (popupHtml) {
+    bindWaypointZoomLabel(marker, {
+      type: "Point",
+      name: "",
+      description: ""
+    });
+  }
+
   drawn.addLayer(marker);
 }
 
@@ -531,7 +610,29 @@ function drawGPXRoute(points, sourceName) {
       extraRows
     );
 
-    drawWaypointMarker(p.lat, p.lon, popupHtml, i, points.length);
+    const latlng = [p.lat, normalizePacificLon(p.lon)];
+
+    let iconColor = "#ffff00";
+    if (i === 0) iconColor = "#00aa00";
+    if (i === points.length - 1) iconColor = "#0000ff";
+
+    const marker = L.circleMarker(latlng, {
+      radius: 5,
+      color: "#222",
+      weight: 1,
+      fillColor: iconColor,
+      fillOpacity: 1
+    }).addTo(map);
+
+    marker.bindPopup(popupHtml, { maxWidth: 360 });
+
+    bindWaypointZoomLabel(marker, {
+      type: "Point",
+      name: p.name || "",
+      description: p.description || ""
+    });
+
+    drawn.addLayer(marker);
   });
 
   fitDrawnBounds();
@@ -660,7 +761,7 @@ function buildExtendedDataRows(placemark) {
   [...datas].forEach(node => {
     const key = node.getAttribute("name") || "Data";
     const valueNode = node.getElementsByTagName("value")[0];
-    const value = valueNode ? escapeHtml(valueNode.textContent || "") : "";
+    const value = valueNode ? escapeHtml(node.getElementsByTagName("value")[0].textContent || "") : "";
     if (value) rows.push({ key, value });
   });
 
@@ -810,6 +911,8 @@ function drawKMLPoint(feature) {
     }).addTo(map);
 
     marker.bindPopup(popupHtml, { maxWidth: 360 });
+    bindWaypointZoomLabel(marker, feature);
+
     drawn.addLayer(marker);
     return;
   }
@@ -827,6 +930,8 @@ function drawKMLPoint(feature) {
   }).addTo(map);
 
   marker.bindPopup(popupHtml, { maxWidth: 360 });
+  bindWaypointZoomLabel(marker, feature);
+
   drawn.addLayer(marker);
 }
 
