@@ -9,40 +9,28 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
-
 html,body{
-margin:0;
-padding:0;
-height:100%;
-width:100%;
+  margin:0;
+  padding:0;
+  height:100%;
+  width:100%;
 }
-
 #map{
-height:100vh;
-width:100%;
+  height:100vh;
+  width:100%;
 }
-
 .panel{
-position:absolute;
-top:10px;
-left:10px;
-z-index:1000;
-background:rgba(255,255,255,0.95);
-padding:10px 12px;
-border-radius:8px;
-font-size:13px;
-box-shadow:0 2px 8px rgba(0,0,0,0.2);
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:1000;
+  background:rgba(255,255,255,0.95);
+  padding:10px 12px;
+  border-radius:8px;
+  font-size:13px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.2);
+  max-width:320px;
 }
-
-.label{
-background:white;
-border:1px solid #666;
-padding:1px 4px;
-font-size:11px;
-border-radius:4px;
-white-space:nowrap;
-}
-
 </style>
 </head>
 
@@ -51,148 +39,217 @@ white-space:nowrap;
 <div id="map"></div>
 
 <div class="panel" id="status">
-Loading route.gpx ...
+Loading...
 </div>
 
 <script>
-
-const map=L.map('map').setView([42,160],3);
+const map = L.map('map').setView([42,160],3);
 
 L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-{maxZoom:18}
+  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  { maxZoom:18, attribution:'© OpenStreetMap' }
 ).addTo(map);
 
-const status=document.getElementById("status");
+const status = document.getElementById("status");
 
 function normalizeLon(lon){
-if(lon<0)return lon+360;
-return lon;
+  return lon < 0 ? lon + 360 : lon;
+}
+
+function getRequestedFile(){
+  const params = new URLSearchParams(window.location.search);
+  const file = params.get("file");
+  return file ? file.trim() : "";
+}
+
+function getExtension(filename){
+  const lower = filename.toLowerCase();
+  if(lower.endsWith(".gpx")) return "gpx";
+  if(lower.endsWith(".kml")) return "kml";
+  return "";
 }
 
 function parseGPX(xmlText){
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(xmlText, "text/xml");
+  const pts = [...xml.getElementsByTagName("rtept")];
 
-const parser=new DOMParser();
-const xml=parser.parseFromString(xmlText,"text/xml");
-
-const pts=[...xml.getElementsByTagName("rtept")];
-
-return pts.map(p=>{
-
-const lat=parseFloat(p.getAttribute("lat"));
-const lon=parseFloat(p.getAttribute("lon"));
-
-const nameNode=p.getElementsByTagName("name")[0];
-
-const name=nameNode?nameNode.textContent:"";
-
-return {lat,lon,name};
-
-});
-
+  return pts.map(p => {
+    const lat = parseFloat(p.getAttribute("lat"));
+    const lon = parseFloat(p.getAttribute("lon"));
+    const nameNode = p.getElementsByTagName("name")[0];
+    const name = nameNode ? nameNode.textContent : "";
+    return { lat, lon, name };
+  }).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
 }
 
-const waypointLabels=[];
+function parseKML(xmlText){
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(xmlText, "text/xml");
+  const placemarks = [...xml.getElementsByTagName("Placemark")];
 
-function updateLabels(points){
+  const points = [];
+  let lineCoords = [];
 
-const zoom=map.getZoom();
+  placemarks.forEach(pm => {
+    const nameNode = pm.getElementsByTagName("name")[0];
+    const name = nameNode ? nameNode.textContent.trim() : "";
 
-waypointLabels.forEach(l=>map.removeLayer(l));
-waypointLabels.length=0;
+    const pointNode = pm.getElementsByTagName("Point")[0];
+    if(pointNode){
+      const coordNode = pointNode.getElementsByTagName("coordinates")[0];
+      if(coordNode){
+        const raw = coordNode.textContent.trim();
+        const parts = raw.split(",");
+        const lon = parseFloat(parts[0]);
+        const lat = parseFloat(parts[1]);
+        if(!isNaN(lat) && !isNaN(lon)){
+          points.push({ lat, lon, name });
+        }
+      }
+    }
 
-points.forEach((p,i)=>{
+    const lineNode = pm.getElementsByTagName("LineString")[0];
+    if(lineNode){
+      const coordNode = lineNode.getElementsByTagName("coordinates")[0];
+      if(coordNode){
+        const raw = coordNode.textContent.trim();
+        const rows = raw.split(/\s+/);
+        const parsed = rows.map(r => {
+          const parts = r.split(",");
+          return {
+            lon: parseFloat(parts[0]),
+            lat: parseFloat(parts[1]),
+            name: ""
+          };
+        }).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
 
-let show=false;
+        if(parsed.length > 1 && lineCoords.length === 0){
+          lineCoords = parsed;
+        }
+      }
+    }
+  });
 
-if(zoom<=3){
-show=(i===0||i===points.length-1);
+  return { points, lineCoords };
 }
 
-else if(zoom<=5){
-show=(i===0||i===points.length-1||i%4===0);
+function drawRouteAndMarkers(points, sourceName){
+  if(!points || points.length < 2){
+    throw new Error("No valid route points");
+  }
+
+  const latlngs = points.map(p => [p.lat, normalizeLon(p.lon)]);
+
+  const route = L.polyline(latlngs, {
+    color:"#FFD400",
+    weight:5
+  }).addTo(map);
+
+  points.forEach((p, i) => {
+    const latlng = [p.lat, normalizeLon(p.lon)];
+    let iconColor = "yellow";
+    let popupText = p.name || "Waypoint";
+
+    if(i === 0){
+      iconColor = "green";
+      popupText = "🛫 " + (p.name || "Departure");
+    }
+
+    if(i === points.length - 1){
+      iconColor = "red";
+      popupText = "🛬 " + (p.name || "Arrival");
+    }
+
+    const marker = L.circleMarker(latlng, {
+      radius:5,
+      color:"#222",
+      weight:1,
+      fillColor:iconColor,
+      fillOpacity:1
+    }).addTo(map);
+
+    marker.bindPopup(popupText);
+  });
+
+  map.fitBounds(route.getBounds(), { padding:[20,20] });
+
+  status.innerHTML =
+    "<b>Flight Route Loaded</b><br>" +
+    "File: " + sourceName + "<br>" +
+    "Waypoints: " + points.length;
 }
 
-else{
-show=true;
+async function fetchTextFile(filename){
+  const res = await fetch(filename + "?v=" + Date.now());
+  if(!res.ok){
+    throw new Error(filename + " not found");
+  }
+  return await res.text();
 }
 
-if(show){
+async function loadByFilename(filename){
+  const ext = getExtension(filename);
 
-const latlng=[p.lat,normalizeLon(p.lon)];
+  if(!ext){
+    throw new Error("Only .gpx or .kml supported");
+  }
 
-const label=L.marker(latlng,{
-interactive:false,
-icon:L.divIcon({
-className:"label",
-html:p.name,
-iconSize:null
-})
-}).addTo(map);
+  const text = await fetchTextFile(filename);
 
-waypointLabels.push(label);
+  if(ext === "gpx"){
+    const points = parseGPX(text);
+    drawRouteAndMarkers(points, filename);
+    return;
+  }
 
+  if(ext === "kml"){
+    const parsed = parseKML(text);
+
+    if(parsed.points.length >= 2){
+      drawRouteAndMarkers(parsed.points, filename);
+      return;
+    }
+
+    if(parsed.lineCoords.length >= 2){
+      drawRouteAndMarkers(parsed.lineCoords, filename);
+      return;
+    }
+
+    throw new Error("No valid Point or LineString in KML");
+  }
 }
 
-});
-
+async function autoLoadDefault(){
+  try{
+    await loadByFilename("route.gpx");
+    return;
+  }catch(e1){
+    try{
+      await loadByFilename("route.kml");
+      return;
+    }catch(e2){
+      throw new Error("No default route.gpx or route.kml found");
+    }
+  }
 }
 
-fetch("route.gpx?v="+Date.now())
+async function init(){
+  try{
+    const requested = getRequestedFile();
 
-.then(res=>{
-if(!res.ok)throw new Error("route.gpx not found");
-return res.text();
-})
+    if(requested){
+      await loadByFilename(requested);
+    }else{
+      await autoLoadDefault();
+    }
+  }catch(err){
+    status.innerHTML = "Error: " + err.message;
+    console.error(err);
+  }
+}
 
-.then(text=>{
-
-const points=parseGPX(text);
-
-const latlngs=points.map(p=>[p.lat,normalizeLon(p.lon)]);
-
-const route=L.polyline(latlngs,{
-color:"#FFD400",
-weight:5
-}).addTo(map);
-
-points.forEach((p,i)=>{
-
-const latlng=[p.lat,normalizeLon(p.lon)];
-
-let iconColor="yellow";
-
-if(i===0)iconColor="green";
-if(i===points.length-1)iconColor="red";
-
-const marker=L.circleMarker(latlng,{
-radius:5,
-color:"#222",
-weight:1,
-fillColor:iconColor,
-fillOpacity:1
-}).addTo(map);
-
-marker.bindPopup(p.name||"Waypoint");
-
-});
-
-map.fitBounds(route.getBounds(),{padding:[20,20]});
-
-updateLabels(points);
-
-map.on("zoomend",()=>updateLabels(points));
-
-status.innerHTML=
-"<b>Flight Route Loaded</b><br>"+
-"Waypoints: "+points.length;
-
-})
-
-.catch(err=>{
-status.innerHTML="Error: "+err.message;
-});
-
+init();
 </script>
 
 </body>
