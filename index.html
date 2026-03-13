@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flight Map</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+    }
+
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
+
+    .legend {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      background: rgba(255,255,255,0.95);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    .legend div {
+      margin-bottom: 4px;
+    }
+
+    .status {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(255,255,255,0.95);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      max-width: 320px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="legend">
+    <div><b>Layers</b></div>
+    <div>🟡 KML : yellow</div>
+    <div>🔵 GPX : blue</div>
+  </div>
+
+  <div class="status" id="status">Loading map...</div>
+
+  <script>
+    const map = L.map('map', {
+      worldCopyJump: false
+    }).setView([38, 160], 3);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const statusBox = document.getElementById('status');
+    const loadedLayers = [];
+    const messages = [];
+
+    function updateStatus() {
+      if (messages.length === 0) {
+        statusBox.innerHTML = 'No route file loaded.';
+      } else {
+        statusBox.innerHTML = messages.join('<br>');
+      }
+    }
+
+    function safeFitBounds(layer) {
+      try {
+        const bounds = layer.getBounds();
+        if (bounds && bounds.isValid && bounds.isValid()) {
+          if (loadedLayers.length === 1) {
+            map.fitBounds(bounds, { padding: [20, 20] });
+          } else {
+            const group = L.featureGroup(loadedLayers);
+            const groupBounds = group.getBounds();
+            if (groupBounds.isValid()) {
+              map.fitBounds(groupBounds, { padding: [20, 20] });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('fitBounds error:', e);
+      }
+    }
+
+    function styleGeoJsonLayer(layer, color, weight) {
+      if (layer.setStyle) {
+        layer.setStyle({
+          color: color,
+          weight: weight,
+          opacity: 0.9,
+          fillOpacity: 0.25
+        });
+      }
+    }
+
+    function loadKML() {
+      const kmlLayer = omnivore.kml('route.kml', null, L.geoJson(null, {
+        style: function () {
+          return {
+            color: '#FFD400',
+            weight: 4,
+            opacity: 0.95,
+            fillColor: '#00CC66',
+            fillOpacity: 0.25
+          };
+        },
+        pointToLayer: function (feature, latlng) {
+          return L.circleMarker(latlng, {
+            radius: 6,
+            color: '#333',
+            weight: 2,
+            fillColor: '#FFD400',
+            fillOpacity: 1
+          }).bindPopup(feature.properties && feature.properties.name ? feature.properties.name : 'KML Point');
+        },
+        onEachFeature: function (feature, layer) {
+          if (feature.properties && feature.properties.name && !layer.getPopup()) {
+            layer.bindPopup(feature.properties.name);
+          }
+        }
+      }))
+      .on('ready', function () {
+        loadedLayers.push(kmlLayer);
+        map.addLayer(kmlLayer);
+        safeFitBounds(kmlLayer);
+        messages.push('✅ KML loaded: route.kml');
+        updateStatus();
+      })
+      .on('error', function () {
+        messages.push('⚠️ KML not loaded: route.kml');
+        updateStatus();
+      });
+    }
+
+    async function loadGPX() {
+      try {
+        const response = await fetch('route.gpx');
+        if (!response.ok) throw new Error('GPX file not found');
+
+        const gpxText = await response.text();
+        const parser = new DOMParser();
+        const gpxDoc = parser.parseFromString(gpxText, 'text/xml');
+
+        const geojson = toGeoJSON.gpx(gpxDoc);
+
+        const gpxLayer = L.geoJSON(geojson, {
+          style: function () {
+            return {
+              color: '#0066FF',
+              weight: 4,
+              opacity: 0.9
+            };
+          },
+          pointToLayer: function (feature, latlng) {
+            return L.circleMarker(latlng, {
+              radius: 5,
+              color: '#003399',
+              weight: 2,
+              fillColor: '#66AAFF',
+              fillOpacity: 1
+            }).bindPopup(feature.properties && feature.properties.name ? feature.properties.name : 'GPX Point');
+          },
+          onEachFeature: function (feature, layer) {
+            if (feature.properties && feature.properties.name && !layer.getPopup()) {
+              layer.bindPopup(feature.properties.name);
+            }
+          }
+        });
+
+        loadedLayers.push(gpxLayer);
+        gpxLayer.addTo(map);
+        safeFitBounds(gpxLayer);
+        messages.push('✅ GPX loaded: route.gpx');
+        updateStatus();
+
+      } catch (error) {
+        messages.push('⚠️ GPX not loaded: route.gpx');
+        updateStatus();
+        console.warn(error);
+      }
+    }
+
+    loadKML();
+    loadGPX();
+  </script>
+</body>
+</html>
