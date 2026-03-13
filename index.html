@@ -63,6 +63,33 @@ html, body {
 .leaflet-popup-content {
   margin: 10px 12px;
 }
+
+/* KML 상시 라벨 */
+.kml-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.kml-label:before {
+  display: none !important;
+}
+
+.kml-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0,0,0,0.65);
+}
 </style>
 </head>
 <body>
@@ -143,17 +170,20 @@ function fitDrawnBounds() {
 async function fetchTextFile(filename) {
   const version = getVersionParam();
   const url = filename + (filename.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(version);
+
   const res = await fetch(url, {
     cache: "no-store"
   });
+
   if (!res.ok) {
     throw new Error(filename + " not found");
   }
+
   return await res.text();
 }
 
 /* -----------------------------
-   공통 popup
+   공통 popup / helpers
 ----------------------------- */
 
 function escapeHtml(str) {
@@ -188,9 +218,14 @@ function buildPopupHtml(title, descriptionHtml, extraRows = []) {
   return html;
 }
 
+function textOfFirst(parent, tagName) {
+  const node = parent.getElementsByTagName(tagName)[0];
+  return node ? node.textContent.trim() : "";
+}
+
 /* -----------------------------
    KML color 변환
-   KML = aabbggrr
+   KML color = aabbggrr
 ----------------------------- */
 
 function kmlColorToCss(kmlColor, fallbackColor, fallbackOpacity) {
@@ -217,9 +252,19 @@ function kmlColorToCss(kmlColor, fallbackColor, fallbackOpacity) {
   };
 }
 
+function getLabelStyle(featureStyle) {
+  const base = kmlColorToCss(featureStyle?.labelColor, "#00ff00", 1);
+  const scale = Number(featureStyle?.labelScale || 1);
+
+  return {
+    color: base.color || "#00ff00",
+    opacity: isFinite(base.opacity) ? base.opacity : 1,
+    scale: isFinite(scale) && scale > 0 ? scale : 1
+  };
+}
+
 /* -----------------------------
    antimeridian split
-   Pacific 0~360 기준
 ----------------------------- */
 
 function splitPacificSegments(latlngs) {
@@ -320,11 +365,13 @@ function drawGPXRoute(points, sourceName) {
   points.forEach((p, i) => {
     const extraRows = [];
     if (p.comment) extraRows.push({ key: "Comment", value: p.comment });
+
     const popupHtml = buildPopupHtml(
       p.name || "Waypoint",
       p.description || "",
       extraRows
     );
+
     drawWaypointMarker(p.lat, p.lon, popupHtml, i, points.length);
   });
 
@@ -335,11 +382,6 @@ function drawGPXRoute(points, sourceName) {
 /* -----------------------------
    KML helpers
 ----------------------------- */
-
-function textOfFirst(parent, tagName) {
-  const node = parent.getElementsByTagName(tagName)[0];
-  return node ? node.textContent.trim() : "";
-}
 
 function parseCoordinates(coordText) {
   if (!coordText) return [];
@@ -368,6 +410,8 @@ function buildStyleIndex(xml) {
 
     const lineStyleNode = styleNode.getElementsByTagName("LineStyle")[0];
     const polyStyleNode = styleNode.getElementsByTagName("PolyStyle")[0];
+    const labelStyleNode = styleNode.getElementsByTagName("LabelStyle")[0];
+    const iconStyleNode = styleNode.getElementsByTagName("IconStyle")[0];
 
     const style = {};
 
@@ -384,10 +428,50 @@ function buildStyleIndex(xml) {
       style.outline = outlineText === "" ? true : outlineText !== "0";
     }
 
+    if (labelStyleNode) {
+      style.labelColor = textOfFirst(labelStyleNode, "color");
+      style.labelScale = parseFloat(textOfFirst(labelStyleNode, "scale")) || 1;
+    }
+
+    if (iconStyleNode) {
+      style.iconScale = parseFloat(textOfFirst(iconStyleNode, "scale")) || 1;
+      const iconNode = iconStyleNode.getElementsByTagName("Icon")[0];
+      if (iconNode) {
+        style.iconHref = textOfFirst(iconNode, "href");
+      }
+    }
+
     styleMap["#" + id] = style;
   });
 
   return styleMap;
+}
+
+function buildStyleMapIndex(xml) {
+  const styleMapIndex = {};
+  const styleMapNodes = [...xml.getElementsByTagName("StyleMap")];
+
+  styleMapNodes.forEach(node => {
+    const id = node.getAttribute("id");
+    if (!id) return;
+
+    const pairs = [...node.getElementsByTagName("Pair")];
+    let normalUrl = "";
+
+    pairs.forEach(pair => {
+      const key = textOfFirst(pair, "key");
+      const styleUrl = textOfFirst(pair, "styleUrl");
+      if (key === "normal" && styleUrl) {
+        normalUrl = styleUrl;
+      }
+    });
+
+    if (normalUrl) {
+      styleMapIndex["#" + id] = normalUrl;
+    }
+  });
+
+  return styleMapIndex;
 }
 
 function buildExtendedDataRows(placemark) {
@@ -414,6 +498,7 @@ function buildExtendedDataRows(placemark) {
 function extractKMLFeatures(text) {
   const xml = parseXml(text);
   const styleIndex = buildStyleIndex(xml);
+  const styleMapIndex = buildStyleMapIndex(xml);
   const placemarks = [...xml.getElementsByTagName("Placemark")];
 
   const features = [];
@@ -421,7 +506,12 @@ function extractKMLFeatures(text) {
   placemarks.forEach(pm => {
     const name = textOfFirst(pm, "name");
     const description = textOfFirst(pm, "description");
-    const styleUrl = textOfFirst(pm, "styleUrl");
+
+    let styleUrl = textOfFirst(pm, "styleUrl");
+    if (styleMapIndex[styleUrl]) {
+      styleUrl = styleMapIndex[styleUrl];
+    }
+
     const style = styleIndex[styleUrl] || {};
     const extraRows = buildExtendedDataRows(pm);
 
@@ -498,7 +588,51 @@ function drawKMLPoint(feature, index, total) {
     feature.description || "",
     feature.extraRows || []
   );
-  drawWaypointMarker(feature.coords.lat, feature.coords.lon, popupHtml, index, total);
+
+  const latlng = [feature.coords.lat, normalizePacificLon(feature.coords.lon)];
+  const labelStyle = getLabelStyle(feature.style);
+
+  let iconColor = "yellow";
+  if (index === 0) iconColor = "green";
+  if (index === total - 1) iconColor = "red";
+
+  if (feature.name && (
+      feature.name.includes("일본") ||
+      feature.name.includes("미국") ||
+      feature.name.includes("중국") ||
+      feature.name.includes("러시아") ||
+      feature.name.includes("캐나다") ||
+      feature.name.includes("PAZA") ||
+      feature.name.includes("RJJJ")
+    )) {
+    iconColor = "#ffffff";
+  }
+
+  const marker = L.circleMarker(latlng, {
+    radius: Math.max(3, 4 * (feature.style?.iconScale || 1)),
+    color: "#222",
+    weight: 1,
+    fillColor: iconColor,
+    fillOpacity: 1
+  }).addTo(map);
+
+  marker.bindPopup(popupHtml, { maxWidth: 360 });
+
+  if (feature.name) {
+    const fontSize = Math.max(12, Math.round(16 * labelStyle.scale));
+    const labelHtml =
+      `<span class="kml-label-text" style="color:${labelStyle.color}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(feature.name)}</span>`;
+
+    marker.bindTooltip(labelHtml, {
+      permanent: true,
+      direction: "right",
+      offset: [8, 0],
+      className: "kml-label",
+      opacity: 1
+    });
+  }
+
+  drawn.addLayer(marker);
 }
 
 function drawKMLLine(feature) {
@@ -515,7 +649,7 @@ function drawKMLLine(feature) {
       opacity: lineStyle.opacity
     }).addTo(map);
 
-    if (feature.name || feature.description) {
+    if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
       const popupHtml = buildPopupHtml(
         feature.name || "LineString",
         feature.description || "",
@@ -544,7 +678,7 @@ function drawKMLPolygon(feature) {
     fillOpacity: feature.style.fill === false ? 0 : fillStyle.opacity
   }).addTo(map);
 
-  if (feature.name || feature.description) {
+  if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
     const popupHtml = buildPopupHtml(
       feature.name || "Polygon",
       feature.description || "",
@@ -570,6 +704,7 @@ function drawKMLFeatures(features, sourceName) {
   pointFeatures.forEach((f, i) => drawKMLPoint(f, i, pointFeatures.length));
 
   fitDrawnBounds();
+
   console.log("Flight Route Loaded:", sourceName, "KML", {
     points: pointFeatures.length,
     lines: lineFeatures.length,
