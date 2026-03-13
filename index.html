@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Flight Map</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-kml@1.0.1/L.KML.js"></script>
+
+<style>
+#map { height: 100vh; }
+</style>
+
+</head>
+
+<body>
+
+<div id="map"></div>
+
+<script>
+
+var map = L.map('map').setView([40,160],4);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+maxZoom: 18
+}).addTo(map);
+
+fetch("route.kml")
+.then(res => res.text())
+.then(kmltext => {
+var parser = new DOMParser();
+var kml = parser.parseFromString(kmltext,"text/xml");
+var track = new L.KML(kml);
+map.addLayer(track);
+map.fitBounds(track.getBounds());
+});
+
+</script>
+
+</body>
+</html>
