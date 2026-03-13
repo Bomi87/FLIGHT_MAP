@@ -338,18 +338,19 @@ function extractCountryFromPlacemarkName(name) {
   return cleaned;
 }
 
-function extractAirportCode(name) {
-  const match = String(name || "").match(/\(([A-Z0-9]{4})\)/);
-  return match ? match[1] : "";
-}
-
-function hasAirportCodeName(feature) {
-  return !!extractAirportCode(feature?.name || "");
+function hasParenthesesName(name) {
+  return /\(.*\)/.test(String(name || ""));
 }
 
 function isAirspaceLabelFeature(feature) {
-  const country = extractCountryFromPlacemarkName(feature?.name || "");
+  const rawName = String(feature?.name || "").trim();
+  if (!rawName) return false;
+
+  if (!hasParenthesesName(rawName)) return false;
+
+  const country = extractCountryFromPlacemarkName(rawName);
   if (!country) return false;
+
   return AIRSPACE_COUNTRIES.has(country);
 }
 
@@ -418,32 +419,6 @@ function splitPacificSegments(latlngs) {
    endpoint helpers
 ----------------------------- */
 
-function isSameCoord(a, b, tolerance = 0.15) {
-  if (!a || !b) return false;
-
-  const latDiff = Math.abs(Number(a.lat) - Number(b.lat));
-  const lonA = normalizePacificLon(Number(a.lon));
-  const lonB = normalizePacificLon(Number(b.lon));
-
-  let lonDiff = Math.abs(lonA - lonB);
-  lonDiff = Math.min(lonDiff, 360 - lonDiff);
-
-  return latDiff <= tolerance && lonDiff <= tolerance;
-}
-
-function isSpecialIconFeature(feature) {
-  const href = String(feature?.style?.iconHref || "").toLowerCase();
-  if (!href) return false;
-
-  return (
-    href.includes("airports") ||
-    href.includes("airplane") ||
-    href.includes("plane") ||
-    href.includes("track") ||
-    href.includes("aircraft")
-  );
-}
-
 function compressConsecutiveByName(features) {
   const result = [];
   for (const f of features) {
@@ -455,30 +430,13 @@ function compressConsecutiveByName(features) {
 }
 
 function getRouteEndpoints(pointFeatures) {
-  const airportLabelCandidates = compressConsecutiveByName(
-    pointFeatures.filter(f => hasAirportCodeName(f))
+  const endpointCandidates = compressConsecutiveByName(
+    pointFeatures.filter(f => !isAirspaceLabelFeature(f))
   );
 
-  if (airportLabelCandidates.length >= 2) {
-    const depFeature = airportLabelCandidates[0];
-    const destFeature = airportLabelCandidates[airportLabelCandidates.length - 1];
-
-    return {
-      departureFeature: depFeature,
-      destinationFeature: destFeature,
-      departureCoord: depFeature.coords,
-      destinationCoord: destFeature.coords
-    };
-  }
-
-  const routePoints = pointFeatures.filter(f =>
-    !isAirspaceLabelFeature(f) &&
-    !isSpecialIconFeature(f)
-  );
-
-  if (routePoints.length >= 2) {
-    const depFeature = routePoints[0];
-    const destFeature = routePoints[routePoints.length - 1];
+  if (endpointCandidates.length >= 2) {
+    const depFeature = endpointCandidates[0];
+    const destFeature = endpointCandidates[endpointCandidates.length - 1];
 
     return {
       departureFeature: depFeature,
@@ -839,7 +797,7 @@ function drawKMLPoint(feature) {
   }
 
   if (iconStyle.href) {
-   const iconSize = Math.max(12, Math.round(16 * iconStyle.scale));
+    const iconSize = Math.max(12, Math.round(16 * iconStyle.scale));
     const customIcon = L.icon({
       iconUrl: iconStyle.href,
       iconSize: [iconSize, iconSize],
@@ -936,12 +894,12 @@ function drawRouteEndpointMarkers(routeEndpoints) {
   if (depFeature?.coords) {
     const depLatLng = [depFeature.coords.lat, normalizePacificLon(depFeature.coords.lon)];
 
-const departureIcon = L.icon({
-  iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
-  iconSize: [22, 22],
-  iconAnchor: [11, 11],
-  popupAnchor: [0, -10]
-});
+    const departureIcon = L.icon({
+      iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+      popupAnchor: [0, -10]
+    });
 
     const depMarker = L.marker(depLatLng, {
       icon: departureIcon,
@@ -959,12 +917,16 @@ const departureIcon = L.icon({
   if (destFeature?.coords) {
     const destLatLng = [destFeature.coords.lat, normalizePacificLon(destFeature.coords.lon)];
 
-    const destMarker = L.circleMarker(destLatLng, {
-      radius: 7,
-      color: "#222",
-      weight: 1,
-      fillColor: "#0000ff",
-      fillOpacity: 1
+    const destinationIcon = L.icon({
+      iconUrl: "https://maps.google.com/mapfiles/kml/paddle/blu-circle.png",
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+      popupAnchor: [0, -10]
+    });
+
+    const destMarker = L.marker(destLatLng, {
+      icon: destinationIcon,
+      zIndexOffset: 1000
     }).addTo(map);
 
     destMarker.bindPopup(
