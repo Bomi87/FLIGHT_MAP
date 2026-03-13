@@ -1000,29 +1000,6 @@ function drawRouteEndpointMarkers(routeEndpoints) {
   const depFeature = routeEndpoints.departureFeature;
   const destFeature = routeEndpoints.destinationFeature;
 
-  if (depFeature?.coords) {
-    const depLatLng = [depFeature.coords.lat, normalizePacificLon(depFeature.coords.lon)];
-
-    const departureIcon = L.icon({
-      iconUrl: "https://maps.google.com/mapfiles/kml/shapes/airports.png",
-      iconSize: [22, 22],
-      iconAnchor: [11, 11],
-      popupAnchor: [0, -10]
-    });
-
-    const depMarker = L.marker(depLatLng, {
-      icon: departureIcon,
-      zIndexOffset: 1000
-    }).addTo(map);
-
-    depMarker.bindPopup(
-      buildPopupHtml(depFeature.name || "", depFeature.description || "", depFeature.extraRows || []),
-      { maxWidth: 360 }
-    );
-
-    drawn.addLayer(depMarker);
-  }
-
   if (destFeature?.coords) {
     const destLatLng = [destFeature.coords.lat, normalizePacificLon(destFeature.coords.lon)];
 
