@@ -195,4 +195,4 @@ async function updateAircraft() {
 }
 
 updateAircraft();
-setInterval(updateAircraft, 5000);
+setInterval(updateAircraft, 15000);
