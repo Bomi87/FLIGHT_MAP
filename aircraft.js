@@ -13,9 +13,9 @@ const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
 const POINT_RADIUS_NM = 80;
 const MAX_LIVE_TRAIL_POINTS = 500;
-
-/* 상승/하강 판단 기준 (ft/min) */
 const VERTICAL_RATE_THRESHOLD = 300;
+
+/* ------------------ STATE ------------------ */
 
 let aircraftMarker = null;
 let liveTrail = [];
@@ -105,7 +105,7 @@ function getVerticalRateFpm(ac) {
 
   vr = Number(vr);
 
-  // 값이 m/s 수준으로 보이면 ft/min으로 변환
+  // m/s 가능성 보정
   if (Math.abs(vr) < 120) {
     vr = vr * 196.850394;
   }
@@ -134,7 +134,9 @@ function formatAltitudeLine(ac) {
 function formatMach(ac) {
   const mach = Number(ac.mach);
   if (!Number.isFinite(mach) || mach <= 0) return "";
-  return "M" + mach.toFixed(2);
+
+  const machStr = mach.toFixed(2).replace(/^0/, "");
+  return "M" + machStr; // M.78
 }
 
 function formatIAS(ac) {
@@ -143,13 +145,23 @@ function formatIAS(ac) {
   return Math.round(ias) + "kt";
 }
 
+function formatGS(ac) {
+  const gs = Number(ac.gs);
+  if (!Number.isFinite(gs) || gs <= 0) return "";
+  return Math.round(gs) + "kt";
+}
+
 function formatSpeedLine(ac) {
   const mach = formatMach(ac);
   const ias = formatIAS(ac);
+  const gs = formatGS(ac);
 
   if (mach && ias) return `${mach} / ${ias}`;
-  if (mach) return mach;
+  if (mach && gs) return `${mach} / ${gs}`;
   if (ias) return ias;
+  if (gs) return gs;
+  if (mach) return mach;
+
   return "";
 }
 
@@ -166,51 +178,55 @@ function formatLabel(ac) {
   return `
     <div style="
       display:inline-block;
-      min-width:115px;
-      padding:8px 12px;
+      width:auto;
+      min-width:0;
+      max-width:120px;
+      padding:5px 7px;
       background:rgba(255,255,255,0.95);
       border:1px solid #999;
       border-radius:8px;
       box-shadow:0 1px 4px rgba(0,0,0,0.18);
       text-align:center;
       color:#111;
-      line-height:1.28;
-      white-space:normal;
+      line-height:1.16;
+      white-space:nowrap;
     ">
       <div style="
-        font-size:13px;
+        font-size:12px;
         font-weight:700;
       ">${callsign || "-"}</div>
 
       ${reg ? `
         <div style="
-          font-size:12px;
+          font-size:11px;
           font-weight:600;
+          margin-top:1px;
         ">(${reg})</div>
       ` : ""}
 
       ${type ? `
         <div style="
-          font-size:12px;
+          font-size:11px;
           font-weight:700;
           color:#333;
+          margin-top:1px;
         ">${type}</div>
       ` : ""}
 
       ${altitudeLine ? `
         <div style="
-          font-size:12px;
+          font-size:11px;
           font-weight:700;
-          margin-top:2px;
+          margin-top:1px;
         ">${altitudeLine}</div>
       ` : ""}
 
       ${speedLine ? `
         <div style="
-          font-size:11px;
+          font-size:10px;
           font-weight:600;
           color:#444;
-          margin-top:2px;
+          margin-top:1px;
         ">${speedLine}</div>
       ` : ""}
     </div>
@@ -512,7 +528,7 @@ function animateMarkerTo(lat, lon, track, ac) {
     aircraftMarker.bindTooltip(formatLabel(ac), {
       permanent: true,
       direction: "top",
-      offset: [0, -20],
+      offset: [0, -18],
       className: "aircraft-label",
       opacity: 1
     });
@@ -531,7 +547,7 @@ function animateMarkerTo(lat, lon, track, ac) {
   aircraftMarker.bindTooltip(formatLabel(ac), {
     permanent: true,
     direction: "top",
-    offset: [0, -20],
+    offset: [0, -18],
     className: "aircraft-label",
     opacity: 1
   });
@@ -587,24 +603,47 @@ async function updateAircraft() {
 
     showStatus("Checking aircraft...", "#444");
 
-    if (targetHex) {
+    if (
+      lastAircraft &&
+      Number.isFinite(lastAircraft.latitude) &&
+      Number.isFinite(lastAircraft.longitude)
+    ) {
+      try {
+        ac = await fetchAircraftFromPoint(
+          lastAircraft.latitude,
+          lastAircraft.longitude,
+          POINT_RADIUS_NM
+        );
+      } catch (e) {
+        console.warn("Point search failed, fallback to exact lookup:", e);
+      }
+    }
+
+    if (!ac && targetHex) {
       ac = await fetchAircraftByHex();
-    } else if (targetReg) {
+    }
+
+    if (!ac && targetReg) {
       ac = await fetchAircraftByReg();
     }
 
     console.log("Final aircraft:", ac);
 
     if (!ac) {
-      showStatus(`Aircraft not found: ${targetHex || targetReg}`, "#444");
+      showStatus(
+        `Aircraft not found` +
+        `${targetHex ? `: ${targetHex}` : ""}` +
+        `${targetReg ? ` / ${targetReg}` : ""}`,
+        "#444"
+      );
       return;
     }
 
-    const lat = Number(ac.latitude);
     const lon = Number(ac.longitude);
+    const lat = Number(ac.latitude);
     const track = Number(ac.true_track ?? 0);
 
-    console.log("Final position:", { lat, lon, track });
+    console.log("Final position:", lat, lon, track);
 
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       showStatus("Aircraft found but no valid position yet.", "#a60");
@@ -614,27 +653,17 @@ async function updateAircraft() {
     hideStatus();
 
     addLiveTrailPoint(lat, lon);
+    animateMarkerTo(lat, lon, track, ac);
 
-    if (!aircraftMarker) {
-      aircraftMarker = L.marker([lat, lon], {
-        icon: makeAircraftIcon(track),
-        zIndexOffset: 2000
-      }).addTo(map);
-    } else {
-      aircraftMarker.setLatLng([lat, lon]);
-      aircraftMarker.setIcon(makeAircraftIcon(track));
+    if (!trackingStarted) {
+      trackingStarted = true;
+
+      try {
+        map.setView([lat, lon], Math.max(map.getZoom?.() || 8, 8), {
+          animate: true
+        });
+      } catch {}
     }
-
-    aircraftMarker.unbindTooltip();
-    aircraftMarker.bindTooltip(formatLabel(ac), {
-      permanent: true,
-      direction: "top",
-      offset: [0, -20],
-      className: "aircraft-label",
-      opacity: 1
-    });
-
-    map.setView([lat, lon], Math.max(map.getZoom?.() || 8, 8));
 
     lastAircraft = {
       ...ac,
@@ -643,11 +672,14 @@ async function updateAircraft() {
       true_track: track
     };
 
+    console.log("Tracking source:", ac.sourceBase || lastGoodApiBase, ac);
+
   } catch (e) {
     console.error("Aircraft update failed:", e);
     showStatus("Aircraft update failed: " + e.message, "red");
   }
 }
+
 /* ------------------ START ------------------ */
 
 async function startAircraftTracking() {
