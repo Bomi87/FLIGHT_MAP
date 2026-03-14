@@ -252,6 +252,24 @@ function escapeHtml(str) {
     .replaceAll("'", "&#39;");
 }
 
+function cleanLabelText(str) {
+  let s = String(str || "");
+
+  /* 가장 문제되는 패턴 제거 */
+  s = s.replace(/&amp;#x2F;\d+/gi, "");
+
+  /* 혹시 entity가 한 단계만 남아있는 경우 제거 */
+  s = s.replace(/&#x2F;\d+/gi, "");
+
+  /* /26 같은 suffix 제거 */
+  s = s.replace(/\/\d+\b/g, "");
+
+  /* 남아있는 entity 제거 */
+  s = s.replace(/&[#A-Za-z0-9]+;/g, "");
+
+  return s.trim();
+}
+
 function buildPopupHtml(title, descriptionHtml, extraRows = []) {
   let html = `<div class="popup-body">`;
 
@@ -513,7 +531,10 @@ function isAlwaysVisibleShapePointLabel(feature) {
 function bindPermanentPointLabel(layer, feature) {
   if (!layer || !feature || !feature.name) return;
 
-  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(feature.name)}</span>`;
+  const cleanedName = cleanLabelText(feature.name);
+  if (!cleanedName) return;
+
+  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
 
   layer.bindTooltip(labelHtml, {
     permanent: true,
@@ -532,7 +553,10 @@ function bindWaypointZoomLabel(layer, feature) {
   if (!layer || !feature || !feature.name) return;
   if (!isWaypointLabelFeature(feature)) return;
 
-  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(feature.name)}</span>`;
+  const cleanedName = cleanLabelText(feature.name);
+  if (!cleanedName) return;
+
+  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
   let labelBound = false;
 
   function updateLabel() {
@@ -907,11 +931,14 @@ function drawKMLPoint(feature) {
   const isAirspaceLabel = isAirspaceLabelFeature(feature);
 
   if (isAirspaceLabel) {
+    const cleanedName = cleanLabelText(feature.name);
+    if (!cleanedName) return;
+
     const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
     const fontSize = Math.max(9, Math.round(11 * labelStyle.scale));
 
     const labelHtml =
-      `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(feature.name)}</span>`;
+      `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
 
     const labelOnlyMarker = L.marker(latlng, {
       opacity: 0,
@@ -947,7 +974,6 @@ function drawKMLPoint(feature) {
 
     marker.bindPopup(popupHtml, { maxWidth: 360 });
 
-    // 삼각형 도형 label은 zoom과 무관하게 항상 표시
     if (isTriangleShapePoint(feature)) {
       bindPermanentPointLabel(marker, feature);
     } else {
