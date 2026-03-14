@@ -8,7 +8,6 @@ let aircraftTrailLine = null;
 
 function formatAltitudeFromState(ac) {
   const altMeters = ac[13];
-
   if (altMeters == null || isNaN(altMeters)) return "";
 
   const ft = Math.round(Number(altMeters) * 3.28084);
@@ -53,18 +52,8 @@ function makeAircraftIcon(track = 0) {
         transform: rotate(${track}deg);
         transform-origin: center center;
       ">
-        <svg
-          width="32"
-          height="32"
-          viewBox="0 0 100 100"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <g
-            fill="#ff8800"
-            stroke="black"
-            stroke-width="3"
-            stroke-linejoin="round"
-          >
+        <svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <g fill="#ff8800" stroke="black" stroke-width="3" stroke-linejoin="round">
             <path d="
               M50 2
               L56 26
@@ -100,7 +89,6 @@ function addTrailPoint(lat, lon) {
   if (lat == null || lon == null) return;
 
   const last = aircraftTrail[aircraftTrail.length - 1];
-
   if (last) {
     const sameEnough =
       Math.abs(last[0] - lat) < 0.00001 &&
@@ -125,32 +113,33 @@ function addTrailPoint(lat, lon) {
   } else {
     aircraftTrailLine.setLatLngs(aircraftTrail);
   }
-
-  console.log("trail point added:", lat, lon, "count:", aircraftTrail.length);
 }
 
 async function updateAircraft() {
-  if (!targetReg && !targetHex) return;
+  if (!targetHex && !targetReg) return;
 
   try {
-  const res = await fetch(
-  `https://opensky-network.org/api/states/all?icao24=${targetHex}`
-);
-console.log("OpenSky response:", res.status, res.statusText);
+    let url = "";
+
+    if (targetHex) {
+      url = `https://opensky-network.org/api/states/all?icao24=${encodeURIComponent(targetHex)}`;
+    } else {
+      url = "https://opensky-network.org/api/states/all";
+    }
+
+    const res = await fetch(url);
+    console.log("OpenSky response:", res.status, res.statusText);
+
     if (!res.ok) {
-  const text = await res.text();   // 서버가 준 에러 메시지 확인
-  console.error("OpenSky fetch failed:", res.status, res.statusText);
-  console.error("OpenSky error body:", text);
-  return;
-}
-    
-    if (!res.ok) {
+      const text = await res.text();
       console.error("OpenSky fetch failed:", res.status, res.statusText);
+      console.error("OpenSky error body:", text);
       return;
     }
 
     const data = await res.json();
     const list = data.states || [];
+    console.log("Aircraft count:", list.length);
 
     let ac = null;
 
