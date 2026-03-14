@@ -7,6 +7,7 @@ const OPENSKY_PROXY = "https://icy-dew-2558.sbyu.workers.dev";
 let aircraftMarker = null;
 let aircraftTrail = [];
 let aircraftTrailLine = null;
+let historicalTrailLoaded = false;
 
 /* ------------------ STATUS BOX ------------------ */
 
@@ -143,24 +144,15 @@ function makeAircraftIcon(track = 0) {
 
 /* ------------------ TRAIL ------------------ */
 
-function addTrailPoint(lat, lon) {
-  if (lat == null || lon == null) return;
+function isSamePoint(a, b) {
+  return (
+    Math.abs(a[0] - b[0]) < 0.00001 &&
+    Math.abs(a[1] - b[1]) < 0.00001
+  );
+}
 
-  const last = aircraftTrail[aircraftTrail.length - 1];
-
-  if (last) {
-    const sameEnough =
-      Math.abs(last[0] - lat) < 0.00001 &&
-      Math.abs(last[1] - lon) < 0.00001;
-
-    if (sameEnough) return;
-  }
-
-  aircraftTrail.push([lat, lon]);
-
-  if (aircraftTrail.length > 300) {
-    aircraftTrail.shift();
-  }
+function redrawTrail() {
+  if (!aircraftTrail.length) return;
 
   if (!aircraftTrailLine) {
     aircraftTrailLine = L.polyline(aircraftTrail, {
@@ -172,6 +164,51 @@ function addTrailPoint(lat, lon) {
   } else {
     aircraftTrailLine.setLatLngs(aircraftTrail);
   }
+}
+
+function addTrailPoint(lat, lon) {
+  if (lat == null || lon == null) return;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+  const newPoint = [lat, lon];
+  const last = aircraftTrail[aircraftTrail.length - 1];
+
+  if (last && isSamePoint(last, newPoint)) return;
+
+  aircraftTrail.push(newPoint);
+
+  if (aircraftTrail.length > 1000) {
+    aircraftTrail.shift();
+  }
+
+  redrawTrail();
+}
+
+function setHistoricalTrail(coords) {
+  if (!Array.isArray(coords) || !coords.length) return;
+
+  const cleaned = [];
+
+  for (const pt of coords) {
+    if (!Array.isArray(pt) || pt.length < 2) continue;
+
+    const lat = Number(pt[0]);
+    const lon = Number(pt[1]);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+    const newPoint = [lat, lon];
+    const last = cleaned[cleaned.length - 1];
+
+    if (!last || !isSamePoint(last, newPoint)) {
+      cleaned.push(newPoint);
+    }
+  }
+
+  if (!cleaned.length) return;
+
+  aircraftTrail = cleaned;
+  redrawTrail();
 }
 
 /* ------------------ SAFE FETCH ------------------ */
@@ -199,16 +236,55 @@ async function fetchJsonSafely(url) {
   return data;
 }
 
+/* ------------------ HISTORICAL TRAIL ------------------ */
+
+async function loadHistoricalTrail() {
+  if (!targetHex || historicalTrailLoaded) return;
+
+  try {
+    showStatus(`Loading historical trail: ${targetHex}`, "#444");
+
+    const url = `${OPENSKY_PROXY}/?mode=tracks&hex=${encodeURIComponent(targetHex)}`;
+    console.log("Historical trail request:", url);
+
+    const data = await fetchJsonSafely(url);
+    const path = Array.isArray(data.path) ? data.path : [];
+
+    if (!path.length) {
+      historicalTrailLoaded = true;
+      showStatus(`No historical trail available: ${targetHex}`, "#666");
+      return;
+    }
+
+    const coords = path
+      .map(p => [Number(p[1]), Number(p[2])])
+      .filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+
+    setHistoricalTrail(coords);
+
+    historicalTrailLoaded = true;
+    hideStatus();
+
+    console.log("Historical trail loaded:", coords.length);
+
+  } catch (e) {
+    historicalTrailLoaded = true;
+    console.error("Historical trail load failed:", e);
+    showStatus("Historical trail load failed: " + e.message, "#aa0000");
+  }
+}
+
 /* ------------------ UPDATE AIRCRAFT ------------------ */
 
 async function updateAircraft() {
   if (!targetHex) {
     console.log("No HEX parameter.");
+    showStatus("No HEX parameter.", "#444");
     return;
   }
 
   try {
-    const url = `${OPENSKY_PROXY}/?hex=${encodeURIComponent(targetHex)}`;
+    const url = `${OPENSKY_PROXY}/?mode=states&hex=${encodeURIComponent(targetHex)}`;
     console.log("Proxy request:", url);
 
     const data = await fetchJsonSafely(url);
@@ -222,7 +298,11 @@ async function updateAircraft() {
 
     if (!ac) {
       console.log("Aircraft not found:", targetHex, list);
-      showStatus(`Aircraft not found yet: ${targetHex}`, "#444");
+
+      if (!aircraftTrail.length) {
+        showStatus(`Aircraft not found yet: ${targetHex}`, "#444");
+      }
+
       return;
     }
 
@@ -267,5 +347,10 @@ async function updateAircraft() {
 
 /* ------------------ START ------------------ */
 
-updateAircraft();
-setInterval(updateAircraft, 10000);
+async function startAircraftTracking() {
+  await loadHistoricalTrail();
+  await updateAircraft();
+  setInterval(updateAircraft, 10000);
+}
+
+startAircraftTracking();
