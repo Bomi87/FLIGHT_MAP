@@ -25,19 +25,19 @@ function formatLabel(ac) {
   const hex = (ac[0] || "").toLowerCase();
   const altitudeText = formatAltitudeFromState(ac);
 
- return `
-<div style="
-  font-size:11px;
-  color:black;
-  font-weight:700;
-  white-space:nowrap;
-  text-align:center;
-  line-height:1.25;
-">
-  ${flight || hex}
-  ${altitudeText ? `<br>${altitudeText}` : ""}
-</div>
-`;
+  return `
+    <div style="
+      font-size: 11px;
+      color: black !important;
+      font-weight: 700;
+      white-space: nowrap;
+      text-align: center;
+      line-height: 1.25;
+    ">
+      ${flight || hex}
+      ${altitudeText ? `<br>${altitudeText}` : ""}
+    </div>
+  `;
 }
 
 function makeAircraftIcon(track = 0) {
@@ -93,28 +93,30 @@ function addTrailPoint(lat, lon) {
 
   if (last) {
     const sameEnough =
-      Math.abs(last[0] - lat) < 0.0001 &&
-      Math.abs(last[1] - lon) < 0.0001;
+      Math.abs(last[0] - lat) < 0.00001 &&
+      Math.abs(last[1] - lon) < 0.00001;
 
     if (sameEnough) return;
   }
 
   aircraftTrail.push([lat, lon]);
 
-  if (aircraftTrail.length > 200) {
+  if (aircraftTrail.length > 300) {
     aircraftTrail.shift();
   }
 
   if (!aircraftTrailLine) {
     aircraftTrailLine = L.polyline(aircraftTrail, {
-      color: "#ff8800",
-      weight: 2,
-      opacity: 0.9,
+      color: "#ff6600",
+      weight: 4,
+      opacity: 1,
       smoothFactor: 1
     }).addTo(map);
   } else {
     aircraftTrailLine.setLatLngs(aircraftTrail);
   }
+
+  console.log("trail point added:", lat, lon, "count:", aircraftTrail.length);
 }
 
 async function updateAircraft() {
