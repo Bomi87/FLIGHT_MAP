@@ -8,6 +8,7 @@ let aircraftTrailLine = null;
 
 function formatAltitudeFromState(ac) {
   const altMeters = ac[13];
+
   if (altMeters == null || isNaN(altMeters)) return "";
 
   const ft = Math.round(Number(altMeters) * 3.28084);
@@ -52,8 +53,18 @@ function makeAircraftIcon(track = 0) {
         transform: rotate(${track}deg);
         transform-origin: center center;
       ">
-        <svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <g fill="#ff8800" stroke="black" stroke-width="3" stroke-linejoin="round">
+        <svg
+          width="32"
+          height="32"
+          viewBox="0 0 100 100"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g
+            fill="#ff8800"
+            stroke="black"
+            stroke-width="3"
+            stroke-linejoin="round"
+          >
             <path d="
               M50 2
               L56 26
@@ -89,6 +100,7 @@ function addTrailPoint(lat, lon) {
   if (lat == null || lon == null) return;
 
   const last = aircraftTrail[aircraftTrail.length - 1];
+
   if (last) {
     const sameEnough =
       Math.abs(last[0] - lat) < 0.00001 &&
@@ -113,19 +125,19 @@ function addTrailPoint(lat, lon) {
   } else {
     aircraftTrailLine.setLatLngs(aircraftTrail);
   }
+
+  console.log("trail point added:", lat, lon, "count:", aircraftTrail.length);
 }
 
 async function updateAircraft() {
-  if (!targetHex && !targetReg) return;
+  if (!targetHex) {
+    console.log("No hex parameter found.");
+    return;
+  }
 
   try {
-    let url = "";
-
-    if (targetHex) {
-      url = `https://opensky-network.org/api/states/all?icao24=${encodeURIComponent(targetHex)}`;
-    } else {
-      url = "https://opensky-network.org/api/states/all";
-    }
+    const url = `https://opensky-network.org/api/states/all?icao24=${encodeURIComponent(targetHex)}`;
+    console.log("OpenSky URL:", url);
 
     const res = await fetch(url);
     console.log("OpenSky response:", res.status, res.statusText);
@@ -141,20 +153,12 @@ async function updateAircraft() {
     const list = data.states || [];
     console.log("Aircraft count:", list.length);
 
-    let ac = null;
-
-    if (targetHex) {
-      ac = list.find(
-        x => ((x[0] || "") + "").toLowerCase().trim() === targetHex
-      );
-    } else if (targetReg) {
-      ac = list.find(
-        x => ((x[1] || "") + "").toUpperCase().trim() === targetReg
-      );
-    }
+    const ac = list.find(
+      x => ((x[0] || "") + "").toLowerCase().trim() === targetHex
+    );
 
     if (!ac) {
-      console.log("Target aircraft not found:", { targetHex, targetReg });
+      console.log("Target aircraft not found:", { targetHex });
       return;
     }
 
@@ -193,4 +197,4 @@ async function updateAircraft() {
 }
 
 updateAircraft();
-setInterval(updateAircraft, 15000);
+setInterval(updateAircraft, 5000);
