@@ -51,7 +51,7 @@ function hideStatus() {
 /* ------------------ ALTITUDE FORMAT ------------------ */
 
 function formatAltitudeFromState(ac) {
-  const altMeters = ac[13];
+  const altMeters = ac[13] ?? ac[7];
 
   if (altMeters == null || isNaN(altMeters)) return "";
 
@@ -73,15 +73,17 @@ function formatLabel(ac) {
 
   return `
     <div style="
+      display:inline-block;
       font-size:11px;
       color:black;
       font-weight:700;
-      white-space:nowrap;
+      white-space:normal;
       text-align:center;
-      line-height:1.25;
+      line-height:1.2;
+      padding:2px 4px;
     ">
-      ${flight || hex}
-      ${altitudeText ? `<br>${altitudeText}` : ""}
+      <div>${flight || hex}</div>
+      ${altitudeText ? `<div>${altitudeText}</div>` : ""}
     </div>
   `;
 }
@@ -200,10 +202,10 @@ async function fetchJsonSafely(url) {
 /* ------------------ UPDATE AIRCRAFT ------------------ */
 
 async function updateAircraft() {
- if (!targetHex) {
-  console.log("No HEX parameter.");
-  return;
-}
+  if (!targetHex) {
+    console.log("No HEX parameter.");
+    return;
+  }
 
   try {
     const url = `${OPENSKY_PROXY}/?hex=${encodeURIComponent(targetHex)}`;
@@ -252,7 +254,7 @@ async function updateAircraft() {
     aircraftMarker.bindTooltip(formatLabel(ac), {
       permanent: true,
       direction: "top",
-      offset: [0, -16],
+      offset: [0, -20],
       className: "aircraft-label",
       opacity: 1
     });
