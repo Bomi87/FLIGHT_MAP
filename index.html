@@ -255,14 +255,8 @@ function escapeHtml(str) {
 function cleanLabelText(str) {
   let s = String(str || "");
 
-  /* 가장 문제되는 패턴 제거 */
   s = s.replace(/&amp;#x2F;\d+/gi, "");
-
-  /* 혹시 entity가 한 단계만 남아있는 경우 제거 */
   s = s.replace(/&#x2F;\d+/gi, "");
-
-
-  /* 남아있는 entity 제거 */
   s = s.replace(/&[#A-Za-z0-9]+;/g, "");
 
   return s.trim();
@@ -511,8 +505,20 @@ function isWaypointLabelFeature(feature) {
 }
 
 /* -----------------------------
-   삼각형 도형 라벨
+   icon52.png 라벨 항상 표시
 ----------------------------- */
+
+function isIcon52ShapePoint(feature) {
+  if (!feature || feature.type !== "Point") return false;
+  if (isAirspaceLabelFeature(feature)) return false;
+
+  const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
+  const name = String(feature?.name || "").trim();
+
+  if (!name) return false;
+
+  return iconHref.includes("icon52.png");
+}
 
 function isTriangleShapePoint(feature) {
   if (!feature || feature.type !== "Point") return false;
@@ -521,22 +527,21 @@ function isTriangleShapePoint(feature) {
   const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
   const name = String(feature?.name || "").trim();
 
-  /* 삼각형 아이콘 URL 패턴 넓게 판별 */
+  if (!name) return false;
+
   const triangleIcon =
+    iconHref.includes("icon52.png") ||
     iconHref.includes("triangle") ||
     iconHref.includes("trk") ||
     iconHref.includes("track") ||
     iconHref.includes("placemark_triangle") ||
     iconHref.includes("shape_triangle");
 
-  /* 이름 없는 점은 제외 */
-  if (!name) return false;
-
   return triangleIcon;
 }
 
 function isAlwaysVisibleShapePointLabel(feature) {
-  return isTriangleShapePoint(feature);
+  return isIcon52ShapePoint(feature) || isTriangleShapePoint(feature);
 }
 
 function bindPermanentPointLabel(layer, feature) {
@@ -979,14 +984,16 @@ function drawKMLPoint(feature) {
       popupAnchor: [0, -12]
     });
 
- const marker = L.marker(latlng, {
-  icon: customIcon,
-  zIndexOffset: 2000
-}).addTo(map);
-    
+    const marker = L.marker(latlng, {
+      icon: customIcon,
+      zIndexOffset: 2000
+    }).addTo(map);
+
     marker.bindPopup(popupHtml, { maxWidth: 360 });
 
-    if (isTriangleShapePoint(feature)) {
+    if (isIcon52ShapePoint(feature)) {
+      bindPermanentPointLabel(marker, feature);
+    } else if (isTriangleShapePoint(feature)) {
       bindPermanentPointLabel(marker, feature);
     } else {
       bindWaypointZoomLabel(marker, feature);
