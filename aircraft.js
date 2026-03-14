@@ -52,7 +52,7 @@ function hideStatus() {
 /* ------------------ ALTITUDE FORMAT ------------------ */
 
 function formatAltitudeFromState(ac) {
-  const altMeters = ac[13] ?? ac[7];
+  const altMeters = ac.geo_altitude ?? ac.baro_altitude;
 
   if (altMeters == null || isNaN(altMeters)) return "";
 
@@ -68,8 +68,8 @@ function formatAltitudeFromState(ac) {
 /* ------------------ LABEL ------------------ */
 
 function formatLabel(ac) {
-  const flight = (ac[1] || "").trim();
-  const hex = (ac[0] || "").toLowerCase();
+  const flight = (ac.callsign || "").trim();
+  const hex = (ac.icao24 || "").toLowerCase();
   const altitudeText = formatAltitudeFromState(ac);
 
   return `
@@ -288,16 +288,12 @@ async function updateAircraft() {
     console.log("Proxy request:", url);
 
     const data = await fetchJsonSafely(url);
-    const list = Array.isArray(data.states) ? data.states : [];
+    const ac = data && data.found ? data.state : null;
 
-    console.log("states length:", list.length);
-
-    const ac = list.find(
-      x => ((x[0] || "") + "").toLowerCase().trim() === targetHex
-    );
+    console.log("state response:", data);
 
     if (!ac) {
-      console.log("Aircraft not found:", targetHex, list);
+      console.log("Aircraft not found:", targetHex, data);
 
       if (!aircraftTrail.length) {
         showStatus(`Aircraft not found yet: ${targetHex}`, "#444");
@@ -306,9 +302,9 @@ async function updateAircraft() {
       return;
     }
 
-    const lon = Number(ac[5]);
-    const lat = Number(ac[6]);
-    const track = Number(ac[10] ?? 0);
+    const lon = Number(ac.longitude);
+    const lat = Number(ac.latitude);
+    const track = Number(ac.true_track ?? 0);
 
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       console.log("Aircraft found but invalid lat/lon:", ac);
@@ -348,6 +344,7 @@ async function updateAircraft() {
 /* ------------------ START ------------------ */
 
 async function startAircraftTracking() {
+  if (!targetHex) return;
   await loadHistoricalTrail();
   await updateAircraft();
   setInterval(updateAircraft, 10000);
