@@ -932,7 +932,7 @@ function drawKMLPoint(feature) {
   }
 
   if (iconStyle.href) {
-    const iconSize = Math.max(12, Math.round(16 * iconStyle.scale));
+    const iconSize = Math.max(10, Math.round(12 * iconStyle.scale));
     const customIcon = L.icon({
       iconUrl: iconStyle.href,
       iconSize: [iconSize, iconSize],
