@@ -79,7 +79,7 @@ html, body {
   display: inline-block;
   white-space: nowrap;
   font-weight: 700;
-  transform: rotate(-90deg);
+  transform: translateX(-6px) rotate(-90deg);
   transform-origin: center top;
   text-shadow:
     -1px -1px 0 #000,
@@ -1024,7 +1024,7 @@ function drawKMLPoint(feature) {
     labelOnlyMarker.bindTooltip(labelHtml, {
       permanent: true,
       direction: "top",
-      offset: [-10, -22],
+      offset: [0, -22],
       className: "kml-label",
       opacity: 1
     });
