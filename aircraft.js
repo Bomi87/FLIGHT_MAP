@@ -155,12 +155,12 @@ function redrawTrail() {
   if (!aircraftTrail.length) return;
 
   if (!aircraftTrailLine) {
-    aircraftTrailLine = L.polyline(aircraftTrail, {
-      color: "#ff6600",
-      weight: 4,
-      opacity: 1,
-      smoothFactor: 1
-    }).addTo(map);
+  aircraftTrailLine = L.polyline(aircraftTrail, {
+  color: "#ff6600",
+  weight: 4,
+  opacity: 0.9,
+  smoothFactor: 1
+}).addTo(map);
   } else {
     aircraftTrailLine.setLatLngs(aircraftTrail);
   }
