@@ -79,7 +79,7 @@ html, body {
   display: inline-block;
   white-space: nowrap;
   font-weight: 700;
-  transform:  translateX(-15px) rotate(-90deg);
+  transform: rotate(-90deg);
   transform-origin: left center;
   text-align: left;
   text-shadow:
@@ -108,7 +108,7 @@ html, body {
   font-weight: 700;
   color: #ffffff;
   font-size: 10px;
-  transform: translateX(-10px) rotate(-90deg);
+  transform: rotate(-90deg);
   transform-origin: left center;
   text-align: left;
   text-shadow:
@@ -605,13 +605,13 @@ function bindPermanentPointLabel(layer, feature) {
 
   const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
 
-  layer.bindTooltip(labelHtml, {
-    permanent: true,
-    direction: "right",
-    offset: [8, 0],
-    className: "waypoint-label",
-    opacity: 1
-  });
+ layer.bindTooltip(labelHtml, {
+  permanent: true,
+  direction: "right",
+  offset: [14, 10],
+  className: "waypoint-label",
+  opacity: 1
+});
 
   if (layer.openTooltip) {
     layer.openTooltip();
@@ -633,13 +633,13 @@ function bindWaypointZoomLabel(layer, feature) {
 
     if (zoom >= 5) {
       if (!labelBound) {
-        layer.bindTooltip(labelHtml, {
-          permanent: true,
-          direction: "bottom",
-          offset: [0, 26],
-          className: "waypoint-label",
-          opacity: 1
-        });
+       layer.bindTooltip(labelHtml, {
+  permanent: true,
+  direction: "bottom",
+  offset: [12, 34],
+  className: "waypoint-label",
+  opacity: 1
+});
 
         labelBound = true;
       }
@@ -1016,13 +1016,13 @@ function drawKMLPoint(feature) {
 
     labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
 
-    labelOnlyMarker.bindTooltip(labelHtml, {
-      permanent: true,
-      direction: "top",
-      offset: [0, -3],
-      className: "kml-label",
-      opacity: 1
-    });
+labelOnlyMarker.bindTooltip(labelHtml, {
+  permanent: true,
+  direction: "top",
+  offset: [14, -18],
+  className: "kml-label",
+  opacity: 1
+});
 
     drawn.addLayer(labelOnlyMarker);
     return;
