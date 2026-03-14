@@ -261,8 +261,6 @@ function cleanLabelText(str) {
   /* 혹시 entity가 한 단계만 남아있는 경우 제거 */
   s = s.replace(/&#x2F;\d+/gi, "");
 
-  /* /26 같은 suffix 제거 */
-  s = s.replace(/\/\d+\b/g, "");
 
   /* 남아있는 entity 제거 */
   s = s.replace(/&[#A-Za-z0-9]+;/g, "");
