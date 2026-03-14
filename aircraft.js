@@ -180,15 +180,15 @@ function formatLabel(ac) {
       display:inline-block;
       width:auto;
       min-width:0;
-      max-width:120px;
-      padding:5px 7px;
+      max-width:110px;
+      padding:4px 6px;
       background:rgba(255,255,255,0.95);
       border:1px solid #999;
-      border-radius:8px;
-      box-shadow:0 1px 4px rgba(0,0,0,0.18);
+      border-radius:6px;
+      box-shadow:0 1px 3px rgba(0,0,0,0.15);
       text-align:center;
       color:#111;
-      line-height:1.16;
+      line-height:1.10;
       white-space:nowrap;
     ">
       <div style="
