@@ -161,9 +161,9 @@ function redrawHistoricalTrail() {
 
   if (!historicalTrailLine) {
     historicalTrailLine = L.polyline(historicalTrail, {
-      color: "#ffb366",
+      color: "#ff9c4a",
       weight: 3,
-      opacity: 0.45,
+      opacity: 0.55,
       smoothFactor: 1
     }).addTo(map);
   } else {
@@ -176,7 +176,7 @@ function redrawLiveTrail() {
 
   if (!liveTrailLine) {
     liveTrailLine = L.polyline(liveTrail, {
-      color: "#ff5500",
+      color: "#ff4d00",
       weight: 4,
       opacity: 0.95,
       dashArray: "6 6",
@@ -228,8 +228,9 @@ function setHistoricalTrail(coords) {
 
   if (!cleaned.length) return;
 
-  historicalTrail = cleaned;
-  redrawHistoricalTrail();
+historicalTrail = cleaned;
+liveTrail = [cleaned[cleaned.length - 1]];  
+redrawHistoricalTrail();
 }
 
 /* ------------------ SAFE FETCH ------------------ */
