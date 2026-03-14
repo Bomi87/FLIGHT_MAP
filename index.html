@@ -129,8 +129,17 @@ const map = L.map('map', {
   maxBoundsViscosity: 1.0
 }).setView([48, 180], 3);
 
+// 위성
 L.tileLayer(
-  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+ 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+ { maxZoom: 18 }
+).addTo(map);
+
+// 지명
+L.tileLayer(
+ 'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+ { maxZoom: 18 }
+).addTo(map);
   {
     maxZoom: 18,
     noWrap: true,
