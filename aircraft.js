@@ -31,7 +31,7 @@ function formatLabel(ac) {
   return `
     <div style="
       font-size:11px;
-      color:white;
+     color:#ff8800;
       font-weight:700;
       text-shadow:0 0 3px black;
       white-space:nowrap;
@@ -59,7 +59,7 @@ function makeAircraftIcon(track = 0) {
         transform-origin: center center;
       ">
         <svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <g fill="white" stroke="black" stroke-width="3" stroke-linejoin="round">
+         <g fill="#ff8800" stroke="black" stroke-width="3" stroke-linejoin="round">
             <path d="
               M50 2
               L56 26
