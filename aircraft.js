@@ -2,6 +2,8 @@ const params = new URLSearchParams(window.location.search);
 const targetReg = (params.get("reg") || "").toUpperCase().trim();
 const targetHex = (params.get("hex") || "").toLowerCase().trim();
 
+const OPENSKY_PROXY = "https://icy-dew-2558.sbyu.workers.dev";
+
 let aircraftMarker = null;
 let aircraftTrail = [];
 let aircraftTrailLine = null;
@@ -129,6 +131,31 @@ function addTrailPoint(lat, lon) {
   console.log("trail point added:", lat, lon, "count:", aircraftTrail.length);
 }
 
+async function fetchJsonSafely(url) {
+  const res = await fetch(url, {
+    cache: "no-store"
+  });
+
+  const text = await res.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`Non-JSON response: ${text}`);
+  }
+
+  if (!res.ok || data.error) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : JSON.stringify(data.detail || data.error || data)
+    );
+  }
+
+  return data;
+}
+
 async function updateAircraft() {
   if (!targetHex) {
     console.log("No hex parameter found.");
@@ -136,20 +163,10 @@ async function updateAircraft() {
   }
 
   try {
-    const url = `https://opensky-network.org/api/states/all?icao24=${encodeURIComponent(targetHex)}`;
-    console.log("OpenSky URL:", url);
+    const url = `${OPENSKY_PROXY}/?hex=${encodeURIComponent(targetHex)}`;
+    console.log("Proxy URL:", url);
 
-    const res = await fetch(url);
-    console.log("OpenSky response:", res.status, res.statusText);
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("OpenSky fetch failed:", res.status, res.statusText);
-      console.error("OpenSky error body:", text);
-      return;
-    }
-
-    const data = await res.json();
+    const data = await fetchJsonSafely(url);
     const list = data.states || [];
     console.log("Aircraft count:", list.length);
 
@@ -191,6 +208,7 @@ async function updateAircraft() {
       className: "aircraft-label",
       opacity: 1
     });
+
   } catch (e) {
     console.error("aircraft update failed:", e);
   }
