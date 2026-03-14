@@ -133,7 +133,9 @@ async function updateAircraft() {
   if (!targetReg && !targetHex) return;
 
   try {
-    const res = await fetch("https://opensky-network.org/api/states/all");
+  const res = await fetch(
+  `https://opensky-network.org/api/states/all?icao24=${targetHex}`
+);
 console.log("OpenSky response:", res.status, res.statusText);
     if (!res.ok) {
   const text = await res.text();   // 서버가 준 에러 메시지 확인
