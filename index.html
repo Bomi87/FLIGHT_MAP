@@ -118,8 +118,8 @@ html, body {
      1px  1px 0 #000;
 }
 
-/* 추가: waypoint / 영공통과 제외한 일반 도형용 가로 레이블 */
-.shape-label {
+/* 삼각형 아이콘 전용: 항상 보이는 가로 레이블 */
+.triangle-label {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -127,17 +127,17 @@ html, body {
   margin: 0 !important;
 }
 
-.shape-label:before {
+.triangle-label:before {
   display: none !important;
 }
 
-.shape-label-text {
+.triangle-label-text {
   display: inline-block;
   white-space: nowrap;
   font-weight: 700;
   color: #ffffff;
-  font-size: 11px;
-  text-align: center;
+  font-size: 10px;
+  text-align: left;
   text-shadow:
     -1px -1px 0 #000,
      1px -1px 0 #000,
@@ -166,7 +166,6 @@ const map = L.map('map', {
    Base Maps
 ----------------------------- */
 
-// 1) Street Map (영어 지명)
 const streetMap = L.tileLayer(
   'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
   {
@@ -175,7 +174,6 @@ const streetMap = L.tileLayer(
   }
 );
 
-// 2) Satellite
 const satelliteMap = L.tileLayer(
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   {
@@ -184,7 +182,6 @@ const satelliteMap = L.tileLayer(
   }
 );
 
-// 3) Satellite + Labels (영어 지명)
 const satelliteWithLabels = L.layerGroup([
   L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -202,10 +199,8 @@ const satelliteWithLabels = L.layerGroup([
   )
 ]);
 
-// 기본 지도
 satelliteMap.addTo(map);
 
-// 지도 선택 버튼
 const baseMaps = {
   "Street Map": streetMap,
   "Satellite": satelliteMap,
@@ -586,7 +581,7 @@ function isWaypointLabelFeature(feature) {
 }
 
 /* -----------------------------
-   icon52.png 라벨 항상 표시
+   icon52.png / triangle
 ----------------------------- */
 
 function isIcon52ShapePoint(feature) {
@@ -646,6 +641,27 @@ function bindPermanentPointLabel(layer, feature) {
   }
 }
 
+function bindPermanentHorizontalTriangleLabel(layer, feature) {
+  if (!layer || !feature || !feature.name) return;
+
+  const cleanedName = cleanLabelText(feature.name);
+  if (!cleanedName) return;
+
+  const labelHtml = `<span class="triangle-label-text">${escapeHtml(cleanedName)}</span>`;
+
+  layer.bindTooltip(labelHtml, {
+    permanent: true,
+    direction: "right",
+    offset: [8, 0],
+    className: "triangle-label",
+    opacity: 1
+  });
+
+  if (layer.openTooltip) {
+    layer.openTooltip();
+  }
+}
+
 function bindWaypointZoomLabel(layer, feature) {
   if (!layer || !feature || !feature.name) return;
   if (!isWaypointLabelFeature(feature)) return;
@@ -685,39 +701,6 @@ function bindWaypointZoomLabel(layer, feature) {
 
   map.on("zoomend", updateLabel);
   updateLabel();
-}
-
-/* -----------------------------
-   추가: 일반 도형용 가로 레이블
------------------------------ */
-
-function bindHorizontalShapeLabel(latlng, feature) {
-  if (!latlng || !feature || !feature.name) return;
-
-  const cleanedName = cleanLabelText(feature.name);
-  if (!cleanedName) return;
-
-  const labelStyle = getLabelStyle(feature.style);
-  const fontSize = Math.max(9, Math.round(11 * labelStyle.scale));
-
-  const labelHtml =
-    `<span class="shape-label-text" style="color:${labelStyle.color}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
-
-  const labelMarker = L.marker(latlng, {
-    opacity: 0,
-    keyboard: false,
-    interactive: false
-  }).addTo(map);
-
-  labelMarker.bindTooltip(labelHtml, {
-    permanent: true,
-    direction: "center",
-    offset: [0, 0],
-    className: "shape-label",
-    opacity: 1
-  });
-
-  drawn.addLayer(labelMarker);
 }
 
 /* -----------------------------
@@ -1105,10 +1088,10 @@ function drawKMLPoint(feature) {
 
     marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
-    if (isIcon52ShapePoint(feature)) {
-      bindPermanentPointLabel(marker, feature);
-    } else if (isTriangleShapePoint(feature)) {
-      bindPermanentPointLabel(marker, feature);
+    if (isTriangleShapePoint(feature)) {
+      bindPermanentHorizontalTriangleLabel(marker, feature);
+    } else if (isIcon52ShapePoint(feature)) {
+      bindPermanentHorizontalTriangleLabel(marker, feature);
     } else {
       bindWaypointZoomLabel(marker, feature);
     }
@@ -1132,7 +1115,7 @@ function drawKMLPoint(feature) {
   marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
   if (isAlwaysVisibleShapePointLabel(feature)) {
-    bindPermanentPointLabel(marker, feature);
+    bindPermanentHorizontalTriangleLabel(marker, feature);
   } else {
     bindWaypointZoomLabel(marker, feature);
   }
@@ -1165,12 +1148,6 @@ function drawKMLLine(feature) {
 
     drawn.addLayer(line);
   });
-
-  // 추가: waypoint / 영공통과 제외한 일반 도형 라벨 항상 표시
-  if (feature.name && latlngs.length >= 2) {
-    const midIndex = Math.floor(latlngs.length / 2);
-    bindHorizontalShapeLabel(latlngs[midIndex], feature);
-  }
 }
 
 function drawKMLPolygon(feature) {
@@ -1199,16 +1176,6 @@ function drawKMLPolygon(feature) {
   }
 
   drawn.addLayer(polygon);
-
-  // 추가: waypoint / 영공통과 제외한 일반 도형 라벨 항상 표시
-  if (feature.name) {
-    try {
-      const center = polygon.getBounds().getCenter();
-      bindHorizontalShapeLabel(center, feature);
-    } catch (e) {
-      console.warn(e);
-    }
-  }
 }
 
 function drawRouteEndpointMarkers(routeEndpoints) {
