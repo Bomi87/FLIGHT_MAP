@@ -266,6 +266,4 @@ async function updateAircraft() {
 /* ------------------ START ------------------ */
 
 updateAircraft();
-setTimeout(updateAircraft, 3000);
-setTimeout(updateAircraft, 6000);
-setInterval(updateAircraft, 15000);
+setInterval(updateAircraft, 10000);
