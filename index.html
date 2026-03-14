@@ -107,7 +107,6 @@ html, body {
   color: #ffffff;
   font-size: 11px;
   letter-spacing: 0.5px;
-
   text-shadow:
     -1px -1px 0 #000,
      1px -1px 0 #000,
@@ -115,7 +114,6 @@ html, body {
      1px  1px 0 #000,
      0 0 4px rgba(0,0,0,0.8);
 }
-
 </style>
 </head>
 <body>
@@ -496,17 +494,20 @@ function isWaypointLabelFeature(feature) {
   return true;
 }
 
-function isAlwaysVisibleShapePointLabel(feature) {
+/* -----------------------------
+   삼각형 도형 라벨
+----------------------------- */
 
+function isTriangleShapePoint(feature) {
   if (!feature || feature.type !== "Point") return false;
   if (isAirspaceLabelFeature(feature)) return false;
 
   const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
+  return iconHref.includes("triangle");
+}
 
-  // 흰색 삼각형 아이콘이면 도형 label
-  if (iconHref.includes("triangle")) return true;
-
-  return false;
+function isAlwaysVisibleShapePointLabel(feature) {
+  return isTriangleShapePoint(feature);
 }
 
 function bindPermanentPointLabel(layer, feature) {
@@ -516,8 +517,8 @@ function bindPermanentPointLabel(layer, feature) {
 
   layer.bindTooltip(labelHtml, {
     permanent: true,
-    direction: "top",
-    offset: [0, -6],
+    direction: "right",
+    offset: [8, 0],
     className: "waypoint-label",
     opacity: 1
   });
@@ -946,7 +947,8 @@ function drawKMLPoint(feature) {
 
     marker.bindPopup(popupHtml, { maxWidth: 360 });
 
-    if (isAlwaysVisibleShapePointLabel(feature)) {
+    // 삼각형 도형 label은 zoom과 무관하게 항상 표시
+    if (isTriangleShapePoint(feature)) {
       bindPermanentPointLabel(marker, feature);
     } else {
       bindWaypointZoomLabel(marker, feature);
