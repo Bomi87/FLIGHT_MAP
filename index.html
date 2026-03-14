@@ -106,13 +106,15 @@ html, body {
   font-weight: 700;
   color: #ffffff;
   font-size: 10px;
-  letter-spacing: 0.5px;
+
+  transform: rotate(90deg);
+  transform-origin: center top;
+
   text-shadow:
     -1px -1px 0 #000,
      1px -1px 0 #000,
     -1px  1px 0 #000,
-     1px  1px 0 #000,
-     0 0 4px rgba(0,0,0,0.8);
+     1px  1px 0 #000;
 }
 </style>
 </head>
@@ -587,8 +589,8 @@ function bindWaypointZoomLabel(layer, feature) {
       if (!labelBound) {
         layer.bindTooltip(labelHtml, {
           permanent: true,
-          direction: "top",
-          offset: [0, -6],
+          direction: "bottom",
+          offset: [0, 8],
           className: "waypoint-label",
           opacity: 1
         });
