@@ -7,9 +7,6 @@ let aircraftTrail = [];
 let aircraftTrailLine = null;
 
 function formatAltitudeFromState(ac) {
-  // OpenSky states/all:
-  // ac[13] = baro altitude (meters)
-  // ac[7]  = baro altitude? depending on docs/availability sometimes geo altitude used elsewhere
   const altMeters = ac[13];
 
   if (altMeters == null || isNaN(altMeters)) return "";
@@ -30,13 +27,13 @@ function formatLabel(ac) {
 
   return `
     <div style="
-      font-size:11px;
-     color:#ff8800;
-      font-weight:700;
-      text-shadow:0 0 3px black;
-      white-space:nowrap;
-      text-align:center;
-      line-height:1.25;
+      font-size: 11px;
+      color: #ff8800;
+      font-weight: 700;
+      text-shadow: 0 0 3px black, 0 0 6px black;
+      white-space: nowrap;
+      text-align: center;
+      line-height: 1.25;
     ">
       ${flight || hex}
       ${altitudeText ? `<br>${altitudeText}` : ""}
@@ -45,7 +42,6 @@ function formatLabel(ac) {
 }
 
 function makeAircraftIcon(track = 0) {
-  // SVG 기준: 위쪽이 기수
   return L.divIcon({
     className: "aircraft-div-icon",
     html: `
@@ -59,7 +55,7 @@ function makeAircraftIcon(track = 0) {
         transform-origin: center center;
       ">
         <svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-         <g fill="#ff8800" stroke="black" stroke-width="3" stroke-linejoin="round">
+          <g fill="#ff8800" stroke="black" stroke-width="3" stroke-linejoin="round">
             <path d="
               M50 2
               L56 26
@@ -106,16 +102,15 @@ function addTrailPoint(lat, lon) {
 
   aircraftTrail.push([lat, lon]);
 
-  // 최근 200포인트만 유지
   if (aircraftTrail.length > 200) {
     aircraftTrail.shift();
   }
 
   if (!aircraftTrailLine) {
     aircraftTrailLine = L.polyline(aircraftTrail, {
-     color: "#ff8800",
+      color: "#ff8800",
       weight: 2,
-      opacity: 0.85,
+      opacity: 0.9,
       smoothFactor: 1
     }).addTo(map);
   } else {
@@ -142,8 +137,6 @@ async function updateAircraft() {
     if (targetHex) {
       ac = list.find(x => ((x[0] || "") + "").toLowerCase().trim() === targetHex);
     } else if (targetReg) {
-      // OpenSky의 ac[1]은 callsign이므로 registration과 다를 수 있음
-      // reg는 안정적이지 않아서 가능하면 hex 사용 권장
       ac = list.find(x => ((x[1] || "") + "").toUpperCase().trim() === targetReg);
     }
 
