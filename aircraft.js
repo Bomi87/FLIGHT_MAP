@@ -25,20 +25,19 @@ function formatLabel(ac) {
   const hex = (ac[0] || "").toLowerCase();
   const altitudeText = formatAltitudeFromState(ac);
 
-  return `
-    <div style="
-      font-size: 11px;
-      color: #ff8800;
-      font-weight: 700;
-      text-shadow: 0 0 3px black, 0 0 6px black;
-      white-space: nowrap;
-      text-align: center;
-      line-height: 1.25;
-    ">
-      ${flight || hex}
-      ${altitudeText ? `<br>${altitudeText}` : ""}
-    </div>
-  `;
+ return `
+<div style="
+  font-size:11px;
+  color:black;
+  font-weight:700;
+  white-space:nowrap;
+  text-align:center;
+  line-height:1.25;
+">
+  ${flight || hex}
+  ${altitudeText ? `<br>${altitudeText}` : ""}
+</div>
+`;
 }
 
 function makeAircraftIcon(track = 0) {
