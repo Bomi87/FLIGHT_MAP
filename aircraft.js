@@ -2,17 +2,12 @@ const params = new URLSearchParams(window.location.search);
 const targetReg = (params.get("reg") || "").toUpperCase().trim();
 const targetHex = (params.get("hex") || "").toLowerCase().trim();
 
-const OPENSKY_PROXY = "https://icy-dew-2558.sbyu.workers.dev";
+/* ------------------ LIVE API ------------------ */
+const ADSB_API_BASE = "https://api.adsb.one/v2";
 
 let aircraftMarker = null;
-
-let historicalTrail = [];
-let historicalTrailLine = null;
-
 let liveTrail = [];
 let liveTrailLine = null;
-
-let historicalTrailLoaded = false;
 
 /* ------------------ STATUS BOX ------------------ */
 
@@ -57,11 +52,19 @@ function hideStatus() {
 /* ------------------ ALTITUDE FORMAT ------------------ */
 
 function formatAltitudeFromState(ac) {
-  const altMeters = ac.geo_altitude ?? ac.baro_altitude;
+  // adsb.one / adsbexchange 계열은 보통 feet 기반 alt_baro / alt_geom 사용
+  let alt = ac.alt_geom ?? ac.alt_baro ?? ac.geo_altitude ?? ac.baro_altitude;
 
-  if (altMeters == null || isNaN(altMeters)) return "";
+  if (alt == null || isNaN(alt)) return "";
 
-  const ft = Math.round(Number(altMeters) * 3.28084);
+  let ft = Number(alt);
+
+  // 혹시 meters 형식으로 오면 보정
+  if (ft > -2000 && ft < 20000) {
+    ft = Math.round(ft * 3.28084);
+  } else {
+    ft = Math.round(ft);
+  }
 
   if (ft >= 18000) {
     return "FL" + String(Math.round(ft / 100)).padStart(3, "0");
@@ -73,8 +76,9 @@ function formatAltitudeFromState(ac) {
 /* ------------------ LABEL ------------------ */
 
 function formatLabel(ac) {
-  const flight = (ac.callsign || "").trim();
-  const hex = (ac.icao24 || "").toLowerCase();
+  const flight = (ac.flight || ac.callsign || "").trim();
+  const reg = (ac.r || ac.reg || "").trim();
+  const hex = (ac.hex || ac.icao24 || "").toLowerCase();
   const altitudeText = formatAltitudeFromState(ac);
 
   return `
@@ -88,7 +92,8 @@ function formatLabel(ac) {
       line-height:1.2;
       padding:2px 4px;
     ">
-      <div>${flight || hex}</div>
+      <div>${flight || reg || hex}</div>
+      ${reg && reg !== flight ? `<div>${reg}</div>` : ""}
       ${altitudeText ? `<div>${altitudeText}</div>` : ""}
     </div>
   `;
@@ -156,21 +161,6 @@ function isSamePoint(a, b) {
   );
 }
 
-function redrawHistoricalTrail() {
-  if (!historicalTrail.length) return;
-
-  if (!historicalTrailLine) {
-    historicalTrailLine = L.polyline(historicalTrail, {
-      color: "#ff9c4a",
-      weight: 3,
-      opacity: 0.55,
-      smoothFactor: 1
-    }).addTo(map);
-  } else {
-    historicalTrailLine.setLatLngs(historicalTrail);
-  }
-}
-
 function redrawLiveTrail() {
   if (!liveTrail.length) return;
 
@@ -205,95 +195,45 @@ function addLiveTrailPoint(lat, lon) {
   redrawLiveTrail();
 }
 
-function setHistoricalTrail(coords) {
-  if (!Array.isArray(coords) || !coords.length) return;
-
-  const cleaned = [];
-
-  for (const pt of coords) {
-    if (!Array.isArray(pt) || pt.length < 2) continue;
-
-    const lat = Number(pt[0]);
-    const lon = Number(pt[1]);
-
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-
-    const newPoint = [lat, lon];
-    const last = cleaned[cleaned.length - 1];
-
-    if (!last || !isSamePoint(last, newPoint)) {
-      cleaned.push(newPoint);
-    }
-  }
-
-  if (!cleaned.length) return;
-
-historicalTrail = cleaned;
-liveTrail = [cleaned[cleaned.length - 1]];  
-redrawHistoricalTrail();
-}
-
-/* ------------------ SAFE FETCH ------------------ */
+/* ------------------ FETCH ------------------ */
 
 async function fetchJsonSafely(url) {
   const res = await fetch(url, { cache: "no-store" });
   const text = await res.text();
 
   let data;
-
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error("Proxy returned non JSON: " + text);
+    throw new Error("API returned non JSON: " + text);
   }
 
-  if (!res.ok || data.error) {
-    throw new Error(
-      typeof data.detail === "string"
-        ? data.detail
-        : JSON.stringify(data.detail || data.error || data)
-    );
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${text}`);
   }
 
   return data;
 }
 
-/* ------------------ HISTORICAL TRAIL ------------------ */
+/* ------------------ STATE NORMALIZE ------------------ */
 
-async function loadHistoricalTrail() {
-  if (!targetHex || historicalTrailLoaded) return;
+function normalizeAircraft(raw) {
+  if (!raw || typeof raw !== "object") return null;
 
-  try {
-    showStatus(`Loading historical trail: ${targetHex}`, "#444");
-
-    const url = `${OPENSKY_PROXY}?mode=tracks&hex=${encodeURIComponent(targetHex)}`;
-    console.log("Historical trail request:", url);
-
-    const data = await fetchJsonSafely(url);
-    const path = Array.isArray(data.path) ? data.path : [];
-
-    if (!path.length) {
-      historicalTrailLoaded = true;
-      showStatus(`No historical trail available: ${targetHex}`, "#666");
-      return;
-    }
-
-    const coords = path
-      .map(p => [Number(p[1]), Number(p[2])])
-      .filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
-
-    setHistoricalTrail(coords);
-
-    historicalTrailLoaded = true;
-    hideStatus();
-
-    console.log("Historical trail loaded:", coords.length);
-
-  } catch (e) {
-    historicalTrailLoaded = true;
-    console.error("Historical trail load failed:", e);
-    showStatus("Historical trail load failed: " + e.message, "#aa0000");
-  }
+  return {
+    hex: (raw.hex || "").toLowerCase(),
+    icao24: (raw.hex || raw.icao24 || "").toLowerCase(),
+    callsign: (raw.flight || raw.callsign || "").trim(),
+    flight: (raw.flight || raw.callsign || "").trim(),
+    r: (raw.r || raw.reg || "").trim(),
+    latitude: Number(raw.lat),
+    longitude: Number(raw.lon),
+    true_track: Number(raw.track ?? raw.true_track ?? 0),
+    alt_baro: raw.alt_baro,
+    alt_geom: raw.alt_geom,
+    geo_altitude: raw.geo_altitude,
+    baro_altitude: raw.baro_altitude
+  };
 }
 
 /* ------------------ UPDATE AIRCRAFT ------------------ */
@@ -306,16 +246,25 @@ async function updateAircraft() {
   }
 
   try {
-    const url = `${OPENSKY_PROXY}?mode=states&hex=${encodeURIComponent(targetHex)}`;
-    console.log("Proxy request:", url);
+    const url = `${ADSB_API_BASE}/hex/${encodeURIComponent(targetHex)}`;
+    console.log("Live request:", url);
 
     const data = await fetchJsonSafely(url);
-    const ac = data && data.found ? data.state : null;
+    console.log("Live response:", data);
 
-    console.log("state response:", data);
+    let ac = null;
+
+    // adsb.one 계열은 보통 {ac:[...]} 또는 {aircraft:[...]} 형태
+    if (Array.isArray(data?.ac) && data.ac.length) {
+      ac = normalizeAircraft(data.ac[0]);
+    } else if (Array.isArray(data?.aircraft) && data.aircraft.length) {
+      ac = normalizeAircraft(data.aircraft[0]);
+    } else if (data?.hex || data?.lat || data?.lon) {
+      ac = normalizeAircraft(data);
+    }
 
     if (!ac) {
-      console.log("Aircraft not found:", targetHex, data);
+      showStatus(`Aircraft not found: ${targetHex}`, "#444");
       return;
     }
 
@@ -362,8 +311,10 @@ async function updateAircraft() {
 
 async function startAircraftTracking() {
   if (!targetHex) return;
-  await loadHistoricalTrail();
+
   await updateAircraft();
+
+  // 15초 폴링: 1 req/sec 제한보다 훨씬 여유 있음
   setInterval(updateAircraft, 15000);
 }
 
