@@ -496,6 +496,42 @@ function isWaypointLabelFeature(feature) {
   return true;
 }
 
+function isAlwaysVisibleShapePointLabel(feature) {
+  if (!feature || feature.type !== "Point") return false;
+  if (isAirspaceLabelFeature(feature)) return false;
+  if (!feature.name || !String(feature.name).trim()) return false;
+
+  const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
+  const iconScale = Number(feature?.style?.iconScale || 1);
+  const nm = String(feature.name || "").trim().toLowerCase();
+
+  if (iconHref.includes("triangle")) return true;
+  if (iconScale <= 0.6) return true;
+  if (nm.includes("fl")) return true;
+  if (nm.includes("z(")) return true;
+  if (nm.includes("z (")) return true;
+
+  return false;
+}
+
+function bindPermanentPointLabel(layer, feature) {
+  if (!layer || !feature || !feature.name) return;
+
+  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(feature.name)}</span>`;
+
+  layer.bindTooltip(labelHtml, {
+    permanent: true,
+    direction: "top",
+    offset: [0, -6],
+    className: "waypoint-label",
+    opacity: 1
+  });
+
+  if (layer.openTooltip) {
+    layer.openTooltip();
+  }
+}
+
 function bindWaypointZoomLabel(layer, feature) {
   if (!layer || !feature || !feature.name) return;
   if (!isWaypointLabelFeature(feature)) return;
@@ -506,15 +542,15 @@ function bindWaypointZoomLabel(layer, feature) {
   function updateLabel() {
     const zoom = map.getZoom();
 
-    if (zoom >= 6) {
+    if (zoom >= 5) {
       if (!labelBound) {
-      layer.bindTooltip(labelHtml, {
-  permanent: true,
-  direction: "top",
-  offset: [0, -6],
-  className: "waypoint-label",
-  opacity: 1
-});
+        layer.bindTooltip(labelHtml, {
+          permanent: true,
+          direction: "top",
+          offset: [0, -6],
+          className: "waypoint-label",
+          opacity: 1
+        });
 
         labelBound = true;
       }
@@ -576,7 +612,6 @@ function drawWaypointMarker(lat, lon, popupHtml, index, total) {
 
   marker.bindPopup(popupHtml, { maxWidth: 360 });
 
-  // GPX도 waypoint 이름 확대 시 표시
   if (popupHtml) {
     bindWaypointZoomLabel(marker, {
       type: "Point",
@@ -877,7 +912,7 @@ function drawKMLPoint(feature) {
 
   if (isAirspaceLabel) {
     const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
-    const fontSize = Math.max(12, Math.round(16 * labelStyle.scale));
+    const fontSize = Math.max(9, Math.round(11 * labelStyle.scale));
 
     const labelHtml =
       `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(feature.name)}</span>`;
@@ -915,7 +950,12 @@ function drawKMLPoint(feature) {
     }).addTo(map);
 
     marker.bindPopup(popupHtml, { maxWidth: 360 });
-    bindWaypointZoomLabel(marker, feature);
+
+    if (isAlwaysVisibleShapePointLabel(feature)) {
+      bindPermanentPointLabel(marker, feature);
+    } else {
+      bindWaypointZoomLabel(marker, feature);
+    }
 
     drawn.addLayer(marker);
     return;
@@ -934,7 +974,12 @@ function drawKMLPoint(feature) {
   }).addTo(map);
 
   marker.bindPopup(popupHtml, { maxWidth: 360 });
-  bindWaypointZoomLabel(marker, feature);
+
+  if (isAlwaysVisibleShapePointLabel(feature)) {
+    bindPermanentPointLabel(marker, feature);
+  } else {
+    bindWaypointZoomLabel(marker, feature);
+  }
 
   drawn.addLayer(marker);
 }
@@ -1037,28 +1082,28 @@ function drawKMLFeatures(features, sourceName) {
   lineFeatures.forEach(drawKMLLine);
   polygonFeatures.forEach(drawKMLPolygon);
 
- let lastAirspaceLabelName = "";
+  let lastAirspaceLabelName = "";
 
-pointFeatures.forEach(f => {
-  if (isEndpointPointFeature(f, routeEndpoints)) {
-    return;
-  }
-
-  if (isAirspaceLabelFeature(f)) {
-    const currentName = String(f.name || "").trim();
-
-    if (currentName && currentName === lastAirspaceLabelName) {
+  pointFeatures.forEach(f => {
+    if (isEndpointPointFeature(f, routeEndpoints)) {
       return;
     }
 
-    lastAirspaceLabelName = currentName;
-    drawKMLPoint(f);
-    return;
-  }
+    if (isAirspaceLabelFeature(f)) {
+      const currentName = String(f.name || "").trim();
 
-  lastAirspaceLabelName = "";
-  drawKMLPoint(f);
-});
+      if (currentName && currentName === lastAirspaceLabelName) {
+        return;
+      }
+
+      lastAirspaceLabelName = currentName;
+      drawKMLPoint(f);
+      return;
+    }
+
+    lastAirspaceLabelName = "";
+    drawKMLPoint(f);
+  });
 
   drawRouteEndpointMarkers(routeEndpoints);
 
