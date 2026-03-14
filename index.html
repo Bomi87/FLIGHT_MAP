@@ -497,23 +497,17 @@ function isWaypointLabelFeature(feature) {
 }
 
 function isAlwaysVisibleShapePointLabel(feature) {
+
   if (!feature || feature.type !== "Point") return false;
   if (isAirspaceLabelFeature(feature)) return false;
-  if (!feature.name || !String(feature.name).trim()) return false;
 
   const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
-  const iconScale = Number(feature?.style?.iconScale || 1);
-  const nm = String(feature.name || "").trim().toLowerCase();
 
+  // 흰색 삼각형 아이콘이면 도형 label
   if (iconHref.includes("triangle")) return true;
-  if (iconScale <= 0.6) return true;
-  if (nm.includes("fl")) return true;
-  if (nm.includes("z(")) return true;
-  if (nm.includes("z (")) return true;
 
   return false;
 }
-
 function bindPermanentPointLabel(layer, feature) {
   if (!layer || !feature || !feature.name) return;
 
