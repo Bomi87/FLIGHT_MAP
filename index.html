@@ -88,6 +88,7 @@ html, body {
      1px  1px 0 #000,
      0 0 4px rgba(0,0,0,0.65);
 }
+
 .waypoint-label {
   background: transparent !important;
   border: none !important;
@@ -106,15 +107,18 @@ html, body {
   font-weight: 700;
   color: #ffffff;
   font-size: 10px;
-
   transform: rotate(-90deg);
   transform-origin: center top;
-
   text-shadow:
     -1px -1px 0 #000,
      1px -1px 0 #000,
     -1px  1px 0 #000,
      1px  1px 0 #000;
+}
+
+/* 지도 선택 버튼 스타일 약간 정리 */
+.leaflet-control-layers {
+  font-size: 12px;
 }
 </style>
 </head>
@@ -129,23 +133,64 @@ const map = L.map('map', {
   maxBoundsViscosity: 1.0
 }).setView([48, 180], 3);
 
-// 위성
-L.tileLayer(
- 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
- { maxZoom: 18 }
-).addTo(map);
+/* -----------------------------
+   Base Maps
+----------------------------- */
 
-// 지명
-L.tileLayer(
- 'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
- { maxZoom: 18 }
-).addTo(map);
+// 1) Street Map (영어 지명)
+const streetMap = L.tileLayer(
+  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
   {
     maxZoom: 18,
     noWrap: true,
-    attribution: '© OpenStreetMap'
+    attribution: '&copy; OpenStreetMap &copy; CARTO'
   }
-).addTo(map);
+);
+
+// 2) Satellite
+const satelliteMap = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {
+    maxZoom: 18,
+    noWrap: true,
+    attribution: 'Tiles &copy; Esri'
+  }
+);
+
+// 3) Satellite + Labels (영어 지명)
+const satelliteWithLabels = L.layerGroup([
+  L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      maxZoom: 18,
+      noWrap: true,
+      attribution: 'Tiles &copy; Esri'
+    }
+  ),
+  L.tileLayer(
+    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    {
+      maxZoom: 18,
+      noWrap: true,
+      attribution: 'Labels &copy; Esri'
+    }
+  )
+]);
+
+// 기본 지도
+satelliteWithLabels.addTo(map);
+
+// 지도 선택 버튼
+const baseMaps = {
+  "Street Map": streetMap,
+  "Satellite": satelliteMap,
+  "Satellite + Labels": satelliteWithLabels
+};
+
+L.control.layers(baseMaps, null, {
+  position: "topright",
+  collapsed: false
+}).addTo(map);
 
 map.setMaxBounds([
   [-85, 0],
@@ -979,13 +1024,14 @@ function drawKMLPoint(feature) {
 
     labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
 
-labelOnlyMarker.bindTooltip(labelHtml, {
-  permanent: true,
-  direction: "top",
-  offset: [0, -27],
-  className: "kml-label",
-  opacity: 1
-});
+    labelOnlyMarker.bindTooltip(labelHtml, {
+      permanent: true,
+      direction: "top",
+      offset: [0, -27],
+      className: "kml-label",
+      opacity: 1
+    });
+
     drawn.addLayer(labelOnlyMarker);
     return;
   }
