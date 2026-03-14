@@ -364,7 +364,7 @@ async function startAircraftTracking() {
   if (!targetHex) return;
   await loadHistoricalTrail();
   await updateAircraft();
-  setInterval(updateAircraft, 10000);
+  setInterval(updateAircraft, 15000);
 }
 
 startAircraftTracking();
