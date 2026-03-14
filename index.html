@@ -956,7 +956,7 @@ function drawKMLPoint(feature) {
     if (!cleanedName) return;
 
     const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
-    const fontSize = Math.max(9, Math.round(11 * labelStyle.scale));
+    const fontSize = Math.max(6, Math.round(8 * labelStyle.scale));
 
     const labelHtml =
       `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
