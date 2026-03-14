@@ -363,6 +363,9 @@ async function fetchJsonFromFallbacks(path) {
 function normalizeAircraft(raw) {
   if (!raw || typeof raw !== "object") return null;
 
+  const lat = raw.lat ?? raw.latitude ?? raw.lat_deg;
+  const lon = raw.lon ?? raw.lng ?? raw.longitude ?? raw.lon_deg;
+
   return {
     hex: String(raw.hex || raw.icao24 || "").toLowerCase(),
     icao24: String(raw.hex || raw.icao24 || "").toLowerCase(),
@@ -375,10 +378,10 @@ function normalizeAircraft(raw) {
 
     type: String(raw.t || raw.type || "").trim(),
 
-    latitude: Number(raw.lat ?? raw.latitude),
-    longitude: Number(raw.lon ?? raw.longitude),
+    latitude: Number(lat),
+    longitude: Number(lon),
 
-    true_track: Number(raw.track ?? raw.true_track ?? 0),
+    true_track: Number(raw.track ?? raw.true_track ?? raw.heading ?? 0),
     gs: Number(raw.gs ?? raw.groundspeed ?? raw.speed ?? 0),
     ias: Number(raw.ias),
     mach: Number(raw.mach),
@@ -584,47 +587,24 @@ async function updateAircraft() {
 
     showStatus("Checking aircraft...", "#444");
 
-    if (
-      lastAircraft &&
-      Number.isFinite(lastAircraft.latitude) &&
-      Number.isFinite(lastAircraft.longitude)
-    ) {
-      try {
-        ac = await fetchAircraftFromPoint(
-          lastAircraft.latitude,
-          lastAircraft.longitude,
-          POINT_RADIUS_NM
-        );
-      } catch (e) {
-        console.warn("Point search failed, fallback to exact lookup:", e);
-      }
-    }
-
-    if (!ac && targetHex) {
+    if (targetHex) {
       ac = await fetchAircraftByHex();
-    }
-
-    if (!ac && targetReg) {
+    } else if (targetReg) {
       ac = await fetchAircraftByReg();
     }
 
     console.log("Final aircraft:", ac);
 
     if (!ac) {
-      showStatus(
-        `Aircraft not found` +
-        `${targetHex ? `: ${targetHex}` : ""}` +
-        `${targetReg ? ` / ${targetReg}` : ""}`,
-        "#444"
-      );
+      showStatus(`Aircraft not found: ${targetHex || targetReg}`, "#444");
       return;
     }
 
-    const lon = Number(ac.longitude);
     const lat = Number(ac.latitude);
+    const lon = Number(ac.longitude);
     const track = Number(ac.true_track ?? 0);
 
-    console.log("Final position:", lat, lon, track);
+    console.log("Final position:", { lat, lon, track });
 
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       showStatus("Aircraft found but no valid position yet.", "#a60");
@@ -634,17 +614,27 @@ async function updateAircraft() {
     hideStatus();
 
     addLiveTrailPoint(lat, lon);
-    animateMarkerTo(lat, lon, track, ac);
 
-    if (!trackingStarted) {
-      trackingStarted = true;
-
-      try {
-        map.setView([lat, lon], Math.max(map.getZoom?.() || 8, 8), {
-          animate: true
-        });
-      } catch {}
+    if (!aircraftMarker) {
+      aircraftMarker = L.marker([lat, lon], {
+        icon: makeAircraftIcon(track),
+        zIndexOffset: 2000
+      }).addTo(map);
+    } else {
+      aircraftMarker.setLatLng([lat, lon]);
+      aircraftMarker.setIcon(makeAircraftIcon(track));
     }
+
+    aircraftMarker.unbindTooltip();
+    aircraftMarker.bindTooltip(formatLabel(ac), {
+      permanent: true,
+      direction: "top",
+      offset: [0, -20],
+      className: "aircraft-label",
+      opacity: 1
+    });
+
+    map.setView([lat, lon], Math.max(map.getZoom?.() || 8, 8));
 
     lastAircraft = {
       ...ac,
@@ -653,14 +643,11 @@ async function updateAircraft() {
       true_track: track
     };
 
-    console.log("Tracking source:", ac.sourceBase || lastGoodApiBase, ac);
-
   } catch (e) {
     console.error("Aircraft update failed:", e);
     showStatus("Aircraft update failed: " + e.message, "red");
   }
 }
-
 /* ------------------ START ------------------ */
 
 async function startAircraftTracking() {
