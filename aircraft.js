@@ -9,10 +9,13 @@ const ADSB_API_BASES = [
   "https://api.adsb.one"
 ];
 
-const POLL_INTERVAL_MS = 5000;        // 5초
-const ANIMATION_DURATION_MS = 4500;   // 다음 갱신 전까지 부드럽게 이동
-const POINT_RADIUS_NM = 80;           // 마지막 위치 주변 point feed 조회 반경
+const POLL_INTERVAL_MS = 5000;
+const ANIMATION_DURATION_MS = 4500;
+const POINT_RADIUS_NM = 80;
 const MAX_LIVE_TRAIL_POINTS = 500;
+
+/* 상승/하강 판단 기준 (ft/min) */
+const VERTICAL_RATE_THRESHOLD = 300;
 
 let aircraftMarker = null;
 let liveTrail = [];
@@ -65,21 +68,28 @@ function hideStatus() {
   if (box) box.style.display = "none";
 }
 
-/* ------------------ ALTITUDE FORMAT ------------------ */
+/* ------------------ FORMATTERS ------------------ */
 
-function formatAltitudeFromState(ac) {
+function getAltitudeFeet(ac) {
   let alt = ac.alt_geom ?? ac.alt_baro ?? ac.geo_altitude ?? ac.baro_altitude;
 
-  if (alt == null || isNaN(alt)) return "";
+  if (alt == null || isNaN(alt)) return null;
 
   let ft = Number(alt);
 
-  // meters일 가능성 보정
+  // meters 가능성 보정
   if (ft > -2000 && ft < 20000) {
     ft = Math.round(ft * 3.28084);
   } else {
     ft = Math.round(ft);
   }
+
+  return ft;
+}
+
+function formatAltitudeFromState(ac) {
+  const ft = getAltitudeFeet(ac);
+  if (ft == null) return "";
 
   if (ft >= 18000) {
     return "FL" + String(Math.round(ft / 100)).padStart(3, "0");
@@ -88,30 +98,121 @@ function formatAltitudeFromState(ac) {
   return ft.toLocaleString() + " ft";
 }
 
+function getVerticalRateFpm(ac) {
+  let vr = ac.baro_rate ?? ac.geom_rate ?? ac.vertical_rate;
+
+  if (vr == null || isNaN(vr)) return null;
+
+  vr = Number(vr);
+
+  // 값이 m/s 수준으로 보이면 ft/min으로 변환
+  if (Math.abs(vr) < 120) {
+    vr = vr * 196.850394;
+  }
+
+  return Math.round(vr);
+}
+
+function getVerticalTrendSymbol(ac) {
+  const vr = getVerticalRateFpm(ac);
+
+  if (vr == null) return "";
+  if (vr >= VERTICAL_RATE_THRESHOLD) return "↑";
+  if (vr <= -VERTICAL_RATE_THRESHOLD) return "↓";
+  return "→";
+}
+
+function formatAltitudeLine(ac) {
+  const altitude = formatAltitudeFromState(ac);
+  const trend = getVerticalTrendSymbol(ac);
+
+  if (!altitude) return "";
+  if (!trend) return altitude;
+  return `${altitude} ${trend}`;
+}
+
+function formatMach(ac) {
+  const mach = Number(ac.mach);
+  if (!Number.isFinite(mach) || mach <= 0) return "";
+  return "M" + mach.toFixed(2);
+}
+
+function formatIAS(ac) {
+  const ias = Number(ac.ias);
+  if (!Number.isFinite(ias) || ias <= 0) return "";
+  return Math.round(ias) + "kt";
+}
+
+function formatSpeedLine(ac) {
+  const mach = formatMach(ac);
+  const ias = formatIAS(ac);
+
+  if (mach && ias) return `${mach} / ${ias}`;
+  if (mach) return mach;
+  if (ias) return ias;
+  return "";
+}
+
 /* ------------------ LABEL ------------------ */
 
 function formatLabel(ac) {
-  const flight = (ac.flight || ac.callsign || "").trim();
-  const reg = (ac.r || ac.reg || "").trim();
-  const hex = (ac.hex || ac.icao24 || "").toLowerCase();
-  const altitudeText = formatAltitudeFromState(ac);
+  const callsign = (ac.callsign || ac.flight || ac.hex || "").trim();
+  const reg = (ac.reg || ac.r || "").trim();
+  const type = (ac.type || "").trim();
+
+  const altitudeLine = formatAltitudeLine(ac);
+  const speedLine = formatSpeedLine(ac);
 
   return `
     <div style="
       display:inline-block;
-      font-size:11px;
-      color:black;
-      font-weight:700;
-      white-space:normal;
+      min-width:115px;
+      padding:8px 12px;
+      background:rgba(255,255,255,0.95);
+      border:1px solid #999;
+      border-radius:8px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.18);
       text-align:center;
-      line-height:1.2;
-      padding:2px 4px;
-      background:rgba(255,255,255,0.85);
-      border-radius:4px;
+      color:#111;
+      line-height:1.28;
+      white-space:normal;
     ">
-      <div>${flight || reg || hex}</div>
-      ${reg && reg !== flight ? `<div>${reg}</div>` : ""}
-      ${altitudeText ? `<div>${altitudeText}</div>` : ""}
+      <div style="
+        font-size:13px;
+        font-weight:700;
+      ">${callsign || "-"}</div>
+
+      ${reg ? `
+        <div style="
+          font-size:12px;
+          font-weight:600;
+        ">(${reg})</div>
+      ` : ""}
+
+      ${type ? `
+        <div style="
+          font-size:12px;
+          font-weight:700;
+          color:#333;
+        ">${type}</div>
+      ` : ""}
+
+      ${altitudeLine ? `
+        <div style="
+          font-size:12px;
+          font-weight:700;
+          margin-top:2px;
+        ">${altitudeLine}</div>
+      ` : ""}
+
+      ${speedLine ? `
+        <div style="
+          font-size:11px;
+          font-weight:600;
+          color:#444;
+          margin-top:2px;
+        ">${speedLine}</div>
+      ` : ""}
     </div>
   `;
 }
@@ -216,7 +317,6 @@ function addLiveTrailPoint(lat, lon) {
 async function fetchJsonFromFallbacks(path) {
   const bases = [...ADSB_API_BASES];
 
-  // 마지막 성공 API를 우선 시도
   if (lastGoodApiBase) {
     const idx = bases.indexOf(lastGoodApiBase);
     if (idx > 0) {
@@ -263,27 +363,40 @@ async function fetchJsonFromFallbacks(path) {
 function normalizeAircraft(raw) {
   if (!raw || typeof raw !== "object") return null;
 
-  const ac = {
-    hex: (raw.hex || raw.icao24 || "").toLowerCase(),
-    icao24: (raw.hex || raw.icao24 || "").toLowerCase(),
+  return {
+    hex: String(raw.hex || raw.icao24 || "").toLowerCase(),
+    icao24: String(raw.hex || raw.icao24 || "").toLowerCase(),
+
     callsign: String(raw.flight || raw.callsign || "").trim(),
     flight: String(raw.flight || raw.callsign || "").trim(),
+
     r: String(raw.r || raw.reg || "").trim(),
     reg: String(raw.r || raw.reg || "").trim(),
+
+    type: String(raw.t || raw.type || "").trim(),
+
     latitude: Number(raw.lat ?? raw.latitude),
     longitude: Number(raw.lon ?? raw.longitude),
+
     true_track: Number(raw.track ?? raw.true_track ?? 0),
     gs: Number(raw.gs ?? raw.groundspeed ?? raw.speed ?? 0),
+    ias: Number(raw.ias),
+    mach: Number(raw.mach),
+
     alt_baro: raw.alt_baro,
     alt_geom: raw.alt_geom,
     geo_altitude: raw.geo_altitude,
     baro_altitude: raw.baro_altitude,
+
+    baro_rate: raw.baro_rate,
+    geom_rate: raw.geom_rate,
+    vertical_rate: raw.vertical_rate,
+
     seen: raw.seen,
     seen_pos: raw.seen_pos,
+
     sourceBase: ""
   };
-
-  return ac;
 }
 
 function pickAircraftFromResponse(data) {
@@ -327,6 +440,8 @@ async function fetchAircraftByHex() {
   );
 
   const list = pickAircraftFromResponse(data);
+  console.log("HEX lookup result:", base, data, list);
+
   const ac = list.find(isTargetAircraft) || list[0] || null;
 
   if (ac) ac.sourceBase = base;
@@ -341,6 +456,8 @@ async function fetchAircraftByReg() {
   );
 
   const list = pickAircraftFromResponse(data);
+  console.log("REG lookup result:", base, data, list);
+
   const ac = list.find(isTargetAircraft) || list[0] || null;
 
   if (ac) ac.sourceBase = base;
@@ -355,6 +472,8 @@ async function fetchAircraftFromPoint(lat, lon, radiusNm = POINT_RADIUS_NM) {
   );
 
   const list = pickAircraftFromResponse(data);
+  console.log("POINT lookup result:", base, data, list);
+
   const ac = list.find(isTargetAircraft) || null;
 
   if (ac) ac.sourceBase = base;
@@ -429,7 +548,6 @@ function animateMarkerTo(lat, lon, track, ac) {
     const elapsed = now - startTime;
     const t = Math.min(1, elapsed / ANIMATION_DURATION_MS);
 
-    // easeInOut
     const eased = t < 0.5
       ? 2 * t * t
       : 1 - Math.pow(-2 * t + 2, 2) / 2;
@@ -464,10 +582,13 @@ async function updateAircraft() {
   try {
     let ac = null;
 
-    // 1) 이미 위치를 알고 있으면 point feed로 먼저 탐색
-    if (lastAircraft &&
-        Number.isFinite(lastAircraft.latitude) &&
-        Number.isFinite(lastAircraft.longitude)) {
+    showStatus("Checking aircraft...", "#444");
+
+    if (
+      lastAircraft &&
+      Number.isFinite(lastAircraft.latitude) &&
+      Number.isFinite(lastAircraft.longitude)
+    ) {
       try {
         ac = await fetchAircraftFromPoint(
           lastAircraft.latitude,
@@ -479,15 +600,15 @@ async function updateAircraft() {
       }
     }
 
-    // 2) 못 찾으면 hex exact
     if (!ac && targetHex) {
       ac = await fetchAircraftByHex();
     }
 
-    // 3) 그래도 없고 reg가 있으면 reg exact
     if (!ac && targetReg) {
       ac = await fetchAircraftByReg();
     }
+
+    console.log("Final aircraft:", ac);
 
     if (!ac) {
       showStatus(
@@ -503,8 +624,10 @@ async function updateAircraft() {
     const lat = Number(ac.latitude);
     const track = Number(ac.true_track ?? 0);
 
+    console.log("Final position:", lat, lon, track);
+
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      showStatus("Aircraft found but no valid position yet.", "#444");
+      showStatus("Aircraft found but no valid position yet.", "#a60");
       return;
     }
 
@@ -513,7 +636,6 @@ async function updateAircraft() {
     addLiveTrailPoint(lat, lon);
     animateMarkerTo(lat, lon, track, ac);
 
-    // 첫 위치 잡히면 한 번만 화면 맞춤
     if (!trackingStarted) {
       trackingStarted = true;
 
@@ -521,9 +643,7 @@ async function updateAircraft() {
         map.setView([lat, lon], Math.max(map.getZoom?.() || 8, 8), {
           animate: true
         });
-      } catch {
-        // map 상태에 따라 무시
-      }
+      } catch {}
     }
 
     lastAircraft = {
