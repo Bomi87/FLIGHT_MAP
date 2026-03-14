@@ -27,12 +27,13 @@ html, body {
 }
 
 .popup-body {
-  font-size: 12px;
-  line-height: 1.45;
-  max-width: 340px;
+  font-size: 11px;
+  line-height: 1.4;
+  max-width: 220px;
+  max-height: 260px;
+  overflow-y: auto;
   word-break: break-word;
 }
-
 .popup-title {
   font-weight: 700;
   margin-bottom: 6px;
@@ -144,7 +145,7 @@ map.setMaxBounds([
 const drawn = L.featureGroup().addTo(map);
 
 const POPUP_OPTIONS = {
-  maxWidth: 360,
+  maxWidth: 260,
   autoPan: false
 };
 
