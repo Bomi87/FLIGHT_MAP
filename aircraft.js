@@ -134,7 +134,14 @@ async function updateAircraft() {
 
   try {
     const res = await fetch("https://opensky-network.org/api/states/all");
-
+console.log("OpenSky response:", res.status, res.statusText);
+    if (!res.ok) {
+  const text = await res.text();   // 서버가 준 에러 메시지 확인
+  console.error("OpenSky fetch failed:", res.status, res.statusText);
+  console.error("OpenSky error body:", text);
+  return;
+}
+    
     if (!res.ok) {
       console.error("OpenSky fetch failed:", res.status, res.statusText);
       return;
