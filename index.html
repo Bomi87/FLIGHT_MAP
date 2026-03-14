@@ -143,6 +143,11 @@ map.setMaxBounds([
 
 const drawn = L.featureGroup().addTo(map);
 
+const POPUP_OPTIONS = {
+  maxWidth: 360,
+  autoPan: false
+};
+
 /* -----------------------------
    영공 국가 리스트
 ----------------------------- */
@@ -646,7 +651,7 @@ function drawWaypointMarker(lat, lon, popupHtml, index, total) {
     fillOpacity: 1
   }).addTo(map);
 
-  marker.bindPopup(popupHtml, { maxWidth: 360 });
+  marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
   if (popupHtml) {
     bindWaypointZoomLabel(marker, {
@@ -699,7 +704,7 @@ function drawGPXRoute(points, sourceName) {
       fillOpacity: 1
     }).addTo(map);
 
-    marker.bindPopup(popupHtml, { maxWidth: 360 });
+    marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
     bindWaypointZoomLabel(marker, {
       type: "Point",
@@ -961,7 +966,7 @@ function drawKMLPoint(feature) {
       keyboard: false
     }).addTo(map);
 
-    labelOnlyMarker.bindPopup(popupHtml, { maxWidth: 360 });
+    labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
 
     labelOnlyMarker.bindTooltip(labelHtml, {
       permanent: true,
@@ -989,7 +994,7 @@ function drawKMLPoint(feature) {
       zIndexOffset: 2000
     }).addTo(map);
 
-    marker.bindPopup(popupHtml, { maxWidth: 360 });
+    marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
     if (isIcon52ShapePoint(feature)) {
       bindPermanentPointLabel(marker, feature);
@@ -1015,7 +1020,7 @@ function drawKMLPoint(feature) {
     fillOpacity: markerOpacity
   }).addTo(map);
 
-  marker.bindPopup(popupHtml, { maxWidth: 360 });
+  marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
   if (isAlwaysVisibleShapePointLabel(feature)) {
     bindPermanentPointLabel(marker, feature);
@@ -1046,7 +1051,7 @@ function drawKMLLine(feature) {
         feature.description || "",
         feature.extraRows || []
       );
-      line.bindPopup(popupHtml, { maxWidth: 360 });
+      line.bindPopup(popupHtml, POPUP_OPTIONS);
     }
 
     drawn.addLayer(line);
@@ -1075,7 +1080,7 @@ function drawKMLPolygon(feature) {
       feature.description || "",
       feature.extraRows || []
     );
-    polygon.bindPopup(popupHtml, { maxWidth: 360 });
+    polygon.bindPopup(popupHtml, POPUP_OPTIONS);
   }
 
   drawn.addLayer(polygon);
@@ -1104,7 +1109,7 @@ function drawRouteEndpointMarkers(routeEndpoints) {
 
     destMarker.bindPopup(
       buildPopupHtml(destFeature.name || "", destFeature.description || "", destFeature.extraRows || []),
-      { maxWidth: 360 }
+      POPUP_OPTIONS
     );
 
     drawn.addLayer(destMarker);
