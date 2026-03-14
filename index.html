@@ -521,7 +521,20 @@ function isTriangleShapePoint(feature) {
   if (isAirspaceLabelFeature(feature)) return false;
 
   const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
-  return iconHref.includes("triangle");
+  const name = String(feature?.name || "").trim();
+
+  /* 삼각형 아이콘 URL 패턴 넓게 판별 */
+  const triangleIcon =
+    iconHref.includes("triangle") ||
+    iconHref.includes("trk") ||
+    iconHref.includes("track") ||
+    iconHref.includes("placemark_triangle") ||
+    iconHref.includes("shape_triangle");
+
+  /* 이름 없는 점은 제외 */
+  if (!name) return false;
+
+  return triangleIcon;
 }
 
 function isAlwaysVisibleShapePointLabel(feature) {
@@ -968,10 +981,11 @@ function drawKMLPoint(feature) {
       popupAnchor: [0, -12]
     });
 
-    const marker = L.marker(latlng, {
-      icon: customIcon
-    }).addTo(map);
-
+ const marker = L.marker(latlng, {
+  icon: customIcon,
+  zIndexOffset: 2000
+}).addTo(map);
+    
     marker.bindPopup(popupHtml, { maxWidth: 360 });
 
     if (isTriangleShapePoint(feature)) {
