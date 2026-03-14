@@ -4,17 +4,12 @@ const targetHex = (params.get("hex") || "").toLowerCase().trim();
 
 let aircraftMarker = null;
 
-function formatAltitude(ac) {
-  const alt =
-    ac.alt_baro ??
-    ac.altitude ??
-    ac.baro_altitude ??
-    ac.geo_altitude ??
-    null;
+function formatAltitudeFromState(ac) {
+  const alt = ac[13]; // baro altitude (meters in OpenSky)
 
   if (alt == null || isNaN(alt)) return "";
 
-  const ft = Math.round(Number(alt));
+  const ft = Math.round(Number(alt) * 3.28084);
 
   if (ft >= 18000) {
     return "FL" + String(Math.round(ft / 100)).padStart(3, "0");
@@ -44,35 +39,40 @@ async function updateAircraft() {
   if (!targetReg && !targetHex) return;
 
   try {
-    const res = await fetch("YOUR_API_URL");
-    const data = await res.json();
+    const res = await fetch("https://opensky-network.org/api/states/all");
 
-    const list = data.aircraft || data.ac || data.states || [];
+    if (!res.ok) {
+      console.error("OpenSky fetch failed:", res.status, res.statusText);
+      return;
+    }
+
+    const data = await res.json();
+    const list = data.states || [];
+
     let ac = null;
 
     if (targetHex) {
-      ac = list.find(x =>
-        ((x.hex || x.icao24 || "") + "").toLowerCase() === targetHex
-      );
+      ac = list.find(x => ((x[0] || "") + "").toLowerCase().trim() === targetHex);
     } else if (targetReg) {
-      ac = list.find(x =>
-        ((x.r || x.registration || x.reg || "") + "")
-          .toUpperCase()
-          .trim() === targetReg
-      );
+      ac = list.find(x => ((x[1] || "") + "").toUpperCase().trim() === targetReg);
     }
 
-    if (!ac) return;
+    if (!ac) {
+      console.log("Target aircraft not found:", { targetHex, targetReg });
+      return;
+    }
 
-    const lat = ac.lat ?? ac.latitude ?? ac[6];
-    const lon = ac.lon ?? ac.longitude ?? ac[5];
-    const track = ac.track ?? ac.true_track ?? ac.heading ?? ac[10] ?? 0;
-    const reg = ac.r || ac.registration || ac.reg || targetReg || "";
-    const flight = (ac.flight || ac.callsign || ac[1] || "").trim();
-    const hex = ac.hex || ac.icao24 || targetHex || "";
-    const altitudeText = formatAltitude(ac);
+    const lon = ac[5];
+    const lat = ac[6];
+    const track = ac[10] ?? 0;
+    const flight = (ac[1] || "").trim();
+    const hex = (ac[0] || "").toLowerCase();
+    const altitudeText = formatAltitudeFromState(ac);
 
-    if (lat == null || lon == null) return;
+    if (lat == null || lon == null) {
+      console.log("Aircraft found but no lat/lon yet:", ac);
+      return;
+    }
 
     const labelText = `
       <div style="
@@ -83,7 +83,7 @@ async function updateAircraft() {
         white-space:nowrap;
         text-align:center;
       ">
-        ${reg || flight || hex}
+        ${flight || hex}
         ${altitudeText ? `<br>${altitudeText}` : ""}
       </div>
     `;
