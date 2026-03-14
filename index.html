@@ -79,7 +79,7 @@ html, body {
   display: inline-block;
   white-space: nowrap;
   font-weight: 700;
-  transform:  translateX(-23px) rotate(-90deg) ;
+  transform: translateX(-23px) rotate(-90deg);
   transform-origin: center top;
   text-shadow:
     -1px -1px 0 #000,
@@ -107,7 +107,7 @@ html, body {
   font-weight: 700;
   color: #ffffff;
   font-size: 10px;
-  transform: translateX(-6px) rotate(-90deg) ;
+  transform: translateX(-6px) rotate(-90deg);
   transform-origin: center top;
   text-shadow:
     -1px -1px 0 #000,
@@ -116,7 +116,6 @@ html, body {
      1px  1px 0 #000;
 }
 
-/* 지도 선택 버튼 스타일 약간 정리 */
 .leaflet-control-layers {
   font-size: 12px;
 }
@@ -142,7 +141,6 @@ const streetMap = L.tileLayer(
   'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
   {
     maxZoom: 18,
-    noWrap: true,
     attribution: '&copy; OpenStreetMap &copy; CARTO'
   }
 );
@@ -152,7 +150,6 @@ const satelliteMap = L.tileLayer(
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   {
     maxZoom: 18,
-    noWrap: true,
     attribution: 'Tiles &copy; Esri'
   }
 );
@@ -163,7 +160,6 @@ const satelliteWithLabels = L.layerGroup([
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {
       maxZoom: 18,
-      noWrap: true,
       attribution: 'Tiles &copy; Esri'
     }
   ),
@@ -171,7 +167,6 @@ const satelliteWithLabels = L.layerGroup([
     'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
     {
       maxZoom: 18,
-      noWrap: true,
       attribution: 'Labels &copy; Esri'
     }
   )
@@ -191,8 +186,6 @@ L.control.layers(baseMaps, null, {
   position: "topright",
   collapsed: false
 }).addTo(map);
-
-
 
 const drawn = L.featureGroup().addTo(map);
 
