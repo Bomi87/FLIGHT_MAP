@@ -28,7 +28,7 @@ function formatLabel(ac) {
   return `
     <div style="
       font-size: 11px;
-      color: black !important;
+      color: black;
       font-weight: 700;
       white-space: nowrap;
       text-align: center;
@@ -53,8 +53,18 @@ function makeAircraftIcon(track = 0) {
         transform: rotate(${track}deg);
         transform-origin: center center;
       ">
-        <svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <g fill="#ff8800" stroke="black" stroke-width="3" stroke-linejoin="round">
+        <svg
+          width="32"
+          height="32"
+          viewBox="0 0 100 100"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g
+            fill="#ff8800"
+            stroke="black"
+            stroke-width="3"
+            stroke-linejoin="round"
+          >
             <path d="
               M50 2
               L56 26
@@ -136,9 +146,13 @@ async function updateAircraft() {
     let ac = null;
 
     if (targetHex) {
-      ac = list.find(x => ((x[0] || "") + "").toLowerCase().trim() === targetHex);
+      ac = list.find(
+        x => ((x[0] || "") + "").toLowerCase().trim() === targetHex
+      );
     } else if (targetReg) {
-      ac = list.find(x => ((x[1] || "") + "").toUpperCase().trim() === targetReg);
+      ac = list.find(
+        x => ((x[1] || "") + "").toUpperCase().trim() === targetReg
+      );
     }
 
     if (!ac) {
@@ -175,7 +189,6 @@ async function updateAircraft() {
       className: "aircraft-label",
       opacity: 1
     });
-
   } catch (e) {
     console.error("aircraft update failed:", e);
   }
