@@ -244,7 +244,7 @@ async function loadHistoricalTrail() {
   try {
     showStatus(`Loading historical trail: ${targetHex}`, "#444");
 
-    const url = `${OPENSKY_PROXY}/?mode=tracks&hex=${encodeURIComponent(targetHex)}`;
+   const url = `${OPENSKY_PROXY}?mode=tracks&hex=${encodeURIComponent(targetHex)}`;
     console.log("Historical trail request:", url);
 
     const data = await fetchJsonSafely(url);
@@ -284,7 +284,7 @@ async function updateAircraft() {
   }
 
   try {
-    const url = `${OPENSKY_PROXY}/?mode=states&hex=${encodeURIComponent(targetHex)}`;
+   const url = `${OPENSKY_PROXY}?mode=states&hex=${encodeURIComponent(targetHex)}`;
     console.log("Proxy request:", url);
 
     const data = await fetchJsonSafely(url);
