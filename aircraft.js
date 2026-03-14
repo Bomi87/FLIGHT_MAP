@@ -113,7 +113,7 @@ function addTrailPoint(lat, lon) {
 
   if (!aircraftTrailLine) {
     aircraftTrailLine = L.polyline(aircraftTrail, {
-      color: "#00ffff",
+     color: "#ff8800",
       weight: 2,
       opacity: 0.85,
       smoothFactor: 1
