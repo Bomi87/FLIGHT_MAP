@@ -65,7 +65,10 @@ function showStatus(message, color = "#333") {
 
 function hideStatus() {
   const box = document.getElementById("aircraft-status");
-  if (box) box.style.display = "none";
+  if (box) {
+    box.textContent = "";
+    box.style.display = "none";
+  }
 }
 
 /* ------------------ FORMATTERS ------------------ */
@@ -601,7 +604,10 @@ async function updateAircraft() {
   try {
     let ac = null;
 
-    showStatus("Checking aircraft...", "#444");
+    // 이미 추적 시작 후에는 checking 문구를 계속 띄우지 않음
+    if (!trackingStarted) {
+      showStatus("Checking aircraft...", "#444");
+    }
 
     if (
       lastAircraft &&
@@ -650,6 +656,7 @@ async function updateAircraft() {
       return;
     }
 
+    // 정상 위치 확보 시 상태 박스 완전히 숨김
     hideStatus();
 
     addLiveTrailPoint(lat, lon);
@@ -657,6 +664,9 @@ async function updateAircraft() {
 
     if (!trackingStarted) {
       trackingStarted = true;
+
+      // 최초 성공 시 한번 더 숨김 처리
+      hideStatus();
 
       try {
         map.setView([lat, lon], Math.max(map.getZoom?.() || 8, 8), {
