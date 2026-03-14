@@ -200,11 +200,10 @@ async function fetchJsonSafely(url) {
 /* ------------------ UPDATE AIRCRAFT ------------------ */
 
 async function updateAircraft() {
-  if (!targetHex) {
-    console.log("No HEX parameter.");
-    showStatus("No HEX parameter in URL.", "red");
-    return;
-  }
+ if (!targetHex) {
+  console.log("No HEX parameter.");
+  return;
+}
 
   try {
     const url = `${OPENSKY_PROXY}/?hex=${encodeURIComponent(targetHex)}`;
