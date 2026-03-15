@@ -248,29 +248,30 @@ function buildAircraftIcon(trackDeg = 0) {
         transform: rotate(${normalizeDeg(trackDeg)}deg);
         transform-origin:center center;
       ">
-        <svg width="32" height="32" viewBox="0 0 64 64">
+        <svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true">
           <path
             d="
-            M32 4
-            L36 22
-            L56 30
-            L56 36
-            L36 36
-            L42 58
-            L36 60
-            L32 42
-            L28 60
-            L22 58
-            L28 36
-            L8 36
-            L8 30
-            L28 22
-            Z
+              M34 6
+              L41 23
+              L57 30
+              L55 35
+              L39 35
+              L34 59
+              L29 58
+              L30 35
+              L14 29
+              L8 38
+              L4 36
+              L8 26
+              L24 30
+              L30 22
+              Z
             "
             fill="#f59c28"
             stroke="#000"
-            stroke-width="3"
+            stroke-width="2.6"
             stroke-linejoin="round"
+            stroke-linecap="round"
           />
         </svg>
       </div>
