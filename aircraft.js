@@ -303,8 +303,12 @@ function formatMachText(ac) {
 }
 
 function formatVerticalRateText(ac) {
+  if (ac.vert_rate == null || ac.vert_rate === "") return "-";
+
   const vr = Number(ac.vert_rate);
-  if (isNaN(vr) || vr === 0) return "0 FPM";
+  if (isNaN(vr)) return "-";
+  if (vr === 0) return "0 FPM";
+
   return `${vr > 0 ? "+" : ""}${Math.round(vr)} FPM`;
 }
 
@@ -312,7 +316,7 @@ function getVerticalState(ac) {
   const vr = Number(ac.vert_rate);
 
   if (isNaN(vr)) {
-    return { arrow: "→", color: "#000000" };
+    return { arrow: "→", color: "#ffffff" };
   }
 
   if (vr > 300) {
@@ -323,14 +327,19 @@ function getVerticalState(ac) {
     return { arrow: "▼", color: "#007aff" };
   }
 
-  return { arrow: "→", color: "#000000" };
+  return { arrow: "→", color: "#ffffff" };
 }
+
 /* 항상 보이는 작은 라벨 */
 function formatAircraftLabelHtml(ac, color) {
   const flight = (ac.flight || ac.callsign || "").trim();
   const reg = (ac.r || ac.reg || "").trim();
   const altitudeText = formatAltitudeText(ac);
-  const vertical = getVerticalState(ac);
+  const vertical = { ...getVerticalState(ac) };
+
+  if (vertical.arrow === "→") {
+    vertical.color = "#000000";
+  }
 
   const smallLine1 = flight || reg || "UNKNOWN";
   const smallLine2 = altitudeText || "";
@@ -733,16 +742,16 @@ function refreshAircraftFollowButtons() {
     btn.innerHTML = buildAircraftButtonInnerHtml(label, state.color);
     btn.title = isLive ? label : `${label} (NOT LIVE)`;
 
-  btn.onclick = () => {
-  const latestState = aircraftStates.get(target.key);
-  if (!latestState) return;
+    btn.onclick = () => {
+      const latestState = aircraftStates.get(target.key);
+      if (!latestState) return;
 
-  if (latestState.lastAircraft) {
-    showAircraftDetailPanel(target, latestState.lastAircraft);
-  }
+      if (latestState.lastAircraft) {
+        showAircraftDetailPanel(target, latestState.lastAircraft);
+      }
 
-  focusAircraftTarget(target.key, true);
-};
+      focusAircraftTarget(target.key, true);
+    };
 
     state.buttonEl = btn;
     list.appendChild(btn);
@@ -806,6 +815,7 @@ function createToggleButton() {
   acBtn.style.width = "104px";
   applyControlButtonStyle(acBtn);
   acBtn.onclick = () => {
+    hideAircraftDetailPanel();
     focusAllAircraft();
   };
 
