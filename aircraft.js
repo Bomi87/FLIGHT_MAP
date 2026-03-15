@@ -713,9 +713,16 @@ function refreshAircraftFollowButtons() {
     btn.innerHTML = buildAircraftButtonInnerHtml(label, state.color);
     btn.title = isLive ? label : `${label} (NOT LIVE)`;
 
-    btn.onclick = () => {
-      focusAircraftTarget(target.key, true);
-    };
+  btn.onclick = () => {
+  const latestState = aircraftStates.get(target.key);
+  if (!latestState) return;
+
+  if (latestState.lastAircraft) {
+    showAircraftDetailPanel(target, latestState.lastAircraft);
+  }
+
+  focusAircraftTarget(target.key, true);
+};
 
     state.buttonEl = btn;
     list.appendChild(btn);
