@@ -242,39 +242,36 @@ function formatAircraftLabelHtml(ac) {
 function buildAircraftIcon(trackDeg = 0) {
   return L.divIcon({
     className: "aircraft-div-icon",
-    iconSize: [38, 38],
-    iconAnchor: [19, 19],
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
     html: `
       <div style="
-        width:38px;
-        height:38px;
+        width:36px;
+        height:36px;
         display:flex;
         align-items:center;
         justify-content:center;
         transform: rotate(${normalizeDeg(trackDeg)}deg);
         transform-origin:center center;
       ">
-        <svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true">
-          <path
-            d="M34 4
-               L40 24
-               L58 29
-               L58 35
-               L40 36
-               L42 58
-               L36 60
-               L32 42
-               L28 60
-               L22 58
-               L24 36
-               L6 35
-               L6 29
-               L24 24
-               L30 4
-               Z"
+        <svg width="30" height="30" viewBox="0 0 24 24">
+          <path d="
+            M12 2
+            L14 9
+            L21 10
+            L21 12
+            L14 13
+            L15 22
+            L12 21
+            L9 22
+            L10 13
+            L3 12
+            L3 10
+            L10 9
+            Z"
             fill="#ff9c4a"
             stroke="#b76522"
-            stroke-width="2"
+            stroke-width="1.5"
             stroke-linejoin="round"
           />
         </svg>
