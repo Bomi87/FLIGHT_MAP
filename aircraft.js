@@ -313,23 +313,33 @@ function formatMachText(ac) {
   return "";
 }
 
-function formatVerticalRateText(ac) {
-  if (ac.vert_rate == null || ac.vert_rate === "") return "-";
+function getVerticalRate(ac) {
+  if (ac?.vert_rate != null && ac.vert_rate !== "") {
+    const vr = Number(ac.vert_rate);
+    if (!isNaN(vr)) return vr;
+  }
 
-  const vr = Number(ac.vert_rate);
-  if (isNaN(vr)) return "-";
+  if (ac?.baro_rate != null && ac.baro_rate !== "") {
+    const br = Number(ac.baro_rate);
+    if (!isNaN(br)) return br;
+  }
+
+  return null;
+}
+
+function formatVerticalRateText(ac) {
+  const vr = getVerticalRate(ac);
+
+  if (vr == null) return "-";
   if (vr === 0) return "0 FPM";
 
   return `${vr > 0 ? "+" : ""}${Math.round(vr)} FPM`;
 }
 
 function getVerticalState(ac) {
-  if (ac.vert_rate == null || ac.vert_rate === "") {
-    return null;
-  }
+  const vr = getVerticalRate(ac);
 
-  const vr = Number(ac.vert_rate);
-  if (isNaN(vr)) return null;
+  if (vr == null) return null;
 
   if (vr > 300) {
     return { arrow: "▲", color: "#ff3b30" };
@@ -341,17 +351,19 @@ function getVerticalState(ac) {
 
   return { arrow: "→", color: "#ffffff" };
 }
+
 /* 항상 보이는 작은 라벨 */
 function formatAircraftLabelHtml(ac, color) {
   const flight = (ac.flight || ac.callsign || "").trim();
   const reg = (ac.r || ac.reg || "").trim();
   const altitudeText = formatAltitudeText(ac);
- const verticalState = getVerticalState(ac);
-const vertical = verticalState ? { ...verticalState } : null;
 
-if (vertical && vertical.arrow === "→") {
-  vertical.color = "#000000";
-}
+  const verticalState = getVerticalState(ac);
+  const vertical = verticalState ? { ...verticalState } : null;
+
+  if (vertical && vertical.arrow === "→") {
+    vertical.color = "#000000";
+  }
 
   const smallLine1 = flight || reg || "UNKNOWN";
   const smallLine2 = altitudeText || "";
@@ -379,15 +391,15 @@ if (vertical && vertical.arrow === "→") {
         border-radius:2px;
       "></div>
 
-     ${vertical ? `
-<div style="
-  font-size:10px;
-  font-weight:900;
-  color:${vertical.color};
-  line-height:1;
-  margin:0 0 1px 0;
-">${vertical.arrow}</div>
-` : ""}
+      ${vertical ? `
+        <div style="
+          font-size:10px;
+          font-weight:900;
+          color:${vertical.color};
+          line-height:1;
+          margin:0 0 1px 0;
+        ">${vertical.arrow}</div>
+      ` : ""}
 
       <div style="
         font-size:10px;
@@ -467,6 +479,9 @@ function formatAircraftDetailPanelHtml(ac, color) {
     iasText = `${Math.round(Number(ac.ias))}KT`;
   }
 
+  const vsDisplay = vertical ? `${vertical.arrow} ${vrText}` : "-";
+  const vsColor = vertical ? vertical.color : "#ffffff";
+
   return `
     <div style="margin-bottom:4px;color:${escapeHtml(color)};font-size:13px;font-weight:900;">
       ${escapeHtml(flight || reg || hex || "AIRCRAFT")}
@@ -477,7 +492,7 @@ function formatAircraftDetailPanelHtml(ac, color) {
     ${buildDetailRow("SPD", gsText)}
     ${buildDetailRow("IAS", iasText)}
     ${buildDetailRow("MACH", machText)}
-    ${buildDetailRow("V/S", `${vertical.arrow} ${vrText}`, vertical.color)}
+    ${buildDetailRow("V/S", vsDisplay, vsColor)}
     ${hex ? buildDetailRow("HEX", hex) : ""}
   `;
 }
