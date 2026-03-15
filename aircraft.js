@@ -85,36 +85,33 @@ function createToggleButton() {
   btn.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
   btn.style.backdropFilter = "blur(4px)";
 
-  btn.onclick = async () => {
-    if (focusToggleMode === "aircraft") {
-      // 현재 항공기 → GPS로 전환
-      await startDeviceCompass();
+ btn.onclick = async () => {
+  if (focusToggleMode === "aircraft") {
+    await startDeviceCompass();
 
-      if (lastUserLatLng) {
-        const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
-        map.flyTo(lastUserLatLng, targetZoom, {
-          animate: true,
-          duration: 0.8
-        });
-      }
-
-      focusToggleMode = "gps";
-      btn.textContent = "GPS";
-    } else {
-      // 현재 GPS → 항공기로 전환
-      if (lastAircraftLatLng) {
-        const targetZoom = Math.max(map.getZoom(), 9);
-        map.flyTo(lastAircraftLatLng, targetZoom, {
-          animate: true,
-          duration: 0.8
-        });
-      }
-
-      focusToggleMode = "aircraft";
-      btn.textContent = "A/C";
+    if (lastUserLatLng) {
+      const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
+      map.flyTo(lastUserLatLng, targetZoom, {
+        animate: true,
+        duration: 0.8
+      });
     }
-  };
 
+    focusToggleMode = "gps";
+    btn.textContent = "GPS";
+  } else {
+    if (lastAircraftLatLng) {
+      const targetZoom = 8;
+      map.flyTo(lastAircraftLatLng, targetZoom, {
+        animate: true,
+        duration: 0.8
+      });
+    }
+
+    focusToggleMode = "aircraft";
+    btn.textContent = "A/C";
+  }
+};
   wrap.appendChild(btn);
   document.body.appendChild(wrap);
 }
