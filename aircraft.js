@@ -12,14 +12,13 @@ const ADSB_API_BASES = [
 const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
 const MAX_LIVE_TRAIL_POINTS = 500;
-const POINT_RADIUS_NM = 80;
 
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
 const USER_GPS_ZOOM_MIN = 10;
 const MAX_USER_TRAIL_POINTS = 1000;
 
-const RUNNING_SPEED_MAX_KT = 8.0;      // 이 속도 초과면 compass 화살표 숨김
+const RUNNING_SPEED_MAX_KT = 8.0;
 const COMPASS_HEADING_SMOOTHING = 0.18;
 const USER_HEADING_CHANGE_MIN_DEG = 2;
 
@@ -56,9 +55,9 @@ let compassStarted = false;
 
 /* ------------------ TOGGLE BUTTON STATE ------------------ */
 
-let focusToggleMode = "aircraft"; // 버튼 기본 표시 = A/C
-
 /* ------------------ TOGGLE BUTTON ------------------ */
+
+let focusToggleMode = "aircraft";   // 현재 기준 위치
 
 function createToggleButton() {
   let wrap = document.getElementById("custom-follow-controls");
@@ -67,14 +66,15 @@ function createToggleButton() {
   wrap = document.createElement("div");
   wrap.id = "custom-follow-controls";
   wrap.style.position = "fixed";
-  wrap.style.top = "52px";
+  wrap.style.top = "78px";
   wrap.style.right = "10px";
   wrap.style.zIndex = "99999";
 
   const btn = document.createElement("button");
   btn.id = "toggle-focus-btn";
   btn.type = "button";
-  btn.textContent = "A/C";
+  btn.textContent = "A/C";   // 현재 기준 표시
+
   btn.style.width = "54px";
   btn.style.height = "34px";
   btn.style.border = "1px solid rgba(0,0,0,0.2)";
@@ -88,17 +88,9 @@ function createToggleButton() {
   btn.style.backdropFilter = "blur(4px)";
 
   btn.onclick = async () => {
+
     if (focusToggleMode === "aircraft") {
-      if (lastAircraftLatLng) {
-        const targetZoom = Math.max(map.getZoom(), 9);
-        map.flyTo(lastAircraftLatLng, targetZoom, {
-          animate: true,
-          duration: 0.8
-        });
-      }
-      focusToggleMode = "gps";
-      btn.textContent = "GPS";
-    } else {
+      // 현재 항공기 → GPS로 전환
       await startDeviceCompass();
 
       if (lastUserLatLng) {
@@ -108,6 +100,21 @@ function createToggleButton() {
           duration: 0.8
         });
       }
+
+      focusToggleMode = "gps";
+      btn.textContent = "GPS";
+
+    } else {
+
+      // 현재 GPS → 항공기로 전환
+      if (lastAircraftLatLng) {
+        const targetZoom = Math.max(map.getZoom(), 9);
+        map.flyTo(lastAircraftLatLng, targetZoom, {
+          animate: true,
+          duration: 0.8
+        });
+      }
+
       focusToggleMode = "aircraft";
       btn.textContent = "A/C";
     }
@@ -149,24 +156,6 @@ function smoothHeading(prevDeg, nextDeg, smoothing) {
 
 function metersPerSecondToKnots(ms) {
   return (Number(ms) || 0) * 1.943844;
-}
-
-function getDistanceNm(lat1, lon1, lat2, lon2) {
-  const R = 3440.065;
-  const toRad = Math.PI / 180;
-
-  const dLat = (lat2 - lat1) * toRad;
-  const dLon = (lon2 - lon1) * toRad;
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * toRad) *
-      Math.cos(lat2 * toRad) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
 }
 
 /* ------------------ AIRCRAFT FORMAT ------------------ */
@@ -258,24 +247,39 @@ function formatAircraftLabelHtml(ac) {
 function buildAircraftIcon(trackDeg = 0) {
   return L.divIcon({
     className: "aircraft-div-icon",
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
     html: `
       <div style="
-        width:34px;
-        height:34px;
+        width:38px;
+        height:38px;
         display:flex;
         align-items:center;
         justify-content:center;
         transform: rotate(${normalizeDeg(trackDeg)}deg);
         transform-origin:center center;
       ">
-        <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true">
+        <svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true">
           <path
-            d="M21 16.5l-8-4.5V5.5c0-.83-.67-1.5-1.5-1.5S10 4.67 10 5.5V12L2 16.5V18l8-2.5v3l-2 1.5V21l3.5-1 3.5 1v-1l-2-1.5v-3L21 18z"
+            d="M34 4
+               L40 24
+               L58 29
+               L58 35
+               L40 36
+               L42 58
+               L36 60
+               L32 42
+               L28 60
+               L22 58
+               L24 36
+               L6 35
+               L6 29
+               L24 24
+               L30 4
+               Z"
             fill="#ff9c4a"
-            stroke="#a85a1a"
-            stroke-width="0.8"
+            stroke="#b76522"
+            stroke-width="2"
             stroke-linejoin="round"
           />
         </svg>
@@ -338,11 +342,12 @@ function updateLiveTrail(ac) {
   if (isNaN(lat) || isNaN(lon)) return;
 
   const point = [lat, lon];
+  const prev = liveTrail[liveTrail.length - 1];
 
-  if (liveTrail.length > 0) {
-    const prev = liveTrail[liveTrail.length - 1];
-    const dNm = getDistanceNm(prev[0], prev[1], point[0], point[1]);
-    if (dNm < 0.01) return;
+  if (prev) {
+    const dLat = Math.abs(prev[0] - point[0]);
+    const dLon = Math.abs(prev[1] - point[1]);
+    if (dLat < 0.00002 && dLon < 0.00002) return;
   }
 
   liveTrail.push(point);
@@ -474,7 +479,6 @@ function pickAircraftFromResponse(data) {
   }
 
   if (data.hex || data.lat || data.lon) return data;
-
   return null;
 }
 
@@ -533,6 +537,19 @@ async function pollAircraft() {
 
 /* ------------------ COMPASS / GPS ------------------ */
 
+function getHeadingArrowLatLng(baseLatLng, headingDeg) {
+  const lat = baseLatLng[0];
+  const lon = baseLatLng[1];
+
+  const distanceMeters = 7; // 파란 원 바로 앞쪽
+  const rad = normalizeDeg(headingDeg) * Math.PI / 180;
+
+  const dLat = (distanceMeters * Math.cos(rad)) / 111320;
+  const dLon = (distanceMeters * Math.sin(rad)) / (111320 * Math.cos(lat * Math.PI / 180));
+
+  return [lat + dLat, lon + dLon];
+}
+
 function createHeadingArrowIcon(headingDeg) {
   return L.divIcon({
     className: "user-heading-arrow",
@@ -590,16 +607,17 @@ function updateCompassArrowFromOrientation() {
 
   lastUserHeadingDeg = nextHeading;
 
+  const arrowLatLng = getHeadingArrowLatLng(lastUserLatLng, nextHeading);
   const icon = createHeadingArrowIcon(nextHeading);
 
   if (!userHeadingMarker) {
-    userHeadingMarker = L.marker(lastUserLatLng, {
+    userHeadingMarker = L.marker(arrowLatLng, {
       icon,
       zIndexOffset: 1100,
       interactive: false
     }).addTo(map);
   } else {
-    userHeadingMarker.setLatLng(lastUserLatLng);
+    userHeadingMarker.setLatLng(arrowLatLng);
     userHeadingMarker.setIcon(icon);
   }
 }
@@ -654,7 +672,7 @@ function updateUserLocation(position) {
 
   if (!userMarker) {
     userMarker = L.circleMarker(lastUserLatLng, {
-      radius: 4,
+      radius: 7,   // 더 크게
       color: "#ffffff",
       weight: 2,
       fillColor: "#2b8cff",
@@ -665,7 +683,7 @@ function updateUserLocation(position) {
     userMarker.setLatLng(lastUserLatLng);
   }
 
-  const clampedAccuracy = Math.max(5, Math.min(accuracy, 15));
+  const clampedAccuracy = Math.max(6, Math.min(accuracy, 18));
 
   if (!userAccuracyCircle) {
     userAccuracyCircle = L.circle(lastUserLatLng, {
