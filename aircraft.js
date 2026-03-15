@@ -248,27 +248,28 @@ function buildAircraftIcon(trackDeg = 0) {
         transform: rotate(${normalizeDeg(trackDeg)}deg);
         transform-origin:center center;
       ">
-        <svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true">
+        <svg width="32" height="32" viewBox="0 0 64 64">
           <path
-            d="M34 4
-               L40 24
-               L58 29
-               L58 35
-               L40 36
-               L42 58
-               L36 60
-               L32 42
-               L28 60
-               L22 58
-               L24 36
-               L6 35
-               L6 29
-               L24 24
-               L30 4
-               Z"
-            fill="#ff9c4a"
-            stroke="#b76522"
-            stroke-width="2"
+            d="
+            M32 4
+            L36 22
+            L56 30
+            L56 36
+            L36 36
+            L42 58
+            L36 60
+            L32 42
+            L28 60
+            L22 58
+            L28 36
+            L8 36
+            L8 30
+            L28 22
+            Z
+            "
+            fill="#f59c28"
+            stroke="#000"
+            stroke-width="3"
             stroke-linejoin="round"
           />
         </svg>
@@ -276,7 +277,6 @@ function buildAircraftIcon(trackDeg = 0) {
     `
   });
 }
-
 /* ------------------ AIRCRAFT DRAW ------------------ */
 
 function ensureAircraftMarker(ac) {
