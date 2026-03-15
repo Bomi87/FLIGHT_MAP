@@ -119,7 +119,6 @@
          1px  1px 0 #000;
     }
 
-    /* 삼각형 아이콘 전용: 항상 보이는 가로 레이블 */
     .triangle-label {
       background: transparent !important;
       border: none !important;
@@ -150,6 +149,17 @@
     .leaflet-control-layers {
       font-size: 12px;
     }
+
+    /* PC에서만 크게 */
+    @media (min-width: 768px) {
+      .waypoint-label-text {
+        font-size: 13px;
+      }
+
+      .triangle-label-text {
+        font-size: 13px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -161,6 +171,10 @@
       preferCanvas: true,
       maxBoundsViscosity: 1.0
     }).setView([48, 180], 3);
+
+    function isDesktopView() {
+      return window.innerWidth >= 768;
+    }
 
     /* -----------------------------
        Base Maps
@@ -1049,7 +1063,9 @@
         if (!cleanedName) return;
 
         const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
-        const fontSize = Math.max(7, Math.round(9 * labelStyle.scale));
+        const fontSize = isDesktopView()
+          ? Math.max(10, Math.round(13 * labelStyle.scale))
+          : Math.max(7, Math.round(9 * labelStyle.scale));
 
         const labelHtml =
           `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
@@ -1074,7 +1090,10 @@
       }
 
       if (iconStyle.href) {
-        const iconSize = Math.max(8, Math.round(9 * iconStyle.scale));
+        const iconSize = isDesktopView()
+          ? Math.max(12, Math.round(14 * iconStyle.scale))
+          : Math.max(8, Math.round(9 * iconStyle.scale));
+
         const customIcon = L.icon({
           iconUrl: iconStyle.href,
           iconSize: [iconSize, iconSize],
@@ -1321,6 +1340,6 @@
     init();
   </script>
 
-  <script src="aircraft.js?v=20260314_10"></script>
+  <script src="aircraft.js?v=20260315_01"></script>
 </body>
 </html>
