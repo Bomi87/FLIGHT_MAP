@@ -23,12 +23,19 @@ const RUNNING_SPEED_MAX_KT = 8.0;
 const COMPASS_HEADING_SMOOTHING = 0.18;
 const USER_HEADING_CHANGE_MIN_DEG = 2;
 
-/* --- GPS TRAIL FILTER SETTINGS --- */
-const USER_TRAIL_MAX_ACCURACY_M = 45;
-const USER_TRAIL_JUMP_MAX_DIST_M = 60;
+/* --- 100점 GPS TRAIL SETTINGS --- */
+const USER_TRAIL_MAX_ACCURACY_M = 55;       // 완전 컷 기준
+const USER_TRAIL_BASE_MAX_ACCURACY_M = 45;  // 정상 허용 기준
 const USER_TRAIL_JUMP_MAX_TIME_S = 5;
 const USER_TRAIL_MAX_SPEED_MPS = 8;
 const USER_TRAIL_MIN_MOVE_M = 5;
+
+const USER_TRAIL_DASH_MAX_DIST_M = 120;     // 너무 긴 점선 금지
+const USER_TRAIL_DASH_MAX_TIME_S = 25;
+
+const USER_TRAIL_SMOOTHING_WINDOW = 3;      // 최근 3점 기반
+const USER_TRAIL_STORAGE_KEY = "userTrailState_v1";
+const USER_TRAIL_STORAGE_LIMIT = 300;
 
 /* ------------------ STATE ------------------ */
 
@@ -71,6 +78,8 @@ let userTrailDashedLines = [];
 
 let currentSolidSegment = null;
 let currentSolidLine = null;
+
+let recentAcceptedUserPoints = [];
 
 /* ------------------ BUTTONS ------------------ */
 
@@ -190,6 +199,31 @@ function metersBetweenLatLng(lat1, lon1, lat2, lon2) {
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function averagePoint(points) {
+  if (!points || points.length === 0) return null;
+  const sum = points.reduce(
+    (acc, p) => {
+      acc.lat += p.lat;
+      acc.lng += p.lng;
+      return acc;
+    },
+    { lat: 0, lng: 0 }
+  );
+  return {
+    lat: sum.lat / points.length,
+    lng: sum.lng / points.length
+  };
+}
+
+function clonePoint(p) {
+  return {
+    lat: p.lat,
+    lng: p.lng,
+    accuracy: p.accuracy ?? null,
+    time: p.time
+  };
 }
 
 /* ------------------ AIRCRAFT FORMAT ------------------ */
@@ -717,7 +751,7 @@ function createDashedTrailLine(fromPoint, toPoint) {
   ).addTo(map);
 
   userTrailDashedLines.push(line);
-  userTrailDashedSegments.push([fromPoint, toPoint]);
+  userTrailDashedSegments.push([clonePoint(fromPoint), clonePoint(toPoint)]);
 }
 
 function trimOldestSolidTrailData() {
@@ -758,13 +792,41 @@ function trimUserTrailData() {
   trimOldestDashedTrailData();
 }
 
+function rememberAcceptedPoint(point) {
+  recentAcceptedUserPoints.push(clonePoint(point));
+  if (recentAcceptedUserPoints.length > USER_TRAIL_SMOOTHING_WINDOW) {
+    recentAcceptedUserPoints.shift();
+  }
+}
+
+function getReferencePointForValidation() {
+  if (recentAcceptedUserPoints.length === 0) return lastAcceptedUserPoint;
+  if (recentAcceptedUserPoints.length === 1) return recentAcceptedUserPoints[0];
+
+  const avg = averagePoint(recentAcceptedUserPoints);
+  return {
+    lat: avg.lat,
+    lng: avg.lng,
+    accuracy: recentAcceptedUserPoints[recentAcceptedUserPoints.length - 1].accuracy,
+    time: recentAcceptedUserPoints[recentAcceptedUserPoints.length - 1].time
+  };
+}
+
+function getDynamicJumpAllowance(nextAccuracy) {
+  const acc = Number(nextAccuracy) || 0;
+  return Math.max(USER_TRAIL_JUMP_MAX_DIST_M, acc * 1.5);
+}
+
 function isReliableUserTrailPoint(prevPoint, nextPoint) {
   if (!nextPoint) return false;
 
-  if (
-    typeof nextPoint.accuracy === "number" &&
-    nextPoint.accuracy > USER_TRAIL_MAX_ACCURACY_M
-  ) {
+  const nextAccuracy = Number(nextPoint.accuracy) || 0;
+
+  if (nextAccuracy > USER_TRAIL_MAX_ACCURACY_M) {
+    return false;
+  }
+
+  if (nextAccuracy > USER_TRAIL_BASE_MAX_ACCURACY_M && !prevPoint) {
     return false;
   }
 
@@ -784,7 +846,9 @@ function isReliableUserTrailPoint(prevPoint, nextPoint) {
     return null;
   }
 
-  if (dt <= USER_TRAIL_JUMP_MAX_TIME_S && dist > USER_TRAIL_JUMP_MAX_DIST_M) {
+  const dynamicJumpAllowance = getDynamicJumpAllowance(nextAccuracy);
+
+  if (dt <= USER_TRAIL_JUMP_MAX_TIME_S && dist > dynamicJumpAllowance) {
     return false;
   }
 
@@ -792,11 +856,46 @@ function isReliableUserTrailPoint(prevPoint, nextPoint) {
     return false;
   }
 
+  if (nextAccuracy > USER_TRAIL_BASE_MAX_ACCURACY_M && dist > nextAccuracy) {
+    return false;
+  }
+
   return true;
 }
 
+function shouldCreateDashedReconnect(fromPoint, toPoint) {
+  if (!fromPoint || !toPoint) return false;
+
+  const dist = metersBetweenLatLng(
+    fromPoint.lat, fromPoint.lng,
+    toPoint.lat, toPoint.lng
+  );
+
+  const dt = (toPoint.time - fromPoint.time) / 1000;
+  if (dt <= 0) return false;
+
+  return dist <= USER_TRAIL_DASH_MAX_DIST_M && dt <= USER_TRAIL_DASH_MAX_TIME_S;
+}
+
+function getSmoothedAcceptedPoint(candidatePoint) {
+  const windowPoints = recentAcceptedUserPoints.slice(-(USER_TRAIL_SMOOTHING_WINDOW - 1));
+  const points = [...windowPoints, candidatePoint];
+
+  if (points.length < 2) {
+    return clonePoint(candidatePoint);
+  }
+
+  const avg = averagePoint(points);
+  return {
+    lat: avg.lat,
+    lng: avg.lng,
+    accuracy: candidatePoint.accuracy,
+    time: candidatePoint.time
+  };
+}
+
 function startNewSolidSegment(point) {
-  currentSolidSegment = [point];
+  currentSolidSegment = [clonePoint(point)];
   userTrailSolidSegments.push(currentSolidSegment);
   currentSolidLine = createSolidTrailLine(point);
 }
@@ -807,26 +906,95 @@ function appendToCurrentSolidSegment(point) {
     return;
   }
 
-  currentSolidSegment.push(point);
+  currentSolidSegment.push(clonePoint(point));
   currentSolidLine.addLatLng([point.lat, point.lng]);
 }
 
+function serializeTrailState() {
+  try {
+    const solidPointsFlat = userTrailSolidSegments.flat().slice(-USER_TRAIL_STORAGE_LIMIT);
+    const dashedFlat = userTrailDashedSegments.slice(-50);
+
+    const payload = {
+      solidPoints: solidPointsFlat,
+      dashedSegments: dashedFlat
+    };
+
+    localStorage.setItem(USER_TRAIL_STORAGE_KEY, JSON.stringify(payload));
+  } catch (err) {
+    console.warn("Trail state save failed:", err);
+  }
+}
+
+function restoreTrailState() {
+  try {
+    const raw = localStorage.getItem(USER_TRAIL_STORAGE_KEY);
+    if (!raw) return;
+
+    const parsed = JSON.parse(raw);
+    const solidPoints = Array.isArray(parsed.solidPoints) ? parsed.solidPoints : [];
+    const dashedSegments = Array.isArray(parsed.dashedSegments) ? parsed.dashedSegments : [];
+
+    if (solidPoints.length > 0) {
+      userTrailSolidSegments = [solidPoints.map(clonePoint)];
+      currentSolidSegment = userTrailSolidSegments[0];
+
+      const line = L.polyline(
+        currentSolidSegment.map(p => [p.lat, p.lng]),
+        {
+          weight: 2.5,
+          opacity: 0.5,
+          color: "#2b8cff"
+        }
+      ).addTo(map);
+
+      userTrailSolidLines = [line];
+      currentSolidLine = line;
+
+      lastAcceptedUserPoint = clonePoint(currentSolidSegment[currentSolidSegment.length - 1]);
+      lastUserLatLng = [lastAcceptedUserPoint.lat, lastAcceptedUserPoint.lng];
+
+      recentAcceptedUserPoints = currentSolidSegment
+        .slice(-USER_TRAIL_SMOOTHING_WINDOW)
+        .map(clonePoint);
+    }
+
+    for (const seg of dashedSegments) {
+      if (!Array.isArray(seg) || seg.length < 2) continue;
+      const fromPoint = clonePoint(seg[0]);
+      const toPoint = clonePoint(seg[1]);
+      createDashedTrailLine(fromPoint, toPoint);
+    }
+
+    trimUserTrailData();
+  } catch (err) {
+    console.warn("Trail state restore failed:", err);
+  }
+}
+
 function appendUserTrailPoint(lat, lng, accuracy) {
-  const point = {
+  const rawPoint = {
     lat,
     lng,
     accuracy: typeof accuracy === "number" ? accuracy : null,
     time: Date.now()
   };
 
-  if (!lastAcceptedUserPoint) {
-    startNewSolidSegment(point);
-    lastAcceptedUserPoint = point;
-    trimUserTrailData();
+  const validationBase = getReferencePointForValidation() || lastAcceptedUserPoint;
+  const reliability = isReliableUserTrailPoint(validationBase, rawPoint);
+
+  if (!lastAcceptedUserPoint && reliability === false) {
     return;
   }
 
-  const reliability = isReliableUserTrailPoint(lastAcceptedUserPoint, point);
+  if (!lastAcceptedUserPoint) {
+    startNewSolidSegment(rawPoint);
+    lastAcceptedUserPoint = clonePoint(rawPoint);
+    rememberAcceptedPoint(rawPoint);
+    trimUserTrailData();
+    serializeTrailState();
+    return;
+  }
 
   if (reliability === null) {
     return;
@@ -834,26 +1002,34 @@ function appendUserTrailPoint(lat, lng, accuracy) {
 
   if (reliability === false) {
     if (!pendingGapStartPoint) {
-      pendingGapStartPoint = lastAcceptedUserPoint;
+      pendingGapStartPoint = clonePoint(lastAcceptedUserPoint);
     }
     return;
   }
 
-  if (pendingGapStartPoint) {
-    createDashedTrailLine(pendingGapStartPoint, point);
-    startNewSolidSegment(point);
+  const smoothedPoint = getSmoothedAcceptedPoint(rawPoint);
 
+  if (pendingGapStartPoint) {
+    if (shouldCreateDashedReconnect(pendingGapStartPoint, smoothedPoint)) {
+      createDashedTrailLine(pendingGapStartPoint, smoothedPoint);
+    }
+
+    startNewSolidSegment(smoothedPoint);
     pendingGapStartPoint = null;
-    lastAcceptedUserPoint = point;
+    lastAcceptedUserPoint = clonePoint(smoothedPoint);
+    rememberAcceptedPoint(smoothedPoint);
 
     trimUserTrailData();
+    serializeTrailState();
     return;
   }
 
-  appendToCurrentSolidSegment(point);
-  lastAcceptedUserPoint = point;
+  appendToCurrentSolidSegment(smoothedPoint);
+  lastAcceptedUserPoint = clonePoint(smoothedPoint);
+  rememberAcceptedPoint(smoothedPoint);
 
   trimUserTrailData();
+  serializeTrailState();
 }
 
 function updateUserLocation(position) {
@@ -934,6 +1110,7 @@ function startGpsTracking() {
 
 function initAircraftTracking() {
   createToggleButton();
+  restoreTrailState();
   startGpsTracking();
 
   pollAircraft();
