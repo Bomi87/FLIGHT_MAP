@@ -64,7 +64,7 @@ function createToggleButton() {
   wrap = document.createElement("div");
   wrap.id = "custom-follow-controls";
   wrap.style.position = "fixed";
-  wrap.style.top = "108px";   // 기존 78px → 조금 아래로
+  wrap.style.top = "115px";   
   wrap.style.right = "10px";
   wrap.style.zIndex = "99999";
 
