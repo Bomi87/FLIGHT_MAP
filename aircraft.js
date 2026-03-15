@@ -432,46 +432,46 @@ function buildAircraftIcon(trackDeg = 0, color = "#ff8800", sizePx = 36) {
 /* ------------------ FOLLOW / CONTROL BUTTONS ------------------ */
 
 function applyControlButtonStyle(btn) {
-  btn.style.height = "34px";
-  btn.style.border = "1px solid rgba(0,0,0,0.2)";
+  btn.style.height = "28px";
+  btn.style.border = "1px solid rgba(0,0,0,0.18)";
   btn.style.borderRadius = "8px";
-  btn.style.background = "rgba(255,255,255,0.95)";
+  btn.style.background = "rgba(255,255,255,0.94)";
   btn.style.color = "#111";
-  btn.style.fontSize = "12px";
+  btn.style.fontSize = "11px";
   btn.style.fontWeight = "700";
   btn.style.cursor = "pointer";
-  btn.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
-  btn.style.backdropFilter = "blur(4px)";
-  btn.style.padding = "0 10px";
+  btn.style.boxShadow = "0 1px 4px rgba(0,0,0,0.14)";
+  btn.style.backdropFilter = "blur(3px)";
+  btn.style.padding = "0 8px";
   btn.style.whiteSpace = "nowrap";
 }
 
 function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
   applyControlButtonStyle(btn);
   btn.style.width = "auto";
-  btn.style.minWidth = "128px";
-  btn.style.maxWidth = "220px";
+  btn.style.minWidth = "104px";
+  btn.style.maxWidth = "168px";
   btn.style.display = "flex";
   btn.style.alignItems = "center";
   btn.style.justifyContent = "flex-start";
-  btn.style.gap = "8px";
+  btn.style.gap = "6px";
   btn.style.textAlign = "left";
-  btn.style.opacity = isLive ? "1" : "0.45";
+  btn.style.opacity = isLive ? "1" : "0.42";
   btn.style.filter = isLive ? "none" : "grayscale(35%)";
   btn.style.border = isActive
     ? `2px solid ${color}`
-    : "1px solid rgba(0,0,0,0.2)";
+    : "1px solid rgba(0,0,0,0.18)";
   btn.style.boxShadow = isActive
-    ? `0 0 0 2px ${color}33, 0 2px 6px rgba(0,0,0,0.15)`
-    : "0 2px 6px rgba(0,0,0,0.15)";
+    ? `0 0 0 1px ${color}33, 0 1px 4px rgba(0,0,0,0.14)`
+    : "0 1px 4px rgba(0,0,0,0.14)";
 }
 
 function buildAircraftButtonInnerHtml(label, color) {
   return `
     <span style="
-      width:10px;
-      height:10px;
-      min-width:10px;
+      width:8px;
+      height:8px;
+      min-width:8px;
       border-radius:999px;
       background:${escapeHtml(color)};
       border:1px solid rgba(0,0,0,0.35);
@@ -481,8 +481,9 @@ function buildAircraftButtonInnerHtml(label, color) {
       overflow:hidden;
       text-overflow:ellipsis;
       white-space:nowrap;
-      max-width:180px;
+      max-width:136px;
       display:inline-block;
+      font-size:11px;
       ${label.startsWith("HEX:") ? "font-family:Consolas, Monaco, monospace;" : ""}
     ">${escapeHtml(label)}</span>
   `;
@@ -571,8 +572,8 @@ function createToggleButton() {
   wrap = document.createElement("div");
   wrap.id = "custom-follow-controls";
   wrap.style.position = "fixed";
-  wrap.style.top = "108px";
-  wrap.style.left = "10px";
+  wrap.style.left = "8px";
+  wrap.style.bottom = "14px";
   wrap.style.zIndex = "99999";
   wrap.style.display = "flex";
   wrap.style.flexDirection = "column";
@@ -582,7 +583,7 @@ function createToggleButton() {
   acBtn.id = "focus-aircraft-btn";
   acBtn.type = "button";
   acBtn.textContent = "AC ALL";
-  acBtn.style.width = "128px";
+  acBtn.style.width = "104px";
   applyControlButtonStyle(acBtn);
   acBtn.onclick = () => {
     focusAllAircraft();
@@ -598,7 +599,7 @@ function createToggleButton() {
   gpsBtn.id = "focus-gps-btn";
   gpsBtn.type = "button";
   gpsBtn.textContent = "GPS";
-  gpsBtn.style.width = "128px";
+  gpsBtn.style.width = "104px";
   applyControlButtonStyle(gpsBtn);
   gpsBtn.onclick = async () => {
     activeFollowTargetKey = null;
@@ -1495,6 +1496,10 @@ function startGpsTracking() {
 /* ------------------ INIT ------------------ */
 
 function initAircraftTracking() {
+  if (map && map.zoomControl) {
+    map.removeControl(map.zoomControl);
+  }
+
   createToggleButton();
   restoreTrailState();
   startGpsTracking();
