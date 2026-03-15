@@ -303,18 +303,18 @@ function getVerticalState(ac) {
   const vr = Number(ac.vert_rate);
 
   if (isNaN(vr)) {
-    return { arrow: "→", color: "#111111" };
+    return { arrow: "→", color: "#ffffff" };
   }
 
   if (vr > 300) {
-    return { arrow: "▲", color: "#d60000" };
+    return { arrow: "▲", color: "#ff4d4f" };
   }
 
   if (vr < -300) {
-    return { arrow: "▼", color: "#0066ff" };
+    return { arrow: "▼", color: "#4da6ff" };
   }
 
-  return { arrow: "→", color: "#111111" };
+  return { arrow: "→", color: "#ffffff" };
 }
 
 /* 항상 보이는 작은 라벨 */
