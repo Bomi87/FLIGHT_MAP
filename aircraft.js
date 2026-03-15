@@ -168,7 +168,7 @@ function formatAltitudeText(ac) {
 
 function formatMachText(ac) {
   if (ac.mach != null && !isNaN(ac.mach)) {
-    return "M." + String(Number(ac.mach).toFixed(2)).replace(/^0/, "");
+    return "M" + String(Number(ac.mach).toFixed(2)).replace(/^0/, "");
   }
 
   const gs = Number(ac.gs);
@@ -184,7 +184,7 @@ function formatMachText(ac) {
 
     const mach = gs / soundKt;
     if (mach > 0.2) {
-      return "M." + String(mach.toFixed(2)).replace(/^0/, "");
+      return "M" + String(mach.toFixed(2)).replace(/^0/, "");
     }
   }
 
