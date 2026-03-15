@@ -1,6 +1,36 @@
 const params = new URLSearchParams(window.location.search);
-const targetReg = (params.get("reg") || "").toUpperCase().trim();
-const targetHex = (params.get("hex") || "").toLowerCase().trim();
+
+/* ------------------ TARGET PARSE ------------------ */
+
+function parseCsvParam(name) {
+  return (params.get(name) || "")
+    .split(",")
+    .map(x => x.trim())
+    .filter(Boolean);
+}
+
+const singleReg = (params.get("reg") || "").toUpperCase().trim();
+const singleHex = (params.get("hex") || "").toLowerCase().trim();
+
+const multiRegs = parseCsvParam("regs").map(x => x.toUpperCase());
+const multiHexes = parseCsvParam("hexes").map(x => x.toLowerCase());
+
+let TARGETS = [];
+
+if (multiRegs.length || multiHexes.length) {
+  TARGETS = [
+    ...multiRegs.map(reg => ({ key: `reg:${reg}`, reg, hex: "" })),
+    ...multiHexes.map(hex => ({ key: `hex:${hex}`, reg: "", hex }))
+  ];
+} else if (singleReg || singleHex) {
+  TARGETS = [{
+    key: singleReg ? `reg:${singleReg}` : `hex:${singleHex}`,
+    reg: singleReg,
+    hex: singleHex
+  }];
+}
+
+TARGETS = TARGETS.slice(0, 5);
 
 /* ------------------ API / SETTINGS ------------------ */
 
@@ -24,39 +54,52 @@ const COMPASS_HEADING_SMOOTHING = 0.18;
 const USER_HEADING_CHANGE_MIN_DEG = 2;
 
 /* --- GPS TRAIL SETTINGS --- */
-const USER_TRAIL_MAX_ACCURACY_M = 55;       // 완전 컷 기준
-const USER_TRAIL_BASE_MAX_ACCURACY_M = 50;  // 정상 허용 기준
+const USER_TRAIL_MAX_ACCURACY_M = 55;
+const USER_TRAIL_BASE_MAX_ACCURACY_M = 50;
 const USER_TRAIL_JUMP_MAX_TIME_S = 5;
 const USER_TRAIL_MAX_SPEED_MPS = 8;
 const USER_TRAIL_MIN_MOVE_M = 5;
 
-const USER_TRAIL_DASH_MAX_DIST_M = 120;     // 너무 긴 점선 금지
+const USER_TRAIL_DASH_MAX_DIST_M = 120;
 const USER_TRAIL_DASH_MAX_TIME_S = 25;
 
-const USER_TRAIL_SMOOTHING_WINDOW = 3;      // 최근 3점 기반
-const USER_TRAIL_STORAGE_KEY = "userTrailState_v2";
+const USER_TRAIL_SMOOTHING_WINDOW = 3;
+const USER_TRAIL_STORAGE_KEY = "userTrailState_v3";
 const USER_TRAIL_STORAGE_LIMIT = 300;
-const USER_TRAIL_STORAGE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12시간
+const USER_TRAIL_STORAGE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+/* ------------------ COLORS ------------------ */
+
+const AIRCRAFT_COLORS = [
+  "#ff8800",
+  "#1e90ff",
+  "#28a745",
+  "#d63384",
+  "#6f42c1"
+];
 
 /* ------------------ STATE ------------------ */
 
-let aircraftMarker = null;
-let aircraftTooltipBound = false;
-let liveTrail = [];
-let liveTrailLine = null;
+const aircraftStates = new Map();
+/*
+{
+  marker,
+  tooltipBound,
+  liveTrail,
+  liveTrailLine,
+  lastAircraft,
+  lastLatLng,
+  animationFrameId,
+  animationToken,
+  color
+}
+*/
 
-let lastAircraft = null;
 let lastGoodApiBase = null;
-let trackingStarted = false;
-
-let animationFrameId = null;
-let animationToken = 0;
-
-let lastAircraftLatLng = null;
-let lastUserLatLng = null;
 
 /* ------------------ USER / GPS STATE ------------------ */
 
+let lastUserLatLng = null;
 let userMarker = null;
 let userAccuracyCircle = null;
 let userHeadingMarker = null;
@@ -67,7 +110,6 @@ let lastUserHeadingDeg = null;
 let lastKnownSpeedKt = null;
 let compassStarted = false;
 
-/* --- user trail state --- */
 let lastAcceptedUserPoint = null;
 let pendingGapStartPoint = null;
 
@@ -83,6 +125,26 @@ let currentSolidLine = null;
 let recentAcceptedUserPoints = [];
 let lastProcessedGpsTimestamp = null;
 
+/* ------------------ TARGET INIT ------------------ */
+
+function initAircraftStates() {
+  TARGETS.forEach((target, idx) => {
+    aircraftStates.set(target.key, {
+      marker: null,
+      tooltipBound: false,
+      liveTrail: [],
+      liveTrailLine: null,
+      lastAircraft: null,
+      lastLatLng: null,
+      animationFrameId: null,
+      animationToken: 0,
+      color: AIRCRAFT_COLORS[idx % AIRCRAFT_COLORS.length]
+    });
+  });
+}
+
+initAircraftStates();
+
 /* ------------------ BUTTONS ------------------ */
 
 function applyControlButtonStyle(btn) {
@@ -97,6 +159,33 @@ function applyControlButtonStyle(btn) {
   btn.style.cursor = "pointer";
   btn.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
   btn.style.backdropFilter = "blur(4px)";
+}
+
+function focusAllAircraft() {
+  const points = [];
+
+  for (const state of aircraftStates.values()) {
+    if (state.lastLatLng) points.push(state.lastLatLng);
+  }
+
+  if (points.length === 0) return;
+
+  if (points.length === 1) {
+    const targetZoom = Math.min(map.getZoom(), AIRCRAFT_FOCUS_ZOOM_MAX);
+    map.flyTo(points[0], targetZoom, {
+      animate: true,
+      duration: 0.8
+    });
+    return;
+  }
+
+  const bounds = L.latLngBounds(points);
+  map.flyToBounds(bounds, {
+    padding: [40, 40],
+    maxZoom: AIRCRAFT_FOCUS_ZOOM_MAX,
+    animate: true,
+    duration: 0.8
+  });
 }
 
 function createToggleButton() {
@@ -118,16 +207,8 @@ function createToggleButton() {
   acBtn.type = "button";
   acBtn.textContent = "A/C";
   applyControlButtonStyle(acBtn);
-
   acBtn.onclick = () => {
-    if (!lastAircraftLatLng) return;
-
-    const targetZoom = Math.min(map.getZoom(), AIRCRAFT_FOCUS_ZOOM_MAX);
-
-    map.flyTo(lastAircraftLatLng, targetZoom, {
-      animate: true,
-      duration: 0.8
-    });
+    focusAllAircraft();
   };
 
   const gpsBtn = document.createElement("button");
@@ -135,7 +216,6 @@ function createToggleButton() {
   gpsBtn.type = "button";
   gpsBtn.textContent = "GPS";
   applyControlButtonStyle(gpsBtn);
-
   gpsBtn.onclick = async () => {
     await startDeviceCompass();
 
@@ -267,7 +347,7 @@ function formatSpeedLines(ac) {
   return lines;
 }
 
-function formatAircraftLabelHtml(ac) {
+function formatAircraftLabelHtml(ac, color) {
   const flight = (ac.flight || ac.callsign || "").trim();
   const reg = (ac.r || ac.reg || "").trim();
   const type = (ac.t || ac.type || "").trim();
@@ -291,6 +371,8 @@ function formatAircraftLabelHtml(ac) {
          1px -1px 0 #fff,
         -1px  1px 0 #fff,
          1px  1px 0 #fff;
+      border-top:2px solid ${escapeHtml(color)};
+      padding-top:2px;
     ">
       ${line1 ? `<div>${escapeHtml(line1)}</div>` : ""}
       ${line2 ? `<div>${escapeHtml(line2)}</div>` : ""}
@@ -300,24 +382,79 @@ function formatAircraftLabelHtml(ac) {
   `;
 }
 
+/* ------------------ AIRCRAFT SIZE ------------------ */
+
+function getAircraftIconSize(typeCodeRaw) {
+  const typeCode = String(typeCodeRaw || "").toUpperCase().trim();
+
+  if (!typeCode) return 36;
+
+  if (
+    typeCode.startsWith("A388") ||
+    typeCode.startsWith("A380") ||
+    typeCode.startsWith("B748") ||
+    typeCode.startsWith("B744")
+  ) {
+    return 46;
+  }
+
+  if (
+    typeCode.startsWith("B77") ||
+    typeCode.startsWith("B78") ||
+    typeCode.startsWith("A35") ||
+    typeCode.startsWith("A33") ||
+    typeCode.startsWith("A34") ||
+    typeCode.startsWith("B76")
+  ) {
+    return 42;
+  }
+
+  if (
+    typeCode.startsWith("A32") ||
+    typeCode.startsWith("B73") ||
+    typeCode.startsWith("B38") ||
+    typeCode.startsWith("E19") ||
+    typeCode.startsWith("E17") ||
+    typeCode.startsWith("CRJ")
+  ) {
+    return 36;
+  }
+
+  if (
+    typeCode.startsWith("C17") ||
+    typeCode.startsWith("C18") ||
+    typeCode.startsWith("SR2") ||
+    typeCode.startsWith("PC12") ||
+    typeCode.startsWith("BE2") ||
+    typeCode.startsWith("LJ")
+  ) {
+    return 28;
+  }
+
+  return 34;
+}
+
 /* ------------------ AIRCRAFT ICON ------------------ */
 
-function buildAircraftIcon(trackDeg = 0) {
+function buildAircraftIcon(trackDeg = 0, color = "#ff8800", sizePx = 36) {
+  const svgSize = Math.max(24, sizePx - 4);
+  const anchor = Math.round(sizePx / 2);
+
   return L.divIcon({
     className: "aircraft-div-icon",
     html: `
       <div style="
-        width:36px;
-        height:36px;
+        width:${sizePx}px;
+        height:${sizePx}px;
         display:flex;
         align-items:center;
         justify-content:center;
         transform:rotate(${trackDeg}deg);
         transform-origin:center center;
       ">
-        <svg width="32" height="32" viewBox="0 0 100 100">
+        <svg width="${svgSize}" height="${svgSize}" viewBox="0 0 100 100">
           <g
-            fill="#ff8800"
+            fill="${escapeHtml(color)}"
             stroke="black"
             stroke-width="3"
             stroke-linejoin="round"
@@ -345,14 +482,17 @@ function buildAircraftIcon(trackDeg = 0) {
         </svg>
       </div>
     `,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18]
+    iconSize: [sizePx, sizePx],
+    iconAnchor: [anchor, anchor]
   });
 }
 
 /* ------------------ AIRCRAFT DRAW ------------------ */
 
-function ensureAircraftMarker(ac) {
+function ensureAircraftMarker(target, ac) {
+  const state = aircraftStates.get(target.key);
+  if (!state) return;
+
   const lat = Number(ac.lat);
   const lon = Number(ac.lon);
   const track = Number(ac.track || ac.true_heading || ac.mag_heading || 0);
@@ -360,51 +500,56 @@ function ensureAircraftMarker(ac) {
   if (isNaN(lat) || isNaN(lon)) return;
 
   const newLatLng = [lat, lon];
-  lastAircraftLatLng = newLatLng;
+  state.lastLatLng = newLatLng;
 
-  const icon = buildAircraftIcon(track);
-  const labelHtml = formatAircraftLabelHtml(ac);
+  const typeCode = ac.t || ac.type || "";
+  const sizePx = getAircraftIconSize(typeCode);
+  const icon = buildAircraftIcon(track, state.color, sizePx);
+  const labelHtml = formatAircraftLabelHtml(ac, state.color);
 
-  if (!aircraftMarker) {
-    aircraftMarker = L.marker(newLatLng, {
+  if (!state.marker) {
+    state.marker = L.marker(newLatLng, {
       icon,
       zIndexOffset: 1000
     }).addTo(map);
 
-    aircraftMarker.bindTooltip(labelHtml, {
+    state.marker.bindTooltip(labelHtml, {
       permanent: true,
       direction: "top",
       offset: [0, -12],
       className: "aircraft-label-tooltip",
       opacity: 1
     });
-    aircraftTooltipBound = true;
+    state.tooltipBound = true;
   } else {
-    aircraftMarker.setLatLng(newLatLng);
-    aircraftMarker.setIcon(icon);
+    state.marker.setLatLng(newLatLng);
+    state.marker.setIcon(icon);
 
-    if (aircraftTooltipBound && aircraftMarker.getTooltip()) {
-      aircraftMarker.setTooltipContent(labelHtml);
+    if (state.tooltipBound && state.marker.getTooltip()) {
+      state.marker.setTooltipContent(labelHtml);
     } else {
-      aircraftMarker.bindTooltip(labelHtml, {
+      state.marker.bindTooltip(labelHtml, {
         permanent: true,
         direction: "top",
         offset: [0, -12],
         className: "aircraft-label-tooltip",
         opacity: 1
       });
-      aircraftTooltipBound = true;
+      state.tooltipBound = true;
     }
   }
 }
 
-function updateLiveTrail(ac) {
+function updateLiveTrail(target, ac) {
+  const state = aircraftStates.get(target.key);
+  if (!state) return;
+
   const lat = Number(ac.lat);
   const lon = Number(ac.lon);
   if (isNaN(lat) || isNaN(lon)) return;
 
   const point = [lat, lon];
-  const prev = liveTrail[liveTrail.length - 1];
+  const prev = state.liveTrail[state.liveTrail.length - 1];
 
   if (prev) {
     const dLat = Math.abs(prev[0] - point[0]);
@@ -412,37 +557,41 @@ function updateLiveTrail(ac) {
     if (dLat < 0.00002 && dLon < 0.00002) return;
   }
 
-  liveTrail.push(point);
+  state.liveTrail.push(point);
 
-  if (liveTrail.length > MAX_LIVE_TRAIL_POINTS) {
-    liveTrail.shift();
+  if (state.liveTrail.length > MAX_LIVE_TRAIL_POINTS) {
+    state.liveTrail.shift();
   }
 
-  if (!liveTrailLine) {
-    liveTrailLine = L.polyline(liveTrail, {
-      color: "#ff9c4a",
+  if (!state.liveTrailLine) {
+    state.liveTrailLine = L.polyline(state.liveTrail, {
+      color: state.color,
       weight: 3,
-      opacity: 0.75,
+      opacity: 0.7,
       dashArray: "6,6",
       smoothFactor: 1
     }).addTo(map);
   } else {
-    liveTrailLine.setLatLngs(liveTrail);
+    state.liveTrailLine.setLatLngs(state.liveTrail);
   }
 }
 
-function updateAircraft(ac) {
-  if (!ac) return;
-  lastAircraft = ac;
-  ensureAircraftMarker(ac);
-  updateLiveTrail(ac);
+function updateAircraftForTarget(target, ac) {
+  const state = aircraftStates.get(target.key);
+  if (!state || !ac) return;
+  state.lastAircraft = ac;
+  ensureAircraftMarker(target, ac);
+  updateLiveTrail(target, ac);
 }
 
 /* ------------------ AIRCRAFT ANIMATION ------------------ */
 
-function animateAircraftIfNeeded(prevAc, nextAc) {
-  if (!aircraftMarker || !prevAc || !nextAc) {
-    updateAircraft(nextAc);
+function animateAircraftIfNeeded(target, prevAc, nextAc) {
+  const state = aircraftStates.get(target.key);
+  if (!state) return;
+
+  if (!state.marker || !prevAc || !nextAc) {
+    updateAircraftForTarget(target, nextAc);
     return;
   }
 
@@ -452,66 +601,68 @@ function animateAircraftIfNeeded(prevAc, nextAc) {
   const toLon = Number(nextAc.lon);
 
   if ([fromLat, fromLon, toLat, toLon].some(v => isNaN(v))) {
-    updateAircraft(nextAc);
+    updateAircraftForTarget(target, nextAc);
     return;
   }
 
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
+  if (state.animationFrameId) {
+    cancelAnimationFrame(state.animationFrameId);
+    state.animationFrameId = null;
   }
 
   const track = Number(nextAc.track || nextAc.true_heading || nextAc.mag_heading || 0);
-  const labelHtml = formatAircraftLabelHtml(nextAc);
-  const icon = buildAircraftIcon(track);
+  const typeCode = nextAc.t || nextAc.type || "";
+  const sizePx = getAircraftIconSize(typeCode);
+  const icon = buildAircraftIcon(track, state.color, sizePx);
+  const labelHtml = formatAircraftLabelHtml(nextAc, state.color);
 
   const start = performance.now();
-  const token = ++animationToken;
+  const token = ++state.animationToken;
 
   function step(now) {
-    if (token !== animationToken) return;
+    if (token !== state.animationToken) return;
 
     const t = Math.min(1, (now - start) / ANIMATION_DURATION_MS);
     const lat = fromLat + (toLat - fromLat) * t;
     const lon = fromLon + (toLon - fromLon) * t;
 
-    lastAircraftLatLng = [lat, lon];
+    state.lastLatLng = [lat, lon];
 
-    if (!aircraftMarker) {
-      aircraftMarker = L.marker([lat, lon], {
+    if (!state.marker) {
+      state.marker = L.marker([lat, lon], {
         icon,
         zIndexOffset: 1000
       }).addTo(map);
 
-      aircraftMarker.bindTooltip(labelHtml, {
+      state.marker.bindTooltip(labelHtml, {
         permanent: true,
         direction: "top",
         offset: [0, -12],
         className: "aircraft-label-tooltip",
         opacity: 1
       });
-      aircraftTooltipBound = true;
+      state.tooltipBound = true;
     } else {
-      aircraftMarker.setLatLng([lat, lon]);
-      aircraftMarker.setIcon(icon);
+      state.marker.setLatLng([lat, lon]);
+      state.marker.setIcon(icon);
 
-      if (aircraftTooltipBound && aircraftMarker.getTooltip()) {
-        aircraftMarker.setTooltipContent(labelHtml);
+      if (state.tooltipBound && state.marker.getTooltip()) {
+        state.marker.setTooltipContent(labelHtml);
       }
     }
 
     if (t < 1) {
-      animationFrameId = requestAnimationFrame(step);
+      state.animationFrameId = requestAnimationFrame(step);
     } else {
-      animationFrameId = null;
-      updateAircraft(nextAc);
+      state.animationFrameId = null;
+      updateAircraftForTarget(target, nextAc);
     }
   }
 
-  animationFrameId = requestAnimationFrame(step);
+  state.animationFrameId = requestAnimationFrame(step);
 }
 
-/* ------------------ ADS-B FETCH ------------------ */
+/* ------------------ ADS-B FETCH (BATCH) ------------------ */
 
 async function fetchJson(url) {
   const res = await fetch(url, { cache: "no-store" });
@@ -521,78 +672,88 @@ async function fetchJson(url) {
   return await res.json();
 }
 
-function pickAircraftFromResponse(data) {
-  if (!data) return null;
-
-  if (Array.isArray(data.ac) && data.ac.length > 0) {
-    if (targetHex) {
-      const foundByHex = data.ac.find(
-        x => String(x.hex || "").toLowerCase() === targetHex
-      );
-      if (foundByHex) return foundByHex;
-    }
-
-    if (targetReg) {
-      const foundByReg = data.ac.find(
-        x => String(x.r || x.reg || "").toUpperCase() === targetReg
-      );
-      if (foundByReg) return foundByReg;
-    }
-
-    return data.ac[0];
-  }
-
-  if (data.hex || data.lat || data.lon) return data;
-  return null;
+function normalizeReg(v) {
+  return String(v || "").trim().toUpperCase();
 }
 
-async function fetchAircraftData() {
+function normalizeHex(v) {
+  return String(v || "").trim().toLowerCase();
+}
+
+function indexAircraftList(aircraftList) {
+  const byHex = new Map();
+  const byReg = new Map();
+
+  for (const ac of aircraftList || []) {
+    const hex = normalizeHex(ac.hex);
+    const reg = normalizeReg(ac.r || ac.reg);
+
+    if (hex && !byHex.has(hex)) byHex.set(hex, ac);
+    if (reg && !byReg.has(reg)) byReg.set(reg, ac);
+  }
+
+  return { byHex, byReg };
+}
+
+async function fetchBatchAircraftData() {
   const bases = lastGoodApiBase
     ? [lastGoodApiBase, ...ADSB_API_BASES.filter(x => x !== lastGoodApiBase)]
     : [...ADSB_API_BASES];
 
-  const pathCandidates = [];
-
-  if (targetHex) {
-    pathCandidates.push(`/v2/hex/${encodeURIComponent(targetHex)}`);
-    pathCandidates.push(`/v2/icao/${encodeURIComponent(targetHex)}`);
-    pathCandidates.push(`/v2/aircraft/${encodeURIComponent(targetHex)}`);
-  }
-
-  if (targetReg) {
-    pathCandidates.push(`/v2/reg/${encodeURIComponent(targetReg)}`);
-    pathCandidates.push(`/v2/registration/${encodeURIComponent(targetReg)}`);
-  }
+  const regs = [...new Set(TARGETS.map(t => t.reg).filter(Boolean))];
+  const hexes = [...new Set(TARGETS.map(t => t.hex).filter(Boolean))];
 
   let lastError = null;
 
   for (const base of bases) {
-    for (const path of pathCandidates) {
-      try {
-        const data = await fetchJson(base + path);
-        const ac = pickAircraftFromResponse(data);
-        if (ac) {
-          lastGoodApiBase = base;
-          return ac;
-        }
-      } catch (err) {
-        lastError = err;
+    try {
+      let aircraft = [];
+
+      if (hexes.length > 0) {
+        const url = `${base}/v2/hex/${encodeURIComponent(hexes.join(","))}`;
+        const data = await fetchJson(url);
+        if (Array.isArray(data.ac)) aircraft.push(...data.ac);
       }
+
+      if (regs.length > 0) {
+        const url = `${base}/v2/reg/${encodeURIComponent(regs.join(","))}`;
+        const data = await fetchJson(url);
+        if (Array.isArray(data.ac)) aircraft.push(...data.ac);
+      }
+
+      lastGoodApiBase = base;
+      return aircraft;
+    } catch (err) {
+      lastError = err;
     }
   }
 
-  throw lastError || new Error("Aircraft not found");
+  throw lastError || new Error("Aircraft batch fetch failed");
 }
 
 async function pollAircraft() {
-  try {
-    const ac = await fetchAircraftData();
+  if (!TARGETS.length) return;
 
-    if (!trackingStarted) {
-      updateAircraft(ac);
-      trackingStarted = true;
-    } else {
-      animateAircraftIfNeeded(lastAircraft, ac);
+  try {
+    const aircraft = await fetchBatchAircraftData();
+    const { byHex, byReg } = indexAircraftList(aircraft);
+
+    for (const target of TARGETS) {
+      let ac = null;
+
+      if (target.hex) ac = byHex.get(target.hex) || null;
+      if (!ac && target.reg) ac = byReg.get(target.reg) || null;
+
+      if (!ac) continue;
+
+      const state = aircraftStates.get(target.key);
+      if (!state) continue;
+
+      if (!state.lastAircraft) {
+        updateAircraftForTarget(target, ac);
+      } else {
+        animateAircraftIfNeeded(target, state.lastAircraft, ac);
+      }
     }
   } catch (err) {
     console.error("pollAircraft error:", err);
@@ -1099,7 +1260,6 @@ function updateUserLocation(position) {
   const gpsTimestamp = Number(position.timestamp) || Date.now();
 
   if (lastProcessedGpsTimestamp != null && gpsTimestamp <= lastProcessedGpsTimestamp) {
-    // 중복 또는 역순 GPS 콜백 무시
     lastUserLatLng = [lat, lon];
   } else {
     lastProcessedGpsTimestamp = gpsTimestamp;
@@ -1179,8 +1339,10 @@ function initAircraftTracking() {
   restoreTrailState();
   startGpsTracking();
 
-  pollAircraft();
-  setInterval(pollAircraft, POLL_INTERVAL_MS);
+  if (TARGETS.length > 0) {
+    pollAircraft();
+    setInterval(pollAircraft, POLL_INTERVAL_MS);
+  }
 }
 
 initAircraftTracking();
