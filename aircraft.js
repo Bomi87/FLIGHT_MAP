@@ -18,9 +18,9 @@ const VERTICAL_RATE_THRESHOLD = 300;
 /* GPS / FOLLOW */
 const USER_GPS_ZOOM_MIN = 10;
 const MAX_USER_TRAIL_POINTS = 1000;
-const USER_HEADING_MIN_SPEED_KT = 3;     // 이 속도 미만이면 heading 신뢰 안함
-const USER_HEADING_SMOOTHING = 0.35;     // 0~1, 클수록 더 빨리 따라감
-const USER_HEADING_CHANGE_MIN_DEG = 3;   // 너무 작은 흔들림은 무시
+const USER_HEADING_MIN_SPEED_KT = 1.5;     // 이 속도 미만이면 heading 신뢰 안함
+const USER_HEADING_SMOOTHING = 0.25;     // 0~1, 클수록 더 빨리 따라감
+const USER_HEADING_CHANGE_MIN_DEG = 5;   // 너무 작은 흔들림은 무시
 
 /* 버튼 눌렀을 때만 적용할 zoom */
 const AIRCRAFT_FOLLOW_CLICK_ZOOM = 8;
