@@ -17,6 +17,7 @@ const VERTICAL_RATE_THRESHOLD = 300;
 
 /* GPS */
 const USER_GPS_ZOOM_MIN = 10;
+const MAX_USER_TRAIL_POINTS = 1000;
 
 /* ------------------ STATE ------------------ */
 
@@ -37,6 +38,8 @@ let userMarker = null;
 let userAccuracyCircle = null;
 let userWatchId = null;
 let lastUserPosition = null;
+let userTrail = [];
+let userTrailLine = null;
 
 /* ------------------ STATUS BOX ------------------ */
 
@@ -142,7 +145,7 @@ function createFollowToggleButton() {
   btn.id = "follow-toggle-btn";
   btn.style.position = "fixed";
   btn.style.right = "10px";
-  btn.style.top = "120px"; // 지도 선택 박스 아래쪽
+  btn.style.top = "120px";
   btn.style.zIndex = "99999";
   btn.style.minWidth = "54px";
   btn.style.height = "38px";
@@ -181,31 +184,98 @@ function createFollowToggleButton() {
 
 /* ------------------ USER GPS ------------------ */
 
-function makeUserLocationIcon() {
+function makeUserLocationIcon(heading = null) {
+  const hasHeading = Number.isFinite(heading);
+
   return L.divIcon({
     className: "user-location-div-icon",
     html: `
       <div style="
-        width:22px;
-        height:22px;
+        width:28px;
+        height:28px;
+        position:relative;
         display:flex;
         align-items:center;
         justify-content:center;
       ">
-        <svg width="20" height="20" viewBox="0 0 100 100">
-          <path
-            d="M50 8 L88 86 L50 70 L12 86 Z"
-            fill="#1e78ff"
-            stroke="#ffffff"
-            stroke-width="8"
-            stroke-linejoin="round"
-          />
-        </svg>
+        ${
+          hasHeading
+            ? `
+          <div style="
+            position:absolute;
+            width:0;
+            height:0;
+            border-left:7px solid transparent;
+            border-right:7px solid transparent;
+            border-bottom:14px solid #1e78ff;
+            top:1px;
+            left:7px;
+            transform:rotate(${heading}deg);
+            transform-origin:50% 13px;
+            filter:drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+          "></div>
+        `
+            : ""
+        }
+
+        <div style="
+          width:16px;
+          height:16px;
+          border-radius:50%;
+          background:#1e78ff;
+          border:3px solid #ffffff;
+          box-shadow:0 0 0 2px rgba(30,120,255,0.25), 0 1px 4px rgba(0,0,0,0.35);
+          position:absolute;
+          left:6px;
+          top:6px;
+        "></div>
       </div>
     `,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11]
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
   });
+}
+
+function redrawUserTrail() {
+  if (!userTrail.length) return;
+
+  if (!userTrailLine) {
+    userTrailLine = L.polyline(userTrail, {
+      color: "#1e78ff",
+      weight: 3,
+      opacity: 0.9,
+      smoothFactor: 1
+    }).addTo(map);
+  } else {
+    userTrailLine.setLatLngs(userTrail);
+  }
+}
+
+function addUserTrailPoint(lat, lon) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+  const newPoint = [lat, lon];
+  const last = userTrail[userTrail.length - 1];
+
+  if (last && isSamePoint(last, newPoint)) return;
+
+  userTrail.push(newPoint);
+
+  if (userTrail.length > MAX_USER_TRAIL_POINTS) {
+    userTrail.shift();
+  }
+
+  redrawUserTrail();
+}
+
+function getBestUserHeading(pos) {
+  const h1 = Number(pos.coords.heading);
+  if (Number.isFinite(h1) && h1 >= 0) return h1;
+
+  const h2 = Number(pos.coords.webkitCompassHeading);
+  if (Number.isFinite(h2)) return h2;
+
+  return null;
 }
 
 function startUserLocation() {
@@ -219,14 +289,17 @@ function startUserLocation() {
       const lat = Number(pos.coords.latitude);
       const lon = Number(pos.coords.longitude);
       const accuracy = Number(pos.coords.accuracy);
+      const heading = getBestUserHeading(pos);
 
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
-      lastUserPosition = { lat, lon, accuracy };
+      lastUserPosition = { lat, lon, accuracy, heading };
+
+      addUserTrailPoint(lat, lon);
 
       if (!userMarker) {
         userMarker = L.marker([lat, lon], {
-          icon: makeUserLocationIcon(),
+          icon: makeUserLocationIcon(heading),
           zIndexOffset: 1500
         }).addTo(map);
 
@@ -237,6 +310,7 @@ function startUserLocation() {
         });
       } else {
         userMarker.setLatLng([lat, lon]);
+        userMarker.setIcon(makeUserLocationIcon(heading));
       }
 
       if (Number.isFinite(accuracy) && accuracy > 0) {
@@ -266,7 +340,7 @@ function startUserLocation() {
         } catch {}
       }
 
-      console.log("User GPS:", lat, lon, "accuracy:", accuracy);
+      console.log("User GPS:", lat, lon, "accuracy:", accuracy, "heading:", heading);
     },
     (err) => {
       console.warn("GPS error:", err);
@@ -292,7 +366,6 @@ function getAltitudeFeet(ac) {
 
   let ft = Number(alt);
 
-  // meters 가능성 보정
   if (ft > -2000 && ft < 20000) {
     ft = Math.round(ft * 3.28084);
   } else {
@@ -320,7 +393,6 @@ function getVerticalRateFpm(ac) {
 
   vr = Number(vr);
 
-  // m/s 가능성 보정
   if (Math.abs(vr) < 120) {
     vr = vr * 196.850394;
   }
