@@ -25,7 +25,7 @@ const USER_HEADING_CHANGE_MIN_DEG = 2;
 
 /* --- 100점 GPS TRAIL SETTINGS --- */
 const USER_TRAIL_MAX_ACCURACY_M = 55;       // 완전 컷 기준
-const USER_TRAIL_BASE_MAX_ACCURACY_M = 45;  // 정상 허용 기준
+const USER_TRAIL_BASE_MAX_ACCURACY_M = 50;  // 정상 허용 기준
 const USER_TRAIL_JUMP_MAX_TIME_S = 5;
 const USER_TRAIL_MAX_SPEED_MPS = 8;
 const USER_TRAIL_MIN_MOVE_M = 5;
@@ -972,12 +972,12 @@ function restoreTrailState() {
   }
 }
 
-function appendUserTrailPoint(lat, lng, accuracy) {
+function appendUserTrailPoint(lat, lng, accuracy, timestamp) {
   const rawPoint = {
     lat,
     lng,
     accuracy: typeof accuracy === "number" ? accuracy : null,
-    time: Date.now()
+    time: timestamp || Date.now()
   };
 
   const validationBase = getReferencePointForValidation() || lastAcceptedUserPoint;
@@ -1070,7 +1070,7 @@ function updateUserLocation(position) {
     userAccuracyCircle.setRadius(clampedAccuracy);
   }
 
-  appendUserTrailPoint(lat, lon, accuracy);
+appendUserTrailPoint(lat, lon, accuracy, position.timestamp);
 
   if (speedKt > RUNNING_SPEED_MAX_KT) {
     if (userHeadingMarker) {
