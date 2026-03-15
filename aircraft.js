@@ -96,7 +96,8 @@ const aircraftStates = new Map();
   animationFrameId,
   animationToken,
   color,
-  buttonEl
+  buttonEl,
+  isLive
 }
 */
 
@@ -145,7 +146,8 @@ function initAircraftStates() {
       animationFrameId: null,
       animationToken: 0,
       color: AIRCRAFT_COLORS[idx % AIRCRAFT_COLORS.length],
-      buttonEl: null
+      buttonEl: null,
+      isLive: false
     });
   });
 }
@@ -444,7 +446,7 @@ function applyControlButtonStyle(btn) {
   btn.style.whiteSpace = "nowrap";
 }
 
-function applyAircraftFollowButtonStyle(btn, color, isActive) {
+function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
   applyControlButtonStyle(btn);
   btn.style.width = "auto";
   btn.style.minWidth = "128px";
@@ -454,6 +456,8 @@ function applyAircraftFollowButtonStyle(btn, color, isActive) {
   btn.style.justifyContent = "flex-start";
   btn.style.gap = "8px";
   btn.style.textAlign = "left";
+  btn.style.opacity = isLive ? "1" : "0.45";
+  btn.style.filter = isLive ? "none" : "grayscale(35%)";
   btn.style.border = isActive
     ? `2px solid ${color}`
     : "1px solid rgba(0,0,0,0.2)";
@@ -545,10 +549,11 @@ function refreshAircraftFollowButtons() {
 
     const label = getAircraftButtonLabel(state.lastAircraft, target);
     const isActive = activeFollowTargetKey === target.key;
+    const isLive = !!state.isLive;
 
-    applyAircraftFollowButtonStyle(btn, state.color, isActive);
+    applyAircraftFollowButtonStyle(btn, state.color, isActive, isLive);
     btn.innerHTML = buildAircraftButtonInnerHtml(label, state.color);
-    btn.title = label;
+    btn.title = isLive ? label : `${label} (NOT LIVE)`;
 
     btn.onclick = () => {
       focusAircraftTarget(target.key, true);
@@ -879,15 +884,20 @@ async function pollAircraft() {
     const { byHex, byReg } = indexAircraftList(aircraft);
 
     for (const target of TARGETS) {
+      const state = aircraftStates.get(target.key);
+      if (!state) continue;
+
       let ac = null;
 
       if (target.hex) ac = byHex.get(target.hex) || null;
       if (!ac && target.reg) ac = byReg.get(target.reg) || null;
 
-      if (!ac) continue;
+      if (!ac) {
+        state.isLive = false;
+        continue;
+      }
 
-      const state = aircraftStates.get(target.key);
-      if (!state) continue;
+      state.isLive = true;
 
       if (!state.lastAircraft) {
         updateAircraftForTarget(target, ac);
@@ -899,6 +909,14 @@ async function pollAircraft() {
     refreshAircraftFollowButtons();
   } catch (err) {
     console.error("pollAircraft error:", err);
+
+    for (const target of TARGETS) {
+      const state = aircraftStates.get(target.key);
+      if (!state) continue;
+      state.isLive = false;
+    }
+
+    refreshAircraftFollowButtons();
   }
 }
 
