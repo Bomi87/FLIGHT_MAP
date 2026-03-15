@@ -50,6 +50,7 @@ const MAX_LIVE_TRAIL_POINTS = 500;
 
 const USER_GPS_ZOOM_MIN = 10;
 const AIRCRAFT_FOCUS_ZOOM_MAX = 8;
+const FOLLOW_AIRCRAFT_ZOOM_MIN = 9;
 const MAX_USER_TRAIL_POINTS = 1000;
 
 const RUNNING_SPEED_MAX_KT = 8.0;
@@ -94,11 +95,13 @@ const aircraftStates = new Map();
   lastLatLng,
   animationFrameId,
   animationToken,
-  color
+  color,
+  buttonEl
 }
 */
 
 let lastGoodApiBase = null;
+let activeFollowTargetKey = null;
 
 /* ------------------ USER / GPS STATE ------------------ */
 
@@ -141,101 +144,13 @@ function initAircraftStates() {
       lastLatLng: null,
       animationFrameId: null,
       animationToken: 0,
-      color: AIRCRAFT_COLORS[idx % AIRCRAFT_COLORS.length]
+      color: AIRCRAFT_COLORS[idx % AIRCRAFT_COLORS.length],
+      buttonEl: null
     });
   });
 }
 
 initAircraftStates();
-
-/* ------------------ BUTTONS ------------------ */
-
-function applyControlButtonStyle(btn) {
-  btn.style.width = "54px";
-  btn.style.height = "34px";
-  btn.style.border = "1px solid rgba(0,0,0,0.2)";
-  btn.style.borderRadius = "8px";
-  btn.style.background = "rgba(255,255,255,0.95)";
-  btn.style.color = "#111";
-  btn.style.fontSize = "12px";
-  btn.style.fontWeight = "700";
-  btn.style.cursor = "pointer";
-  btn.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
-  btn.style.backdropFilter = "blur(4px)";
-}
-
-function focusAllAircraft() {
-  const points = [];
-
-  for (const state of aircraftStates.values()) {
-    if (state.lastLatLng) points.push(state.lastLatLng);
-  }
-
-  if (points.length === 0) return;
-
-  if (points.length === 1) {
-    const targetZoom = Math.min(map.getZoom(), AIRCRAFT_FOCUS_ZOOM_MAX);
-    map.flyTo(points[0], targetZoom, {
-      animate: true,
-      duration: 0.8
-    });
-    return;
-  }
-
-  const bounds = L.latLngBounds(points);
-  map.flyToBounds(bounds, {
-    padding: [40, 40],
-    maxZoom: AIRCRAFT_FOCUS_ZOOM_MAX,
-    animate: true,
-    duration: 0.8
-  });
-}
-
-function createToggleButton() {
-  let wrap = document.getElementById("custom-follow-controls");
-  if (wrap) return;
-
-  wrap = document.createElement("div");
-  wrap.id = "custom-follow-controls";
-  wrap.style.position = "fixed";
-  wrap.style.top = "108px";
-  wrap.style.right = "10px";
-  wrap.style.zIndex = "99999";
-  wrap.style.display = "flex";
-  wrap.style.flexDirection = "column";
-  wrap.style.gap = "6px";
-
-  const acBtn = document.createElement("button");
-  acBtn.id = "focus-aircraft-btn";
-  acBtn.type = "button";
-  acBtn.textContent = "A/C";
-  applyControlButtonStyle(acBtn);
-  acBtn.onclick = () => {
-    focusAllAircraft();
-  };
-
-  const gpsBtn = document.createElement("button");
-  gpsBtn.id = "focus-gps-btn";
-  gpsBtn.type = "button";
-  gpsBtn.textContent = "GPS";
-  applyControlButtonStyle(gpsBtn);
-  gpsBtn.onclick = async () => {
-    await startDeviceCompass();
-
-    if (!lastUserLatLng) return;
-
-    const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
-
-    map.flyTo(lastUserLatLng, targetZoom, {
-      animate: true,
-      duration: 0.8
-    });
-  };
-
-  wrap.appendChild(acBtn);
-  wrap.appendChild(gpsBtn);
-  document.body.appendChild(wrap);
-}
 
 /* ------------------ UTILS ------------------ */
 
@@ -309,6 +224,28 @@ function clonePoint(p) {
     accuracy: p.accuracy ?? null,
     time: p.time
   };
+}
+
+function normalizeReg(v) {
+  return String(v || "").trim().toUpperCase();
+}
+
+function normalizeHex(v) {
+  return String(v || "").trim().toLowerCase();
+}
+
+/* ------------------ BUTTON LABEL ------------------ */
+
+function getAircraftButtonLabel(ac, target) {
+  const callsign = (ac?.flight || ac?.callsign || "").trim();
+  const reg = (ac?.r || ac?.reg || target?.reg || "").trim();
+  const hex = (ac?.hex || target?.hex || "").toUpperCase();
+
+  if (callsign && reg) return `${callsign} (${reg})`;
+  if (callsign) return callsign;
+  if (reg) return reg;
+  if (hex) return `HEX: ${hex}`;
+  return "UNKNOWN";
 }
 
 /* ------------------ AIRCRAFT FORMAT ------------------ */
@@ -490,6 +427,211 @@ function buildAircraftIcon(trackDeg = 0, color = "#ff8800", sizePx = 36) {
   });
 }
 
+/* ------------------ FOLLOW / CONTROL BUTTONS ------------------ */
+
+function applyControlButtonStyle(btn) {
+  btn.style.height = "34px";
+  btn.style.border = "1px solid rgba(0,0,0,0.2)";
+  btn.style.borderRadius = "8px";
+  btn.style.background = "rgba(255,255,255,0.95)";
+  btn.style.color = "#111";
+  btn.style.fontSize = "12px";
+  btn.style.fontWeight = "700";
+  btn.style.cursor = "pointer";
+  btn.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
+  btn.style.backdropFilter = "blur(4px)";
+  btn.style.padding = "0 10px";
+  btn.style.whiteSpace = "nowrap";
+}
+
+function applyAircraftFollowButtonStyle(btn, color, isActive) {
+  applyControlButtonStyle(btn);
+  btn.style.width = "auto";
+  btn.style.minWidth = "128px";
+  btn.style.maxWidth = "220px";
+  btn.style.display = "flex";
+  btn.style.alignItems = "center";
+  btn.style.justifyContent = "flex-start";
+  btn.style.gap = "8px";
+  btn.style.textAlign = "left";
+  btn.style.border = isActive
+    ? `2px solid ${color}`
+    : "1px solid rgba(0,0,0,0.2)";
+  btn.style.boxShadow = isActive
+    ? `0 0 0 2px ${color}33, 0 2px 6px rgba(0,0,0,0.15)`
+    : "0 2px 6px rgba(0,0,0,0.15)";
+}
+
+function buildAircraftButtonInnerHtml(label, color) {
+  return `
+    <span style="
+      width:10px;
+      height:10px;
+      min-width:10px;
+      border-radius:999px;
+      background:${escapeHtml(color)};
+      border:1px solid rgba(0,0,0,0.35);
+      display:inline-block;
+    "></span>
+    <span style="
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width:180px;
+      display:inline-block;
+      ${label.startsWith("HEX:") ? "font-family:Consolas, Monaco, monospace;" : ""}
+    ">${escapeHtml(label)}</span>
+  `;
+}
+
+function focusAllAircraft() {
+  activeFollowTargetKey = null;
+  refreshAircraftFollowButtons();
+
+  const points = [];
+
+  for (const state of aircraftStates.values()) {
+    if (state.lastLatLng) points.push(state.lastLatLng);
+  }
+
+  if (points.length === 0) return;
+
+  if (points.length === 1) {
+    const targetZoom = Math.min(map.getZoom(), AIRCRAFT_FOCUS_ZOOM_MAX);
+    map.flyTo(points[0], targetZoom, {
+      animate: true,
+      duration: 0.8
+    });
+    return;
+  }
+
+  const bounds = L.latLngBounds(points);
+  map.flyToBounds(bounds, {
+    padding: [40, 40],
+    maxZoom: AIRCRAFT_FOCUS_ZOOM_MAX,
+    animate: true,
+    duration: 0.8
+  });
+}
+
+function focusAircraftTarget(targetKey, enableFollow = true) {
+  const state = aircraftStates.get(targetKey);
+  if (!state) return;
+
+  activeFollowTargetKey = enableFollow ? targetKey : null;
+  refreshAircraftFollowButtons();
+
+  if (!state.lastLatLng) return;
+
+  const targetZoom = Math.max(map.getZoom(), FOLLOW_AIRCRAFT_ZOOM_MIN);
+  map.flyTo(state.lastLatLng, targetZoom, {
+    animate: true,
+    duration: 0.8
+  });
+}
+
+function refreshAircraftFollowButtons() {
+  const list = document.getElementById("aircraft-follow-list");
+  if (!list) return;
+
+  list.innerHTML = "";
+
+  TARGETS.forEach(target => {
+    const state = aircraftStates.get(target.key);
+    if (!state) return;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+
+    const label = getAircraftButtonLabel(state.lastAircraft, target);
+    const isActive = activeFollowTargetKey === target.key;
+
+    applyAircraftFollowButtonStyle(btn, state.color, isActive);
+    btn.innerHTML = buildAircraftButtonInnerHtml(label, state.color);
+    btn.title = label;
+
+    btn.onclick = () => {
+      focusAircraftTarget(target.key, true);
+    };
+
+    state.buttonEl = btn;
+    list.appendChild(btn);
+  });
+}
+
+function createToggleButton() {
+  let wrap = document.getElementById("custom-follow-controls");
+  if (wrap) return;
+
+  wrap = document.createElement("div");
+  wrap.id = "custom-follow-controls";
+  wrap.style.position = "fixed";
+  wrap.style.top = "108px";
+  wrap.style.left = "10px";
+  wrap.style.zIndex = "99999";
+  wrap.style.display = "flex";
+  wrap.style.flexDirection = "column";
+  wrap.style.gap = "6px";
+
+  const acBtn = document.createElement("button");
+  acBtn.id = "focus-aircraft-btn";
+  acBtn.type = "button";
+  acBtn.textContent = "AC ALL";
+  acBtn.style.width = "128px";
+  applyControlButtonStyle(acBtn);
+  acBtn.onclick = () => {
+    focusAllAircraft();
+  };
+
+  const aircraftList = document.createElement("div");
+  aircraftList.id = "aircraft-follow-list";
+  aircraftList.style.display = "flex";
+  aircraftList.style.flexDirection = "column";
+  aircraftList.style.gap = "6px";
+
+  const gpsBtn = document.createElement("button");
+  gpsBtn.id = "focus-gps-btn";
+  gpsBtn.type = "button";
+  gpsBtn.textContent = "GPS";
+  gpsBtn.style.width = "128px";
+  applyControlButtonStyle(gpsBtn);
+  gpsBtn.onclick = async () => {
+    activeFollowTargetKey = null;
+    refreshAircraftFollowButtons();
+
+    await startDeviceCompass();
+
+    if (!lastUserLatLng) return;
+
+    const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
+
+    map.flyTo(lastUserLatLng, targetZoom, {
+      animate: true,
+      duration: 0.8
+    });
+  };
+
+  wrap.appendChild(acBtn);
+  wrap.appendChild(aircraftList);
+  wrap.appendChild(gpsBtn);
+  document.body.appendChild(wrap);
+
+  refreshAircraftFollowButtons();
+}
+
+function syncFollowView(target) {
+  if (activeFollowTargetKey !== target.key) return;
+
+  const state = aircraftStates.get(target.key);
+  if (!state || !state.lastLatLng) return;
+
+  const targetZoom = Math.max(map.getZoom(), FOLLOW_AIRCRAFT_ZOOM_MIN);
+  map.flyTo(state.lastLatLng, targetZoom, {
+    animate: true,
+    duration: 0.8
+  });
+}
+
 /* ------------------ AIRCRAFT DRAW ------------------ */
 
 function ensureAircraftMarker(target, ac) {
@@ -582,9 +724,12 @@ function updateLiveTrail(target, ac) {
 function updateAircraftForTarget(target, ac) {
   const state = aircraftStates.get(target.key);
   if (!state || !ac) return;
+
   state.lastAircraft = ac;
   ensureAircraftMarker(target, ac);
   updateLiveTrail(target, ac);
+  refreshAircraftFollowButtons();
+  syncFollowView(target);
 }
 
 /* ------------------ AIRCRAFT ANIMATION ------------------ */
@@ -675,14 +820,6 @@ async function fetchJson(url) {
   return await res.json();
 }
 
-function normalizeReg(v) {
-  return String(v || "").trim().toUpperCase();
-}
-
-function normalizeHex(v) {
-  return String(v || "").trim().toLowerCase();
-}
-
 function indexAircraftList(aircraftList) {
   const byHex = new Map();
   const byReg = new Map();
@@ -758,6 +895,8 @@ async function pollAircraft() {
         animateAircraftIfNeeded(target, state.lastAircraft, ac);
       }
     }
+
+    refreshAircraftFollowButtons();
   } catch (err) {
     console.error("pollAircraft error:", err);
   }
@@ -1341,6 +1480,15 @@ function initAircraftTracking() {
   createToggleButton();
   restoreTrailState();
   startGpsTracking();
+
+  if (map && typeof map.on === "function") {
+    map.on("dragstart", () => {
+      if (activeFollowTargetKey) {
+        activeFollowTargetKey = null;
+        refreshAircraftFollowButtons();
+      }
+    });
+  }
 
   if (TARGETS.length > 0) {
     pollAircraft();
