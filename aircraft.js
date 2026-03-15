@@ -373,22 +373,22 @@ function ensureAircraftDetailPanel() {
   panel.style.padding = "6px 8px";
   panel.style.borderRadius = "8px";
 
-  /* 핵심: 아주 약한 검정 그라데이션 */
-  panel.style.background = "linear-gradient(180deg, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0.12) 100%)";
+  /* 배경은 더 약하게 */
+  panel.style.background = "rgba(0,0,0,0.18)";
 
   panel.style.color = "#ffffff";
   panel.style.fontSize = "12px";
   panel.style.lineHeight = "1.35";
   panel.style.fontWeight = "700";
+
   panel.style.pointerEvents = "none";
 
-  panel.style.textShadow = `
-    -1px -1px 2px rgba(0,0,0,0.95),
-     1px -1px 2px rgba(0,0,0,0.95),
-    -1px  1px 2px rgba(0,0,0,0.95),
-     1px  1px 2px rgba(0,0,0,0.95),
-     0px  0px 5px rgba(0,0,0,0.9)
-  `;
+  /* ✈️ 가독성 핵심 */
+  panel.style.textShadow = "0 0 4px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.85)";
+
+  document.body.appendChild(panel);
+  return panel;
+}
 
   document.body.appendChild(panel);
   return panel;
