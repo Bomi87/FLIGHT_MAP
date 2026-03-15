@@ -262,10 +262,7 @@ function buildAircraftIcon(trackDeg = 0) {
               L54 70
               L68 82
               L64 86
-              L52 78
-              L52 96
-              L48 96
-              L48 78
+              L50 76
               L36 86
               L32 82
               L46 70
