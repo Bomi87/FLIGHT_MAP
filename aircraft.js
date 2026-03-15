@@ -89,6 +89,7 @@ const aircraftStates = new Map();
 {
   marker,
   tooltipBound,
+  popupBound,
   liveTrail,
   liveTrailLine,
   lastAircraft,
@@ -139,6 +140,7 @@ function initAircraftStates() {
     aircraftStates.set(target.key, {
       marker: null,
       tooltipBound: false,
+      popupBound: false,
       liveTrail: [],
       liveTrailLine: null,
       lastAircraft: null,
@@ -289,25 +291,48 @@ function formatSpeedLines(ac) {
   return lines;
 }
 
+function formatVerticalRateText(ac) {
+  const vr = Number(ac.vert_rate);
+  if (isNaN(vr) || vr === 0) return "0 FPM";
+  return `${vr > 0 ? "+" : ""}${Math.round(vr)} FPM`;
+}
+
+function getVerticalState(ac) {
+  const vr = Number(ac.vert_rate);
+
+  if (isNaN(vr)) {
+    return { arrow: "→", color: "#111111" };
+  }
+
+  if (vr > 300) {
+    return { arrow: "▲", color: "#d60000" };
+  }
+
+  if (vr < -300) {
+    return { arrow: "▼", color: "#0066ff" };
+  }
+
+  return { arrow: "→", color: "#111111" };
+}
+
+/* 항상 보이는 작은 라벨 */
 function formatAircraftLabelHtml(ac, color) {
   const flight = (ac.flight || ac.callsign || "").trim();
   const reg = (ac.r || ac.reg || "").trim();
-  const type = (ac.t || ac.type || "").trim();
   const altitudeText = formatAltitudeText(ac);
-  const machText = formatMachText(ac);
-  const speedLines = formatSpeedLines(ac);
+  const vertical = getVerticalState(ac);
 
-  const line1 = [flight, reg ? `(${reg})` : ""].filter(Boolean).join(" ");
-  const line2 = [type, altitudeText].filter(Boolean).join(" ");
+  const smallLine1 = flight || reg || "UNKNOWN";
+  const smallLine2 = altitudeText || "";
 
   return `
     <div style="
-      font-size:11px;
+      font-size:10px;
       color:#000;
-      font-weight:700;
+      font-weight:800;
       white-space:nowrap;
       text-align:center;
-      line-height:1.2;
+      line-height:1.1;
       text-shadow:
         -1px -1px 0 #fff,
          1px -1px 0 #fff,
@@ -315,11 +340,57 @@ function formatAircraftLabelHtml(ac, color) {
          1px  1px 0 #fff;
       border-top:2px solid ${escapeHtml(color)};
       padding-top:2px;
+      min-width:42px;
     ">
-      ${line1 ? `<div>${escapeHtml(line1)}</div>` : ""}
-      ${line2 ? `<div>${escapeHtml(line2)}</div>` : ""}
-      ${machText ? `<div>${escapeHtml(machText)}</div>` : ""}
-      ${speedLines.map(x => `<div>${escapeHtml(x)}</div>`).join("")}
+      <div style="
+        font-size:11px;
+        font-weight:900;
+        color:${vertical.color};
+        margin-bottom:1px;
+      ">${vertical.arrow}</div>
+      <div>${escapeHtml(smallLine1)}</div>
+      ${smallLine2 ? `<div>${escapeHtml(smallLine2)}</div>` : ""}
+    </div>
+  `;
+}
+
+/* 클릭 시 보이는 상세 팝업 */
+function formatAircraftPopupHtml(ac, color) {
+  const flight = (ac.flight || ac.callsign || "").trim();
+  const reg = (ac.r || ac.reg || "").trim();
+  const type = (ac.t || ac.type || "").trim();
+  const altitudeText = formatAltitudeText(ac);
+  const machText = formatMachText(ac);
+  const speedLines = formatSpeedLines(ac);
+  const vertical = getVerticalState(ac);
+  const vrText = formatVerticalRateText(ac);
+  const hex = (ac.hex || "").toUpperCase();
+
+  return `
+    <div style="
+      min-width:170px;
+      max-width:220px;
+      font-size:12px;
+      line-height:1.35;
+      color:#111;
+    ">
+      <div style="
+        font-size:13px;
+        font-weight:800;
+        border-top:3px solid ${escapeHtml(color)};
+        padding-top:6px;
+        margin-bottom:6px;
+      ">
+        ${escapeHtml(flight || reg || hex || "AIRCRAFT")}
+      </div>
+
+      ${reg ? `<div><b>REG</b> ${escapeHtml(reg)}</div>` : ""}
+      ${type ? `<div><b>TYPE</b> ${escapeHtml(type)}</div>` : ""}
+      ${altitudeText ? `<div><b>ALT</b> ${escapeHtml(altitudeText)}</div>` : ""}
+      ${machText ? `<div><b>MACH</b> ${escapeHtml(machText)}</div>` : ""}
+      ${speedLines.map(x => `<div><b>${escapeHtml(x.split(" ")[0])}</b> ${escapeHtml(x.split(" ").slice(1).join(" "))}</div>`).join("")}
+      <div><b>V/S</b> <span style="color:${vertical.color};font-weight:800;">${vertical.arrow}</span> ${escapeHtml(vrText)}</div>
+      ${hex ? `<div><b>HEX</b> ${escapeHtml(hex)}</div>` : ""}
     </div>
   `;
 }
@@ -673,6 +744,7 @@ function ensureAircraftMarker(target, ac) {
   const sizePx = getAircraftIconSize(typeCode);
   const icon = buildAircraftIcon(track, state.color, sizePx);
   const labelHtml = formatAircraftLabelHtml(ac, state.color);
+  const popupHtml = formatAircraftPopupHtml(ac, state.color);
 
   if (!state.marker) {
     state.marker = L.marker(newLatLng, {
@@ -688,6 +760,18 @@ function ensureAircraftMarker(target, ac) {
       opacity: 1
     });
     state.tooltipBound = true;
+
+    state.marker.bindPopup(popupHtml, {
+      autoClose: true,
+      closeButton: true,
+      maxWidth: 240,
+      className: "aircraft-detail-popup"
+    });
+    state.popupBound = true;
+
+    state.marker.on("click", () => {
+      state.marker.openPopup();
+    });
   } else {
     state.marker.setLatLng(newLatLng);
     state.marker.setIcon(icon);
@@ -703,6 +787,18 @@ function ensureAircraftMarker(target, ac) {
         opacity: 1
       });
       state.tooltipBound = true;
+    }
+
+    if (state.popupBound && state.marker.getPopup()) {
+      state.marker.setPopupContent(popupHtml);
+    } else {
+      state.marker.bindPopup(popupHtml, {
+        autoClose: true,
+        closeButton: true,
+        maxWidth: 240,
+        className: "aircraft-detail-popup"
+      });
+      state.popupBound = true;
     }
   }
 }
@@ -785,6 +881,7 @@ function animateAircraftIfNeeded(target, prevAc, nextAc) {
   const sizePx = getAircraftIconSize(typeCode);
   const icon = buildAircraftIcon(track, state.color, sizePx);
   const labelHtml = formatAircraftLabelHtml(nextAc, state.color);
+  const popupHtml = formatAircraftPopupHtml(nextAc, state.color);
 
   const start = performance.now();
   const token = ++state.animationToken;
@@ -812,12 +909,28 @@ function animateAircraftIfNeeded(target, prevAc, nextAc) {
         opacity: 1
       });
       state.tooltipBound = true;
+
+      state.marker.bindPopup(popupHtml, {
+        autoClose: true,
+        closeButton: true,
+        maxWidth: 240,
+        className: "aircraft-detail-popup"
+      });
+      state.popupBound = true;
+
+      state.marker.on("click", () => {
+        state.marker.openPopup();
+      });
     } else {
       state.marker.setLatLng([lat, lon]);
       state.marker.setIcon(icon);
 
       if (state.tooltipBound && state.marker.getTooltip()) {
         state.marker.setTooltipContent(labelHtml);
+      }
+
+      if (state.popupBound && state.marker.getPopup()) {
+        state.marker.setPopupContent(popupHtml);
       }
     }
 
