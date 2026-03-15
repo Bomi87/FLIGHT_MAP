@@ -53,8 +53,6 @@ let lastUserHeadingDeg = null;
 let lastKnownSpeedKt = null;
 let compassStarted = false;
 
-/* ------------------ TOGGLE BUTTON STATE ------------------ */
-
 /* ------------------ TOGGLE BUTTON ------------------ */
 
 let focusToggleMode = "aircraft";   // 현재 기준 위치
@@ -66,14 +64,14 @@ function createToggleButton() {
   wrap = document.createElement("div");
   wrap.id = "custom-follow-controls";
   wrap.style.position = "fixed";
-  wrap.style.top = "78px";
+  wrap.style.top = "108px";   // 기존 78px → 조금 아래로
   wrap.style.right = "10px";
   wrap.style.zIndex = "99999";
 
   const btn = document.createElement("button");
   btn.id = "toggle-focus-btn";
   btn.type = "button";
-  btn.textContent = "A/C";   // 현재 기준 표시
+  btn.textContent = "A/C";
 
   btn.style.width = "54px";
   btn.style.height = "34px";
@@ -88,7 +86,6 @@ function createToggleButton() {
   btn.style.backdropFilter = "blur(4px)";
 
   btn.onclick = async () => {
-
     if (focusToggleMode === "aircraft") {
       // 현재 항공기 → GPS로 전환
       await startDeviceCompass();
@@ -103,9 +100,7 @@ function createToggleButton() {
 
       focusToggleMode = "gps";
       btn.textContent = "GPS";
-
     } else {
-
       // 현재 GPS → 항공기로 전환
       if (lastAircraftLatLng) {
         const targetZoom = Math.max(map.getZoom(), 9);
@@ -541,7 +536,7 @@ function getHeadingArrowLatLng(baseLatLng, headingDeg) {
   const lat = baseLatLng[0];
   const lon = baseLatLng[1];
 
-  const distanceMeters = 7; // 파란 원 바로 앞쪽
+  const distanceMeters = 7;
   const rad = normalizeDeg(headingDeg) * Math.PI / 180;
 
   const dLat = (distanceMeters * Math.cos(rad)) / 111320;
@@ -672,7 +667,7 @@ function updateUserLocation(position) {
 
   if (!userMarker) {
     userMarker = L.circleMarker(lastUserLatLng, {
-      radius: 7,   // 더 크게
+      radius: 7,
       color: "#ffffff",
       weight: 2,
       fillColor: "#2b8cff",
@@ -683,7 +678,7 @@ function updateUserLocation(position) {
     userMarker.setLatLng(lastUserLatLng);
   }
 
-  const clampedAccuracy = Math.max(6, Math.min(accuracy, 18));
+  const clampedAccuracy = Math.max(8, Math.min(accuracy, 35));
 
   if (!userAccuracyCircle) {
     userAccuracyCircle = L.circle(lastUserLatLng, {
