@@ -1,167 +1,333 @@
-const params = new URLSearchParams(window.location.search);
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-/* ------------------ TARGET PARSE ------------------ */
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 
-function parseCsvParam(name) {
-  return (params.get(name) || "")
-    .split(",")
-    .map(x => x.trim())
-    .filter(Boolean);
+<title>Flight Route Viewer</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
 }
 
-const singleReg = (params.get("reg") || "").toUpperCase().trim();
-const singleHex = (params.get("hex") || "").toLowerCase().trim();
-
-const multiRegs = parseCsvParam("regs").map(x => x.toUpperCase());
-const multiHexes = [
-  ...parseCsvParam("hexes"),
-  ...parseCsvParam("hexs")
-].map(x => x.toLowerCase());
-
-let TARGETS = [];
-
-if (multiRegs.length || multiHexes.length) {
-  TARGETS = [
-    ...multiRegs.map(reg => ({ key: `reg:${reg}`, reg, hex: "" })),
-    ...multiHexes.map(hex => ({ key: `hex:${hex}`, reg: "", hex }))
-  ];
-} else if (singleReg || singleHex) {
-  TARGETS = [{
-    key: singleReg ? `reg:${singleReg}` : `hex:${singleHex}`,
-    reg: singleReg,
-    hex: singleHex
-  }];
+#map {
+  height: 100vh;
+  width: 100%;
 }
 
-TARGETS = TARGETS.slice(0, 5);
-
-/* ------------------ API / SETTINGS ------------------ */
-
-const ADSB_API_BASES = [
-  "https://api.adsb.lol",
-  "https://api.adsb.one"
-];
-
-const POLL_INTERVAL_MS = 5000;
-const ANIMATION_DURATION_MS = 4500;
-const MAX_LIVE_TRAIL_POINTS = 500;
-
-/* ------------------ GPS / USER SETTINGS ------------------ */
-
-const USER_GPS_ZOOM_MIN = 10;
-const AIRCRAFT_FOCUS_ZOOM_MAX = 8;
-const FOLLOW_AIRCRAFT_ZOOM_MIN = 9;
-const MAX_USER_TRAIL_POINTS = 1000;
-
-const RUNNING_SPEED_MAX_KT = 8.0;
-const COMPASS_HEADING_SMOOTHING = 0.18;
-const USER_HEADING_CHANGE_MIN_DEG = 2;
-
-/* --- GPS TRAIL SETTINGS --- */
-const USER_TRAIL_MAX_ACCURACY_M = 55;
-const USER_TRAIL_BASE_MAX_ACCURACY_M = 50;
-const USER_TRAIL_JUMP_MAX_TIME_S = 5;
-const USER_TRAIL_MAX_SPEED_MPS = 8;
-const USER_TRAIL_MIN_MOVE_M = 5;
-
-const USER_TRAIL_DASH_MAX_DIST_M = 120;
-const USER_TRAIL_DASH_MAX_TIME_S = 25;
-
-const USER_TRAIL_SMOOTHING_WINDOW = 3;
-const USER_TRAIL_STORAGE_KEY = "userTrailState_v3";
-const USER_TRAIL_STORAGE_LIMIT = 300;
-const USER_TRAIL_STORAGE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
-
-/* ------------------ COLORS ------------------ */
-
-const AIRCRAFT_COLORS = [
-  "#ff8800",
-  "#1e90ff",
-  "#28a745",
-  "#d63384",
-  "#6f42c1"
-];
-
-/* ------------------ STATE ------------------ */
-
-const aircraftStates = new Map();
-/*
-{
-  marker,
-  tooltipBound,
-  liveTrail,
-  liveTrailLine,
-  lastAircraft,
-  lastLatLng,
-  animationFrameId,
-  animationToken,
-  color,
-  buttonEl,
-  isLive
+.popup-body {
+  font-size: 11px;
+  line-height: 1.4;
+  max-width: 220px;
+  word-break: break-word;
 }
-*/
+.popup-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
 
-let lastGoodApiBase = null;
-let activeFollowTargetKey = null;
+.popup-section {
+  margin-top: 6px;
+}
 
-/* 상세정보 패널 상태 */
-let selectedAircraftTargetKey = null;
-let suppressNextMapClose = false;
+.popup-section table {
+  border-collapse: collapse;
+  width: 100%;
+}
 
-/* ------------------ USER / GPS STATE ------------------ */
+.popup-section td {
+  border-bottom: 1px solid #eee;
+  padding: 3px 4px;
+  vertical-align: top;
+}
 
-let lastUserLatLng = null;
-let userMarker = null;
-let userAccuracyCircle = null;
-let userHeadingMarker = null;
+.popup-section td:first-child {
+  font-weight: 600;
+  white-space: nowrap;
+  width: 1%;
+}
 
-let gpsWatchId = null;
-let deviceCompassHeading = null;
-let lastUserHeadingDeg = null;
-let lastKnownSpeedKt = null;
-let compassStarted = false;
+.leaflet-popup-content {
+  margin: 10px 12px;
+}
 
-let lastAcceptedUserPoint = null;
-let pendingGapStartPoint = null;
+.kml-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
 
-let userTrailSolidSegments = [];
-let userTrailDashedSegments = [];
+.kml-label:before {
+  display: none !important;
+}
 
-let userTrailSolidLines = [];
-let userTrailDashedLines = [];
+.kml-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-weight: 700;
+  text-align: left;
+  transform-origin: left bottom;
+  transform: translate(40px, -2px) rotate(-90deg);
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0,0,0,0.65);
+}
 
-let currentSolidSegment = null;
-let currentSolidLine = null;
+.waypoint-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
 
-let recentAcceptedUserPoints = [];
-let lastProcessedGpsTimestamp = null;
+.waypoint-label:before {
+  display: none !important;
+}
 
-/* ------------------ TARGET INIT ------------------ */
+.waypoint-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 10px;
+  transform: rotate(-90deg);
+  transform-origin: top right;
+  text-align: left;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000;
+}
 
-function initAircraftStates() {
-  TARGETS.forEach((target, idx) => {
-    aircraftStates.set(target.key, {
-      marker: null,
-      tooltipBound: false,
-      liveTrail: [],
-      liveTrailLine: null,
-      lastAircraft: null,
-      lastLatLng: null,
-      animationFrameId: null,
-      animationToken: 0,
-      color: AIRCRAFT_COLORS[idx % AIRCRAFT_COLORS.length],
-      buttonEl: null,
-      isLive: false
-    });
+/* 삼각형 아이콘 전용: 항상 보이는 가로 레이블 */
+.triangle-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.triangle-label:before {
+  display: none !important;
+}
+
+.triangle-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 10px;
+  text-align: left;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0,0,0,0.65);
+}
+
+.leaflet-control-layers {
+  font-size: 12px;
+}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script>
+const map = L.map('map', {
+  worldCopyJump: false,
+  preferCanvas: true,
+  maxBoundsViscosity: 1.0
+}).setView([48, 180], 3);
+
+/* -----------------------------
+   Base Maps
+----------------------------- */
+
+const streetMap = L.tileLayer(
+  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  {
+    maxZoom: 18,
+    attribution: '&copy; OpenStreetMap &copy; CARTO'
+  }
+);
+
+const satelliteMap = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {
+    maxZoom: 18,
+    attribution: 'Tiles &copy; Esri'
+  }
+);
+
+const satelliteWithLabels = L.layerGroup([
+  L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      maxZoom: 18,
+      attribution: 'Tiles &copy; Esri'
+    }
+  ),
+  L.tileLayer(
+    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    {
+      maxZoom: 18,
+      attribution: 'Labels &copy; Esri'
+    }
+  ),
+  L.tileLayer(
+    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+    {
+      maxZoom: 18,
+      attribution: 'Transportation &copy; Esri'
+    }
+  )
+]);
+
+satelliteMap.addTo(map);
+
+const baseMaps = {
+  "Street Map": streetMap,
+  "Satellite": satelliteMap,
+  "Satellite + Labels": satelliteWithLabels
+};
+
+L.control.layers(baseMaps, null, {
+  position: "topright",
+  collapsed: false
+}).addTo(map);
+
+const drawn = L.featureGroup().addTo(map);
+
+const POPUP_OPTIONS = {
+  maxWidth: 260,
+  autoPan: false
+};
+
+/* -----------------------------
+   영공 국가 리스트
+----------------------------- */
+const AIRSPACE_COUNTRIES = new Set([
+  "솔로몬 제도","나우루","파푸아 뉴기니","그린란드","아이슬란드","캐나다",
+  "알제리","가나","아이보리 해안","나이지리아","니제르","튀니지",
+  "벨기에","독일","에스토니아","핀란드","영국","네덜란드","아일랜드",
+  "덴마크","노르웨이","폴란드","스웨덴","라트비아","리투아니아",
+  "보츠와나","콩고 공화국","모리셔스","카메룬","잠비아","코모로",
+  "마다가스카르","앙골라","가봉","모잠비크","세이셸","차드","짐바브웨",
+  "말라위","콩고민주공화국","카나리아 제도","세네갈","모로코","카보베르데",
+  "에티오피아","부룬디","소말리아","이집트","에리트레아","케냐","리비아",
+  "르완다","수단","탄자니아","우간다",
+  "미국","알바니아","불가리아","키프로스","크로아티아","스페인","프랑스",
+  "그리스","헝가리","이탈리아","슬로베니아","체코 공화국","이스라엘","몰타",
+  "오스트리아","포르투갈","아조레스 제도","보스니아 헤르체고비나","루마니아",
+  "스위스","터키","몰도바","북 마케도니아","세르비아","슬로바키아",
+  "도미니카 공화국","온두라스","자메이카","멕시코","파나마","아이티","쿠바",
+  "바하마","피지","프랑스령 폴리네시아","뉴칼레도니아","뉴질랜드",
+  "아프가니스탄","바레인","사우디 아라비아","이란","요르단","쿠웨이트",
+  "레바논","아랍 에미리트","오만","파키스탄","이라크","시리아","예멘",
+  "대만","일본","대한민국","필리핀",
+  "아르헨티나","브라질","칠레","에콰도르","파라과이","콜롬비아","볼리비아",
+  "수리남","프랑스령 기아나","페루","우루과이","베네수엘라","가이아나",
+  "푸에르토리코","퀴라소","트리니다드토바고",
+  "타지키스탄","키르기스스탄","아르메니아","러시아","조지아","우크라이나",
+  "벨라루스","남수단","우즈베키스탄","스리랑카","아제르바이잔","방글라데시",
+  "홍콩","라오스","네팔","몰디브","태국","미얀마","인도네시아","브루나이",
+  "말레이시아","싱가포르","호주","중국","중국(산야)","북한","몽골","캄보디아",
+  "베트남","인도","카자흐스탄","투르크메니스탄","나미비아","남아프리카",
+  "앤티가 바부다","카타르"
+]);
+
+function getRequestedFile() {
+  const params = new URLSearchParams(location.search);
+  const file = params.get("file");
+  return file ? file.trim() : "";
+}
+
+function getVersionParam() {
+  const params = new URLSearchParams(location.search);
+  return params.get("v") || Date.now().toString();
+}
+
+function getExtension(filename) {
+  const f = filename.toLowerCase();
+  if (f.endsWith(".gpx")) return "gpx";
+  if (f.endsWith(".kml")) return "kml";
+  return "";
+}
+
+function normalizePacificLon(lon) {
+  let x = Number(lon);
+  while (x < 0) x += 360;
+  while (x >= 360) x -= 360;
+  return x;
+}
+
+function isBadCoord(lat, lon) {
+  if (!isFinite(lat) || !isFinite(lon)) return true;
+  if (Math.abs(lat) > 90) return true;
+  if (Math.abs(lon) > 360) return true;
+  if (Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001) return true;
+  return false;
+}
+
+function parseXml(text) {
+  return new DOMParser().parseFromString(text, "text/xml");
+}
+
+function fitDrawnBounds() {
+  try {
+    const bounds = drawn.getBounds();
+    if (bounds && bounds.isValid && bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+async function fetchTextFile(filename) {
+  const version = getVersionParam();
+  const url = filename + (filename.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(version);
+
+  const res = await fetch(url, {
+    cache: "no-store"
   });
+
+  if (!res.ok) {
+    throw new Error(filename + " not found");
+  }
+
+  return await res.text();
 }
 
-initAircraftStates();
-
-/* ------------------ UTILS ------------------ */
+/* -----------------------------
+   공통
+----------------------------- */
 
 function escapeHtml(str) {
-  return String(str ?? "")
+  return String(str || "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -169,1584 +335,994 @@ function escapeHtml(str) {
     .replaceAll("'", "&#39;");
 }
 
-function normalizeDeg(deg) {
-  let d = deg % 360;
-  if (d < 0) d += 360;
-  return d;
+function cleanLabelText(str) {
+  let s = String(str || "");
+
+  s = s.replace(/&amp;#x2F;\d+/gi, "");
+  s = s.replace(/&#x2F;\d+/gi, "");
+  s = s.replace(/&[#A-Za-z0-9]+;/g, "");
+
+  return s.trim();
 }
 
-function shortestAngleDiff(fromDeg, toDeg) {
-  let diff = normalizeDeg(toDeg) - normalizeDeg(fromDeg);
-  if (diff > 180) diff -= 360;
-  if (diff < -180) diff += 360;
-  return diff;
-}
+function buildPopupHtml(title, descriptionHtml, extraRows = []) {
+  let html = `<div class="popup-body">`;
 
-function smoothHeading(prevDeg, nextDeg, smoothing) {
-  if (prevDeg == null) return normalizeDeg(nextDeg);
-  const diff = shortestAngleDiff(prevDeg, nextDeg);
-  return normalizeDeg(prevDeg + diff * smoothing);
-}
-
-function metersPerSecondToKnots(ms) {
-  return (Number(ms) || 0) * 1.943844;
-}
-
-function metersBetweenLatLng(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const toRad = d => d * Math.PI / 180;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function averagePoint(points) {
-  if (!points || points.length === 0) return null;
-  const sum = points.reduce(
-    (acc, p) => {
-      acc.lat += p.lat;
-      acc.lng += p.lng;
-      return acc;
-    },
-    { lat: 0, lng: 0 }
-  );
-  return {
-    lat: sum.lat / points.length,
-    lng: sum.lng / points.length
-  };
-}
-
-function clonePoint(p) {
-  return {
-    lat: p.lat,
-    lng: p.lng,
-    accuracy: p.accuracy ?? null,
-    time: p.time
-  };
-}
-
-function normalizeReg(v) {
-  return String(v || "").trim().toUpperCase();
-}
-
-function normalizeHex(v) {
-  return String(v || "").trim().toLowerCase();
-}
-
-function injectAircraftUiCss() {
-  if (document.getElementById("aircraft-ui-css")) return;
-
-  const style = document.createElement("style");
-  style.id = "aircraft-ui-css";
-  style.textContent = `
-    .aircraft-label-tooltip {
-      pointer-events: none !important;
-      background: transparent !important;
-      border: none !important;
-      box-shadow: none !important;
-    }
-    .aircraft-label-tooltip::before {
-      display: none !important;
-    }
-    .aircraft-div-icon {
-      background: transparent !important;
-      border: none !important;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-/* ------------------ BUTTON LABEL ------------------ */
-
-function getAircraftButtonLabel(ac, target) {
-  const callsign = (ac?.flight || ac?.callsign || "").trim();
-  const reg = (ac?.r || ac?.reg || target?.reg || "").trim();
-  const hex = (ac?.hex || target?.hex || "").toUpperCase();
-
-  if (callsign && reg) return `${callsign} (${reg})`;
-  if (callsign) return callsign;
-  if (reg) return reg;
-  if (hex) return `HEX: ${hex}`;
-  return "UNKNOWN";
-}
-
-/* ------------------ AIRCRAFT FORMAT ------------------ */
-
-function formatAltitudeText(ac) {
-  const altBaro = ac.alt_baro;
-  const altGeom = ac.alt_geom;
-  const altFt = altBaro ?? altGeom;
-
-  if (altFt == null || isNaN(altFt)) return "";
-
-  const ft = Math.round(Number(altFt));
-
-  if (ft >= 18000) {
-    return "FL" + String(Math.round(ft / 100)).padStart(3, "0");
+  if (title) {
+    html += `<div class="popup-title">${escapeHtml(title)}</div>`;
   }
 
-  return ft.toLocaleString() + " ft";
-}
-
-function formatMachText(ac) {
-  if (ac.mach != null && !isNaN(ac.mach)) {
-    return "M" + String(Number(ac.mach).toFixed(2)).replace(/^0/, "");
-  }
-  return "";
-}
-
-function formatVerticalRateText(ac) {
-  if (ac.vert_rate == null || ac.vert_rate === "") return "-";
-
-  const vr = Number(ac.vert_rate);
-  if (isNaN(vr)) return "-";
-  if (vr === 0) return "0 FPM";
-
-  return `${vr > 0 ? "+" : ""}${Math.round(vr)} FPM`;
-}
-
-function getVerticalState(ac) {
-  const vr = Number(ac.vert_rate);
-
-  if (isNaN(vr)) {
-    return { arrow: "→", color: "#ffffff" };
+  if (descriptionHtml) {
+    html += `<div class="popup-section">${descriptionHtml}</div>`;
   }
 
-  if (vr > 300) {
-    return { arrow: "▲", color: "#ff3b30" };
-  }
-
-  if (vr < -300) {
-    return { arrow: "▼", color: "#007aff" };
-  }
-
-  return { arrow: "→", color: "#ffffff" };
-}
-
-/* 항상 보이는 작은 라벨 */
-function formatAircraftLabelHtml(ac, color) {
-  const flight = (ac.flight || ac.callsign || "").trim();
-  const reg = (ac.r || ac.reg || "").trim();
-  const altitudeText = formatAltitudeText(ac);
-  const vertical = { ...getVerticalState(ac) };
-
-  if (vertical.arrow === "→") {
-    vertical.color = "#000000";
-  }
-
-  const smallLine1 = flight || reg || "UNKNOWN";
-  const smallLine2 = altitudeText || "";
-
-  return `
-    <div style="
-      display:inline-block;
-      background:#ffffff;
-      border:1px solid rgba(0,0,0,0.22);
-      border-radius:4px;
-      box-shadow:0 1px 3px rgba(0,0,0,0.22);
-      padding:2px 5px 3px 5px;
-      min-width:46px;
-      white-space:nowrap;
-      text-align:center;
-      line-height:1.0;
-      user-select:none;
-      -webkit-user-select:none;
-    ">
-      <div style="
-        width:100%;
-        height:2px;
-        background:${escapeHtml(color)};
-        margin:0 0 2px 0;
-        border-radius:2px;
-      "></div>
-
-      <div style="
-        font-size:10px;
-        font-weight:900;
-        color:${vertical.color};
-        line-height:1;
-        margin:0 0 1px 0;
-      ">${vertical.arrow}</div>
-
-      <div style="
-        font-size:10px;
-        font-weight:800;
-        color:#000000;
-        line-height:1.05;
-        margin:0;
-      ">${escapeHtml(smallLine1)}</div>
-
-      ${smallLine2 ? `
-        <div style="
-          font-size:10px;
-          font-weight:800;
-          color:#000000;
-          line-height:1.05;
-          margin:1px 0 0 0;
-        ">${escapeHtml(smallLine2)}</div>
-      ` : ""}
-    </div>
-  `;
-}
-
-/* ------------------ 상세정보 패널 ------------------ */
-
-function ensureAircraftDetailPanel() {
-  let panel = document.getElementById("aircraft-detail-panel");
-  if (panel) return panel;
-
-  panel = document.createElement("div");
-  panel.id = "aircraft-detail-panel";
-  panel.style.position = "fixed";
-  panel.style.top = "46px";
-  panel.style.left = "12px";
-  panel.style.zIndex = "99999";
-  panel.style.display = "none";
-  panel.style.maxWidth = "220px";
-  panel.style.padding = "6px 8px";
-  panel.style.borderRadius = "8px";
-  panel.style.background = "rgba(0,0,0,0.18)";
-  panel.style.color = "#ffffff";
-  panel.style.fontSize = "12px";
-  panel.style.lineHeight = "1.35";
-  panel.style.fontWeight = "700";
-  panel.style.pointerEvents = "none";
-  panel.style.textShadow = "0 0 4px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.85)";
-
-  document.body.appendChild(panel);
-  return panel;
-}
-
-function buildDetailRow(label, value, valueColor = "#ffffff") {
-  return `
-    <div style="display:grid;grid-template-columns:44px auto;column-gap:8px;margin-bottom:2px;">
-      <div style="opacity:0.9;">${escapeHtml(label)}</div>
-      <div style="color:${valueColor};">${escapeHtml(value)}</div>
-    </div>
-  `;
-}
-
-function formatAircraftDetailPanelHtml(ac, color) {
-  const flight = (ac.flight || ac.callsign || "").trim();
-  const reg = (ac.r || ac.reg || "").trim();
-  const type = (ac.t || ac.type || "").trim();
-  const altitudeText = formatAltitudeText(ac) || "-";
-  const machText = formatMachText(ac) || "-";
-  const vertical = getVerticalState(ac);
-  const vrText = formatVerticalRateText(ac);
-  const hex = (ac.hex || "").toUpperCase();
-
-  let gsText = "-";
-  let iasText = "-";
-
-  if (ac.gs != null && !isNaN(ac.gs)) {
-    gsText = `${Math.round(Number(ac.gs))}KT`;
-  }
-  if (ac.ias != null && !isNaN(ac.ias)) {
-    iasText = `${Math.round(Number(ac.ias))}KT`;
-  }
-
-  return `
-    <div style="margin-bottom:4px;color:${escapeHtml(color)};font-size:13px;font-weight:900;">
-      ${escapeHtml(flight || reg || hex || "AIRCRAFT")}
-    </div>
-    ${reg ? `<div style="margin-bottom:4px;">${escapeHtml(reg)}</div>` : ""}
-    ${type ? `<div style="margin-bottom:6px;">${escapeHtml(type)}</div>` : ""}
-    ${buildDetailRow("ALT", altitudeText)}
-    ${buildDetailRow("SPD", gsText)}
-    ${buildDetailRow("IAS", iasText)}
-    ${buildDetailRow("MACH", machText)}
-    ${buildDetailRow("V/S", `${vertical.arrow} ${vrText}`, vertical.color)}
-    ${hex ? buildDetailRow("HEX", hex) : ""}
-  `;
-}
-
-function showAircraftDetailPanel(target, ac) {
-  const state = aircraftStates.get(target.key);
-  if (!state || !ac) return;
-
-  const panel = ensureAircraftDetailPanel();
-  panel.innerHTML = formatAircraftDetailPanelHtml(ac, state.color);
-  panel.style.display = "block";
-  selectedAircraftTargetKey = target.key;
-}
-
-function hideAircraftDetailPanel() {
-  const panel = ensureAircraftDetailPanel();
-  panel.style.display = "none";
-  panel.innerHTML = "";
-  selectedAircraftTargetKey = null;
-}
-
-function updateAircraftDetailPanelIfSelected(target, ac) {
-  if (selectedAircraftTargetKey !== target.key) return;
-  showAircraftDetailPanel(target, ac);
-}
-
-/* ------------------ AIRCRAFT SIZE ------------------ */
-
-function getAircraftIconSize(typeCodeRaw) {
-  const typeCode = String(typeCodeRaw || "").toUpperCase().trim();
-
-  if (!typeCode) return 36;
-
-  if (
-    typeCode.startsWith("A388") ||
-    typeCode.startsWith("A380") ||
-    typeCode.startsWith("B748") ||
-    typeCode.startsWith("B744")
-  ) {
-    return 46;
-  }
-
-  if (
-    typeCode.startsWith("B77") ||
-    typeCode.startsWith("B78") ||
-    typeCode.startsWith("A35") ||
-    typeCode.startsWith("A33") ||
-    typeCode.startsWith("A34") ||
-    typeCode.startsWith("B76")
-  ) {
-    return 42;
-  }
-
-  if (
-    typeCode.startsWith("A32") ||
-    typeCode.startsWith("B73") ||
-    typeCode.startsWith("B38") ||
-    typeCode.startsWith("E19") ||
-    typeCode.startsWith("E17") ||
-    typeCode.startsWith("CRJ")
-  ) {
-    return 36;
-  }
-
-  if (
-    typeCode.startsWith("C17") ||
-    typeCode.startsWith("C18") ||
-    typeCode.startsWith("SR2") ||
-    typeCode.startsWith("PC12") ||
-    typeCode.startsWith("BE2") ||
-    typeCode.startsWith("LJ")
-  ) {
-    return 28;
-  }
-
-  return 34;
-}
-
-/* ------------------ AIRCRAFT ICON ------------------ */
-
-function buildAircraftIcon(trackDeg = 0, color = "#ff8800", sizePx = 36) {
-  const svgSize = Math.max(24, sizePx - 4);
-  const hitSize = Math.max(sizePx, 52);
-  const anchor = Math.round(hitSize / 2);
-
-  return L.divIcon({
-    className: "aircraft-div-icon",
-    html: `
-      <div style="
-        width:${hitSize}px;
-        height:${hitSize}px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        transform:rotate(${trackDeg}deg);
-        transform-origin:center center;
-        touch-action:none;
-      ">
-        <svg width="${svgSize}" height="${svgSize}" viewBox="0 0 100 100">
-          <g
-            fill="${escapeHtml(color)}"
-            stroke="black"
-            stroke-width="3"
-            stroke-linejoin="round"
-          >
-            <path d="
-              M50 2
-              L56 26
-              L88 36
-              L88 44
-              L56 42
-              L54 70
-              L68 82
-              L64 86
-              L50 76
-              L36 86
-              L32 82
-              L46 70
-              L44 42
-              L12 44
-              L12 36
-              L44 26
-              Z
-            "/>
-          </g>
-        </svg>
-      </div>
-    `,
-    iconSize: [hitSize, hitSize],
-    iconAnchor: [anchor, anchor]
-  });
-}
-
-function bindAircraftMarkerEvents(marker, target, getAircraft) {
-  const openPanel = (e) => {
-    if (e?.originalEvent?.preventDefault) e.originalEvent.preventDefault();
-    if (e?.originalEvent?.stopPropagation) e.originalEvent.stopPropagation();
-
-    suppressNextMapClose = true;
-    const ac = getAircraft();
-    if (ac) showAircraftDetailPanel(target, ac);
-
-    setTimeout(() => {
-      suppressNextMapClose = false;
-    }, 250);
-  };
-
-  marker.on("click", openPanel);
-  marker.on("touchstart", openPanel);
-}
-
-/* ------------------ FOLLOW / CONTROL BUTTONS ------------------ */
-
-function applyControlButtonStyle(btn) {
-  btn.style.height = "28px";
-  btn.style.border = "1px solid rgba(0,0,0,0.18)";
-  btn.style.borderRadius = "8px";
-  btn.style.background = "rgba(255,255,255,0.94)";
-  btn.style.color = "#111";
-  btn.style.fontSize = "11px";
-  btn.style.fontWeight = "700";
-  btn.style.cursor = "pointer";
-  btn.style.boxShadow = "0 1px 4px rgba(0,0,0,0.14)";
-  btn.style.backdropFilter = "blur(3px)";
-  btn.style.padding = "0 8px";
-  btn.style.whiteSpace = "nowrap";
-}
-
-function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
-  applyControlButtonStyle(btn);
-  btn.style.width = "auto";
-  btn.style.minWidth = "104px";
-  btn.style.maxWidth = "168px";
-  btn.style.display = "flex";
-  btn.style.alignItems = "center";
-  btn.style.justifyContent = "flex-start";
-  btn.style.gap = "6px";
-  btn.style.textAlign = "left";
-  btn.style.opacity = isLive ? "1" : "0.42";
-  btn.style.filter = isLive ? "none" : "grayscale(35%)";
-  btn.style.border = isActive
-    ? `2px solid ${color}`
-    : "1px solid rgba(0,0,0,0.18)";
-  btn.style.boxShadow = isActive
-    ? `0 0 0 1px ${color}33, 0 1px 4px rgba(0,0,0,0.14)`
-    : "0 1px 4px rgba(0,0,0,0.14)";
-}
-
-function buildAircraftButtonInnerHtml(label, color) {
-  return `
-    <span style="
-      width:8px;
-      height:8px;
-      min-width:8px;
-      border-radius:999px;
-      background:${escapeHtml(color)};
-      border:1px solid rgba(0,0,0,0.35);
-      display:inline-block;
-    "></span>
-    <span style="
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-      max-width:136px;
-      display:inline-block;
-      font-size:11px;
-      ${label.startsWith("HEX:") ? "font-family:Consolas, Monaco, monospace;" : ""}
-    ">${escapeHtml(label)}</span>
-  `;
-}
-
-function focusAllAircraft() {
-  activeFollowTargetKey = null;
-  refreshAircraftFollowButtons();
-
-  const points = [];
-
-  for (const state of aircraftStates.values()) {
-    if (state.lastLatLng) points.push(state.lastLatLng);
-  }
-
-  if (points.length === 0) return;
-
-  if (points.length === 1) {
-    const targetZoom = Math.min(map.getZoom(), AIRCRAFT_FOCUS_ZOOM_MAX);
-    map.flyTo(points[0], targetZoom, {
-      animate: true,
-      duration: 0.8
+  if (extraRows && extraRows.length) {
+    html += `<div class="popup-section"><table>`;
+    extraRows.forEach(row => {
+      html += `<tr><td>${escapeHtml(row.key)}</td><td>${row.value}</td></tr>`;
     });
-    return;
+    html += `</table></div>`;
   }
 
-  const bounds = L.latLngBounds(points);
-  map.flyToBounds(bounds, {
-    padding: [40, 40],
-    maxZoom: AIRCRAFT_FOCUS_ZOOM_MAX,
-    animate: true,
-    duration: 0.8
-  });
+  html += `</div>`;
+  return html;
 }
 
-function focusAircraftTarget(targetKey, enableFollow = true) {
-  const state = aircraftStates.get(targetKey);
-  if (!state) return;
-
-  activeFollowTargetKey = enableFollow ? targetKey : null;
-  refreshAircraftFollowButtons();
-
-  if (!state.lastLatLng) return;
-
-  const targetZoom = Math.max(map.getZoom(), FOLLOW_AIRCRAFT_ZOOM_MIN);
-  map.flyTo(state.lastLatLng, targetZoom, {
-    animate: true,
-    duration: 0.8
-  });
+function textOfFirst(parent, tagName) {
+  const node = parent.getElementsByTagName(tagName)[0];
+  return node ? node.textContent.trim() : "";
 }
 
-function refreshAircraftFollowButtons() {
-  const list = document.getElementById("aircraft-follow-list");
-  if (!list) return;
-
-  list.innerHTML = "";
-
-  TARGETS.forEach(target => {
-    const state = aircraftStates.get(target.key);
-    if (!state) return;
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-
-    const label = getAircraftButtonLabel(state.lastAircraft, target);
-    const isActive = activeFollowTargetKey === target.key;
-    const isLive = !!state.isLive;
-
-    applyAircraftFollowButtonStyle(btn, state.color, isActive, isLive);
-    btn.innerHTML = buildAircraftButtonInnerHtml(label, state.color);
-    btn.title = isLive ? label : `${label} (NOT LIVE)`;
-
-    btn.onclick = () => {
-      const latestState = aircraftStates.get(target.key);
-      if (!latestState) return;
-
-      if (latestState.lastAircraft) {
-        showAircraftDetailPanel(target, latestState.lastAircraft);
-      }
-
-      focusAircraftTarget(target.key, true);
-    };
-
-    state.buttonEl = btn;
-    list.appendChild(btn);
-  });
+function getDirectChild(parent, tagName) {
+  for (const node of parent.children || []) {
+    if (node.tagName === tagName) return node;
+  }
+  return null;
 }
 
-function createToggleButton() {
-  if (!document.getElementById("custom-gps-control")) {
-    const gpsWrap = document.createElement("div");
-    gpsWrap.id = "custom-gps-control";
-    gpsWrap.style.position = "fixed";
-    gpsWrap.style.top = "10px";
-    gpsWrap.style.left = "10px";
-    gpsWrap.style.zIndex = "99999";
+/* -----------------------------
+   KML color = aabbggrr
+----------------------------- */
 
-    const gpsBtn = document.createElement("button");
-    gpsBtn.id = "focus-gps-btn";
-    gpsBtn.type = "button";
-    gpsBtn.textContent = "GPS";
-    gpsBtn.style.width = "104px";
-    applyControlButtonStyle(gpsBtn);
-    gpsBtn.onclick = async () => {
-      activeFollowTargetKey = null;
-      refreshAircraftFollowButtons();
-      hideAircraftDetailPanel();
-
-      await startDeviceCompass();
-
-      if (!lastUserLatLng) return;
-
-      const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
-
-      map.flyTo(lastUserLatLng, targetZoom, {
-        animate: true,
-        duration: 0.8
-      });
-    };
-
-    gpsWrap.appendChild(gpsBtn);
-    document.body.appendChild(gpsWrap);
+function kmlColorToCss(kmlColor, fallbackColor, fallbackOpacity) {
+  if (!kmlColor || typeof kmlColor !== "string") {
+    return { color: fallbackColor, opacity: fallbackOpacity };
   }
 
-  let wrap = document.getElementById("custom-follow-controls");
-  if (wrap) return;
-
-  wrap = document.createElement("div");
-  wrap.id = "custom-follow-controls";
-  wrap.style.position = "fixed";
-  wrap.style.left = "8px";
-  wrap.style.bottom = "14px";
-  wrap.style.zIndex = "99999";
-  wrap.style.display = "flex";
-  wrap.style.flexDirection = "column";
-  wrap.style.gap = "6px";
-  wrap.style.maxWidth = "calc(100vw - 16px)";
-
-  const acBtn = document.createElement("button");
-  acBtn.id = "focus-aircraft-btn";
-  acBtn.type = "button";
-  acBtn.textContent = "AC ALL";
-  acBtn.style.width = "104px";
-  applyControlButtonStyle(acBtn);
-  acBtn.onclick = () => {
-    hideAircraftDetailPanel();
-    focusAllAircraft();
-  };
-
-  const aircraftList = document.createElement("div");
-  aircraftList.id = "aircraft-follow-list";
-  aircraftList.style.display = "grid";
-  aircraftList.style.gridTemplateColumns = "repeat(3, max-content)";
-  aircraftList.style.gridAutoRows = "max-content";
-  aircraftList.style.gap = "6px";
-  aircraftList.style.alignItems = "start";
-  aircraftList.style.justifyContent = "start";
-  aircraftList.style.maxWidth = "calc(100vw - 16px)";
-
-  wrap.appendChild(acBtn);
-  wrap.appendChild(aircraftList);
-  document.body.appendChild(wrap);
-
-  ensureAircraftDetailPanel();
-  refreshAircraftFollowButtons();
-}
-
-function syncFollowView(target) {
-  if (activeFollowTargetKey !== target.key) return;
-
-  const state = aircraftStates.get(target.key);
-  if (!state || !state.lastLatLng) return;
-
-  const targetZoom = Math.max(map.getZoom(), FOLLOW_AIRCRAFT_ZOOM_MIN);
-  map.flyTo(state.lastLatLng, targetZoom, {
-    animate: true,
-    duration: 0.8
-  });
-}
-
-/* ------------------ AIRCRAFT DRAW ------------------ */
-
-function ensureAircraftMarker(target, ac) {
-  const state = aircraftStates.get(target.key);
-  if (!state) return;
-
-  const lat = Number(ac.lat);
-  const lon = Number(ac.lon);
-  const track = Number(ac.track || ac.true_heading || ac.mag_heading || 0);
-
-  if (isNaN(lat) || isNaN(lon)) return;
-
-  const newLatLng = [lat, lon];
-  state.lastLatLng = newLatLng;
-
-  const typeCode = ac.t || ac.type || "";
-  const sizePx = getAircraftIconSize(typeCode);
-  const icon = buildAircraftIcon(track, state.color, sizePx);
-  const labelHtml = formatAircraftLabelHtml(ac, state.color);
-
-  if (!state.marker) {
-    state.marker = L.marker(newLatLng, {
-      icon,
-      zIndexOffset: 1000
-    }).addTo(map);
-
-    state.marker.bindTooltip(labelHtml, {
-      permanent: true,
-      direction: "top",
-      offset: [0, -12],
-      className: "aircraft-label-tooltip",
-      opacity: 1
-    });
-    state.tooltipBound = true;
-
-    bindAircraftMarkerEvents(state.marker, target, () => state.lastAircraft || ac);
-  } else {
-    state.marker.setLatLng(newLatLng);
-    state.marker.setIcon(icon);
-
-    if (state.tooltipBound && state.marker.getTooltip()) {
-      state.marker.setTooltipContent(labelHtml);
-    } else {
-      state.marker.bindTooltip(labelHtml, {
-        permanent: true,
-        direction: "top",
-        offset: [0, -12],
-        className: "aircraft-label-tooltip",
-        opacity: 1
-      });
-      state.tooltipBound = true;
-    }
+  const s = kmlColor.trim().replace("#", "");
+  if (s.length !== 8) {
+    return { color: fallbackColor, opacity: fallbackOpacity };
   }
 
-  updateAircraftDetailPanelIfSelected(target, ac);
-}
+  const aa = s.substring(0, 2);
+  const bb = s.substring(2, 4);
+  const gg = s.substring(4, 6);
+  const rr = s.substring(6, 8);
 
-function updateLiveTrail(target, ac) {
-  const state = aircraftStates.get(target.key);
-  if (!state) return;
+  const opacity = parseInt(aa, 16) / 255;
+  const color = "#" + rr + gg + bb;
 
-  const lat = Number(ac.lat);
-  const lon = Number(ac.lon);
-  if (isNaN(lat) || isNaN(lon)) return;
-
-  const point = [lat, lon];
-  const prev = state.liveTrail[state.liveTrail.length - 1];
-
-  if (prev) {
-    const dLat = Math.abs(prev[0] - point[0]);
-    const dLon = Math.abs(prev[1] - point[1]);
-    if (dLat < 0.00002 && dLon < 0.00002) return;
-  }
-
-  state.liveTrail.push(point);
-
-  if (state.liveTrail.length > MAX_LIVE_TRAIL_POINTS) {
-    state.liveTrail.shift();
-  }
-
-  if (!state.liveTrailLine) {
-    state.liveTrailLine = L.polyline(state.liveTrail, {
-      color: state.color,
-      weight: 3,
-      opacity: 0.7,
-      dashArray: "6,6",
-      smoothFactor: 1
-    }).addTo(map);
-  } else {
-    state.liveTrailLine.setLatLngs(state.liveTrail);
-  }
-}
-
-function updateAircraftForTarget(target, ac) {
-  const state = aircraftStates.get(target.key);
-  if (!state || !ac) return;
-
-  state.lastAircraft = ac;
-  ensureAircraftMarker(target, ac);
-  updateLiveTrail(target, ac);
-  refreshAircraftFollowButtons();
-  syncFollowView(target);
-}
-
-/* ------------------ AIRCRAFT ANIMATION ------------------ */
-
-function animateAircraftIfNeeded(target, prevAc, nextAc) {
-  const state = aircraftStates.get(target.key);
-  if (!state) return;
-
-  if (!state.marker || !prevAc || !nextAc) {
-    updateAircraftForTarget(target, nextAc);
-    return;
-  }
-
-  const fromLat = Number(prevAc.lat);
-  const fromLon = Number(prevAc.lon);
-  const toLat = Number(nextAc.lat);
-  const toLon = Number(nextAc.lon);
-
-  if ([fromLat, fromLon, toLat, toLon].some(v => isNaN(v))) {
-    updateAircraftForTarget(target, nextAc);
-    return;
-  }
-
-  if (state.animationFrameId) {
-    cancelAnimationFrame(state.animationFrameId);
-    state.animationFrameId = null;
-  }
-
-  const track = Number(nextAc.track || nextAc.true_heading || nextAc.mag_heading || 0);
-  const typeCode = nextAc.t || nextAc.type || "";
-  const sizePx = getAircraftIconSize(typeCode);
-  const icon = buildAircraftIcon(track, state.color, sizePx);
-  const labelHtml = formatAircraftLabelHtml(nextAc, state.color);
-
-  const start = performance.now();
-  const token = ++state.animationToken;
-
-  function step(now) {
-    if (token !== state.animationToken) return;
-
-    const t = Math.min(1, (now - start) / ANIMATION_DURATION_MS);
-    const lat = fromLat + (toLat - fromLat) * t;
-    const lon = fromLon + (toLon - fromLon) * t;
-
-    state.lastLatLng = [lat, lon];
-
-    if (!state.marker) {
-      state.marker = L.marker([lat, lon], {
-        icon,
-        zIndexOffset: 1000
-      }).addTo(map);
-
-      state.marker.bindTooltip(labelHtml, {
-        permanent: true,
-        direction: "top",
-        offset: [0, -12],
-        className: "aircraft-label-tooltip",
-        opacity: 1
-      });
-      state.tooltipBound = true;
-
-      bindAircraftMarkerEvents(state.marker, target, () => state.lastAircraft || nextAc);
-    } else {
-      state.marker.setLatLng([lat, lon]);
-      state.marker.setIcon(icon);
-
-      if (state.tooltipBound && state.marker.getTooltip()) {
-        state.marker.setTooltipContent(labelHtml);
-      }
-    }
-
-    updateAircraftDetailPanelIfSelected(target, nextAc);
-
-    if (t < 1) {
-      state.animationFrameId = requestAnimationFrame(step);
-    } else {
-      state.animationFrameId = null;
-      updateAircraftForTarget(target, nextAc);
-    }
-  }
-
-  state.animationFrameId = requestAnimationFrame(step);
-}
-
-/* ------------------ ADS-B FETCH (BATCH) ------------------ */
-
-async function fetchJson(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
-  }
-  return await res.json();
-}
-
-function indexAircraftList(aircraftList) {
-  const byHex = new Map();
-  const byReg = new Map();
-
-  for (const ac of aircraftList || []) {
-    const hex = normalizeHex(ac.hex);
-    const reg = normalizeReg(ac.r || ac.reg);
-
-    if (hex && !byHex.has(hex)) byHex.set(hex, ac);
-    if (reg && !byReg.has(reg)) byReg.set(reg, ac);
-  }
-
-  return { byHex, byReg };
-}
-
-async function fetchBatchAircraftData() {
-  const bases = lastGoodApiBase
-    ? [lastGoodApiBase, ...ADSB_API_BASES.filter(x => x !== lastGoodApiBase)]
-    : [...ADSB_API_BASES];
-
-  const regs = [...new Set(TARGETS.map(t => t.reg).filter(Boolean))];
-  const hexes = [...new Set(TARGETS.map(t => t.hex).filter(Boolean))];
-
-  let lastError = null;
-
-  for (const base of bases) {
-    try {
-      let aircraft = [];
-
-      if (hexes.length > 0) {
-        const url = `${base}/v2/hex/${encodeURIComponent(hexes.join(","))}`;
-        const data = await fetchJson(url);
-        if (Array.isArray(data.ac)) aircraft.push(...data.ac);
-      }
-
-      if (regs.length > 0) {
-        const url = `${base}/v2/reg/${encodeURIComponent(regs.join(","))}`;
-        const data = await fetchJson(url);
-        if (Array.isArray(data.ac)) aircraft.push(...data.ac);
-      }
-
-      lastGoodApiBase = base;
-      return aircraft;
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  throw lastError || new Error("Aircraft batch fetch failed");
-}
-
-async function pollAircraft() {
-  if (!TARGETS.length) return;
-
-  try {
-    const aircraft = await fetchBatchAircraftData();
-    const { byHex, byReg } = indexAircraftList(aircraft);
-
-    for (const target of TARGETS) {
-      const state = aircraftStates.get(target.key);
-      if (!state) continue;
-
-      let ac = null;
-
-      if (target.hex) ac = byHex.get(target.hex) || null;
-      if (!ac && target.reg) ac = byReg.get(target.reg) || null;
-
-      if (!ac) {
-        state.isLive = false;
-        continue;
-      }
-
-      state.isLive = true;
-
-      if (!state.lastAircraft) {
-        updateAircraftForTarget(target, ac);
-      } else {
-        animateAircraftIfNeeded(target, state.lastAircraft, ac);
-      }
-    }
-
-    refreshAircraftFollowButtons();
-  } catch (err) {
-    console.error("pollAircraft error:", err);
-
-    for (const target of TARGETS) {
-      const state = aircraftStates.get(target.key);
-      if (!state) continue;
-      state.isLive = false;
-    }
-
-    refreshAircraftFollowButtons();
-  }
-}
-
-/* ------------------ COMPASS / GPS ------------------ */
-
-function getHeadingArrowLatLng(baseLatLng, headingDeg) {
-  const lat = baseLatLng[0];
-  const lon = baseLatLng[1];
-
-  const distanceMeters = 7;
-  const rad = normalizeDeg(headingDeg) * Math.PI / 180;
-
-  const dLat = (distanceMeters * Math.cos(rad)) / 111320;
-  const dLon = (distanceMeters * Math.sin(rad)) / (111320 * Math.cos(lat * Math.PI / 180));
-
-  return [lat + dLat, lon + dLon];
-}
-
-function createHeadingArrowIcon(headingDeg) {
-  return L.divIcon({
-    className: "user-heading-arrow",
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-    html: `
-      <div style="
-        width:14px;
-        height:14px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        transform: rotate(${normalizeDeg(headingDeg)}deg);
-        transform-origin:center center;
-      ">
-        <div style="
-          width:0;
-          height:0;
-          border-left:4px solid transparent;
-          border-right:4px solid transparent;
-          border-bottom:10px solid red;
-          filter: drop-shadow(0 0 0.6px rgba(0,0,0,0.45));
-        "></div>
-      </div>
-    `
-  });
-}
-
-function updateCompassArrowFromOrientation() {
-  if (!lastUserLatLng) return;
-  if (deviceCompassHeading == null || isNaN(deviceCompassHeading)) return;
-
-  if (lastKnownSpeedKt != null && lastKnownSpeedKt > RUNNING_SPEED_MAX_KT) {
-    if (userHeadingMarker) {
-      map.removeLayer(userHeadingMarker);
-      userHeadingMarker = null;
-    }
-    return;
-  }
-
-  let nextHeading = deviceCompassHeading;
-
-  if (lastUserHeadingDeg != null) {
-    const diff = Math.abs(shortestAngleDiff(lastUserHeadingDeg, deviceCompassHeading));
-    if (diff < USER_HEADING_CHANGE_MIN_DEG) {
-      nextHeading = lastUserHeadingDeg;
-    } else {
-      nextHeading = smoothHeading(
-        lastUserHeadingDeg,
-        deviceCompassHeading,
-        COMPASS_HEADING_SMOOTHING
-      );
-    }
-  }
-
-  lastUserHeadingDeg = nextHeading;
-
-  const arrowLatLng = getHeadingArrowLatLng(lastUserLatLng, nextHeading);
-  const icon = createHeadingArrowIcon(nextHeading);
-
-  if (!userHeadingMarker) {
-    userHeadingMarker = L.marker(arrowLatLng, {
-      icon,
-      zIndexOffset: 1100,
-      interactive: false
-    }).addTo(map);
-  } else {
-    userHeadingMarker.setLatLng(arrowLatLng);
-    userHeadingMarker.setIcon(icon);
-  }
-}
-
-function handleDeviceOrientation(event) {
-  let heading = null;
-
-  if (typeof event.webkitCompassHeading === "number") {
-    heading = event.webkitCompassHeading;
-  } else if (event.absolute === true && typeof event.alpha === "number") {
-    heading = 360 - event.alpha;
-  } else if (typeof event.alpha === "number") {
-    heading = 360 - event.alpha;
-  }
-
-  if (heading != null && !isNaN(heading)) {
-    deviceCompassHeading = normalizeDeg(heading);
-    updateCompassArrowFromOrientation();
-  }
-}
-
-async function startDeviceCompass() {
-  if (compassStarted) return;
-
-  try {
-    if (
-      typeof DeviceOrientationEvent !== "undefined" &&
-      typeof DeviceOrientationEvent.requestPermission === "function"
-    ) {
-      const permission = await DeviceOrientationEvent.requestPermission();
-      if (permission !== "granted") {
-        return;
-      }
-    }
-
-    window.addEventListener("deviceorientationabsolute", handleDeviceOrientation, true);
-    window.addEventListener("deviceorientation", handleDeviceOrientation, true);
-    compassStarted = true;
-  } catch (err) {
-    console.error("Compass start failed:", err);
-  }
-}
-
-/* ------------------ USER TRAIL HELPERS ------------------ */
-
-function createSolidTrailLine(initialPoint) {
-  const line = L.polyline([[initialPoint.lat, initialPoint.lng]], {
-    weight: 2.5,
-    opacity: 0.5,
-    color: "#2b8cff"
-  }).addTo(map);
-
-  userTrailSolidLines.push(line);
-  return line;
-}
-
-function createDashedTrailLine(fromPoint, toPoint) {
-  const line = L.polyline(
-    [
-      [fromPoint.lat, fromPoint.lng],
-      [toPoint.lat, toPoint.lng]
-    ],
-    {
-      weight: 2.5,
-      opacity: 0.35,
-      color: "#2b8cff",
-      dashArray: "4,8"
-    }
-  ).addTo(map);
-
-  userTrailDashedLines.push(line);
-  userTrailDashedSegments.push([clonePoint(fromPoint), clonePoint(toPoint)]);
-}
-
-function trimOldestSolidTrailData() {
-  let totalSolidPoints = userTrailSolidSegments.reduce((sum, seg) => sum + seg.length, 0);
-
-  while (totalSolidPoints > MAX_USER_TRAIL_POINTS && userTrailSolidSegments.length > 0) {
-    const firstSeg = userTrailSolidSegments[0];
-    const firstLine = userTrailSolidLines[0];
-
-    if (!firstSeg || !firstLine) break;
-
-    if (firstSeg.length <= 2) {
-      if (map.hasLayer(firstLine)) map.removeLayer(firstLine);
-      userTrailSolidSegments.shift();
-      userTrailSolidLines.shift();
-      totalSolidPoints -= firstSeg.length;
-      continue;
-    }
-
-    firstSeg.shift();
-    firstLine.setLatLngs(firstSeg.map(p => [p.lat, p.lng]));
-    totalSolidPoints -= 1;
-  }
-}
-
-function trimOldestDashedTrailData() {
-  const maxDashedSegments = Math.max(20, Math.floor(MAX_USER_TRAIL_POINTS / 10));
-
-  while (userTrailDashedSegments.length > maxDashedSegments && userTrailDashedLines.length > 0) {
-    const firstLine = userTrailDashedLines.shift();
-    userTrailDashedSegments.shift();
-    if (map.hasLayer(firstLine)) map.removeLayer(firstLine);
-  }
-}
-
-function trimUserTrailData() {
-  trimOldestSolidTrailData();
-  trimOldestDashedTrailData();
-}
-
-function rememberAcceptedPoint(point) {
-  recentAcceptedUserPoints.push(clonePoint(point));
-  if (recentAcceptedUserPoints.length > USER_TRAIL_SMOOTHING_WINDOW) {
-    recentAcceptedUserPoints.shift();
-  }
-}
-
-function getReferencePointForValidation() {
-  if (recentAcceptedUserPoints.length === 0) return lastAcceptedUserPoint;
-  if (recentAcceptedUserPoints.length === 1) return recentAcceptedUserPoints[0];
-
-  const avg = averagePoint(recentAcceptedUserPoints);
   return {
-    lat: avg.lat,
-    lng: avg.lng,
-    accuracy: recentAcceptedUserPoints[recentAcceptedUserPoints.length - 1].accuracy,
-    time: recentAcceptedUserPoints[recentAcceptedUserPoints.length - 1].time
+    color,
+    opacity: isNaN(opacity) ? fallbackOpacity : opacity
   };
 }
 
-function getDynamicJumpAllowance(nextAccuracy) {
-  const acc = Number(nextAccuracy) || 0;
-  return Math.max(60, acc * 1.5);
+function getLabelStyle(featureStyle) {
+  const base = kmlColorToCss(featureStyle?.labelColor, "#00ff00", 1);
+  const scale = Number(featureStyle?.labelScale || 1);
+
+  return {
+    color: base.color || "#00ff00",
+    opacity: isFinite(base.opacity) ? base.opacity : 1,
+    scale: isFinite(scale) && scale > 0 ? scale : 1
+  };
 }
 
-function isReliableUserTrailPoint(prevPoint, nextPoint) {
-  if (!nextPoint) return false;
+function getIconStyle(featureStyle) {
+  const rawColor =
+    featureStyle?.iconColor ||
+    featureStyle?.lineColor ||
+    featureStyle?.labelColor ||
+    "#ffff00";
 
-  const nextAccuracy = Number(nextPoint.accuracy) || 0;
+  const base = kmlColorToCss(rawColor, "#ffff00", 1);
+  const scale = Number(featureStyle?.iconScale || 1);
 
-  if (nextAccuracy > USER_TRAIL_MAX_ACCURACY_M) {
-    return false;
+  return {
+    color: base.color || "#ffff00",
+    opacity: isFinite(base.opacity) ? base.opacity : 1,
+    scale: isFinite(scale) && scale > 0 ? scale : 1,
+    href: featureStyle?.iconHref || ""
+  };
+}
+
+/* -----------------------------
+   영공 라벨 판별
+----------------------------- */
+
+function normalizeCountryName(name) {
+  return String(name || "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractCountryFromPlacemarkName(name) {
+  const cleaned = normalizeCountryName(name);
+  if (!cleaned) return "";
+
+  const match = cleaned.match(/^(.+?)\s*\(/);
+  if (match) return normalizeCountryName(match[1]);
+
+  return cleaned;
+}
+
+function hasParenthesesName(name) {
+  return /\(.*\)/.test(String(name || ""));
+}
+
+function isAirspaceLabelFeature(feature) {
+  const rawName = String(feature?.name || "").trim();
+  if (!rawName) return false;
+  if (!hasParenthesesName(rawName)) return false;
+
+  const country = extractCountryFromPlacemarkName(rawName);
+  if (!country) return false;
+
+  return AIRSPACE_COUNTRIES.has(country);
+}
+
+function getPermitStatus(feature) {
+  const desc = String(feature?.description || "").toLowerCase();
+  const extra = (feature?.extraRows || [])
+    .map(r => `${r.key || ""} ${r.value || ""}`.toLowerCase())
+    .join(" ");
+
+  const all = `${desc} ${extra}`;
+
+  if (all.includes("not required")) return "not_required";
+  if (all.includes("required")) return "required";
+  return "unknown";
+}
+
+function getAirspaceLabelColor(feature, fallbackColor) {
+  const permit = getPermitStatus(feature);
+
+  if (permit === "not_required") return "#00ff00";
+  if (permit === "required") return "#ff0000";
+
+  return fallbackColor || "#00ff00";
+}
+
+/* -----------------------------
+   antimeridian split
+----------------------------- */
+
+function splitPacificSegments(latlngs) {
+  if (!latlngs || latlngs.length < 2) return [latlngs];
+
+  const segments = [];
+  let current = [latlngs[0]];
+
+  for (let i = 1; i < latlngs.length; i++) {
+    const p1 = latlngs[i - 1];
+    const p2 = latlngs[i];
+
+    const lat1 = p1[0], lon1 = p1[1];
+    const lat2 = p2[0], lon2 = p2[1];
+
+    const diff = lon2 - lon1;
+
+    if (Math.abs(diff) > 180) {
+      const targetLon1 = diff > 0 ? 0 : 360;
+      const adjustedLon2 = diff > 0 ? lon2 - 360 : lon2 + 360;
+      const t = (targetLon1 - lon1) / (adjustedLon2 - lon1);
+      const crossingLat = lat1 + (lat2 - lat1) * t;
+
+      current.push([crossingLat, targetLon1]);
+      segments.push(current);
+
+      const targetLon2 = targetLon1 === 0 ? 360 : 0;
+      current = [[crossingLat, targetLon2], [lat2, lon2]];
+    } else {
+      current.push([lat2, lon2]);
+    }
   }
 
-  if (nextAccuracy > USER_TRAIL_BASE_MAX_ACCURACY_M && !prevPoint) {
-    return false;
+  if (current.length > 0) segments.push(current);
+  return segments;
+}
+
+/* -----------------------------
+   endpoint helpers
+----------------------------- */
+
+function compressConsecutiveByName(features) {
+  const result = [];
+  for (const f of features) {
+    if (!result.length || result[result.length - 1].name !== f.name) {
+      result.push(f);
+    }
   }
+  return result;
+}
 
-  if (!prevPoint) return true;
-
-  const dist = metersBetweenLatLng(
-    prevPoint.lat, prevPoint.lng,
-    nextPoint.lat, nextPoint.lng
+function getRouteEndpoints(pointFeatures) {
+  const endpointCandidates = compressConsecutiveByName(
+    pointFeatures.filter(f => !isAirspaceLabelFeature(f))
   );
 
-  const dt = (nextPoint.time - prevPoint.time) / 1000;
-  if (dt <= 0) return false;
+  if (endpointCandidates.length >= 2) {
+    const depFeature = endpointCandidates[0];
+    const destFeature = endpointCandidates[endpointCandidates.length - 1];
 
-  const speedMps = dist / dt;
-
-  if (dist < USER_TRAIL_MIN_MOVE_M) {
-    return null;
+    return {
+      departureFeature: depFeature,
+      destinationFeature: destFeature,
+      departureCoord: depFeature.coords,
+      destinationCoord: destFeature.coords
+    };
   }
 
-  const dynamicJumpAllowance = getDynamicJumpAllowance(nextAccuracy);
+  return {
+    departureFeature: null,
+    destinationFeature: null,
+    departureCoord: null,
+    destinationCoord: null
+  };
+}
 
-  if (dt <= USER_TRAIL_JUMP_MAX_TIME_S && dist > dynamicJumpAllowance) {
-    return false;
-  }
+function isEndpointPointFeature(feature, routeEndpoints) {
+  return (
+    feature === routeEndpoints?.departureFeature ||
+    feature === routeEndpoints?.destinationFeature
+  );
+}
 
-  if (speedMps > USER_TRAIL_MAX_SPEED_MPS) {
-    return false;
-  }
-
-  if (nextAccuracy > USER_TRAIL_BASE_MAX_ACCURACY_M && dist > nextAccuracy) {
-    return false;
-  }
-
+function isWaypointLabelFeature(feature) {
+  if (!feature || feature.type !== "Point") return false;
+  if (isAirspaceLabelFeature(feature)) return false;
+  if (!feature.name || !String(feature.name).trim()) return false;
   return true;
 }
 
-function shouldCreateDashedReconnect(fromPoint, toPoint) {
-  if (!fromPoint || !toPoint) return false;
+/* -----------------------------
+   icon52.png / triangle
+----------------------------- */
 
-  const dist = metersBetweenLatLng(
-    fromPoint.lat, fromPoint.lng,
-    toPoint.lat, toPoint.lng
-  );
+function isIcon52ShapePoint(feature) {
+  if (!feature || feature.type !== "Point") return false;
+  if (isAirspaceLabelFeature(feature)) return false;
 
-  const dt = (toPoint.time - fromPoint.time) / 1000;
-  if (dt <= 0) return false;
+  const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
+  const name = String(feature?.name || "").trim();
 
-  return dist <= USER_TRAIL_DASH_MAX_DIST_M && dt <= USER_TRAIL_DASH_MAX_TIME_S;
+  if (!name) return false;
+
+  return iconHref.includes("icon52.png");
 }
 
-function getSmoothedAcceptedPoint(candidatePoint) {
-  const windowPoints = recentAcceptedUserPoints.slice(-(USER_TRAIL_SMOOTHING_WINDOW - 1));
-  const points = [...windowPoints, candidatePoint];
+function isTriangleShapePoint(feature) {
+  if (!feature || feature.type !== "Point") return false;
+  if (isAirspaceLabelFeature(feature)) return false;
 
-  if (points.length < 2) {
-    return clonePoint(candidatePoint);
+  const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
+  const name = String(feature?.name || "").trim();
+
+  if (!name) return false;
+
+  const triangleIcon =
+    iconHref.includes("icon52.png") ||
+    iconHref.includes("triangle") ||
+    iconHref.includes("trk") ||
+    iconHref.includes("track") ||
+    iconHref.includes("placemark_triangle") ||
+    iconHref.includes("shape_triangle");
+
+  return triangleIcon;
+}
+
+function isAlwaysVisibleShapePointLabel(feature) {
+  return isIcon52ShapePoint(feature) || isTriangleShapePoint(feature);
+}
+
+function bindPermanentPointLabel(layer, feature) {
+  if (!layer || !feature || !feature.name) return;
+
+  const cleanedName = cleanLabelText(feature.name);
+  if (!cleanedName) return;
+
+  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
+
+  layer.bindTooltip(labelHtml, {
+    permanent: true,
+    direction: "right",
+    offset: [8, 0],
+    className: "waypoint-label",
+    opacity: 1
+  });
+
+  if (layer.openTooltip) {
+    layer.openTooltip();
+  }
+}
+
+function bindPermanentHorizontalTriangleLabel(layer, feature) {
+  if (!layer || !feature || !feature.name) return;
+
+  const cleanedName = cleanLabelText(feature.name);
+  if (!cleanedName) return;
+
+  const labelHtml = `<span class="triangle-label-text">${escapeHtml(cleanedName)}</span>`;
+
+  layer.bindTooltip(labelHtml, {
+    permanent: true,
+    direction: "right",
+    offset: [8, 0],
+    className: "triangle-label",
+    opacity: 1
+  });
+
+  if (layer.openTooltip) {
+    layer.openTooltip();
+  }
+}
+
+function bindWaypointZoomLabel(layer, feature) {
+  if (!layer || !feature || !feature.name) return;
+  if (!isWaypointLabelFeature(feature)) return;
+
+  const cleanedName = cleanLabelText(feature.name);
+  if (!cleanedName) return;
+
+  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
+  let labelBound = false;
+
+  function updateLabel() {
+    const zoom = map.getZoom();
+
+    if (zoom >= 5) {
+      if (!labelBound) {
+        layer.bindTooltip(labelHtml, {
+          permanent: true,
+          direction: "bottom",
+          offset: [-20, 10],
+          className: "waypoint-label",
+          opacity: 1
+        });
+
+        labelBound = true;
+      }
+
+      if (layer.openTooltip) {
+        layer.openTooltip();
+      }
+    } else {
+      if (labelBound && layer.unbindTooltip) {
+        layer.unbindTooltip();
+        labelBound = false;
+      }
+    }
   }
 
-  const avg = averagePoint(points);
+  map.on("zoomend", updateLabel);
+  updateLabel();
+}
+
+/* -----------------------------
+   GPX
+----------------------------- */
+
+function parseGPX(text) {
+  const xml = parseXml(text);
+  const pts = [...xml.getElementsByTagName("rtept")];
+
+  return pts.map(p => {
+    const lat = parseFloat(p.getAttribute("lat"));
+    const lon = parseFloat(p.getAttribute("lon"));
+    const nameNode = p.getElementsByTagName("name")[0];
+    const descNode = p.getElementsByTagName("desc")[0];
+    const cmtNode = p.getElementsByTagName("cmt")[0];
+
+    return {
+      lat,
+      lon,
+      name: nameNode ? nameNode.textContent.trim() : "",
+      description: descNode ? escapeHtml(descNode.textContent.trim()) : "",
+      comment: cmtNode ? escapeHtml(cmtNode.textContent.trim()) : ""
+    };
+  }).filter(p => !isBadCoord(p.lat, p.lon));
+}
+
+function drawWaypointMarker(lat, lon, popupHtml, index, total) {
+  const latlng = [lat, normalizePacificLon(lon)];
+
+  let iconColor = "#ffff00";
+  if (index === 0) iconColor = "#00aa00";
+  if (index === total - 1) iconColor = "#0000ff";
+
+  const marker = L.circleMarker(latlng, {
+    radius: 5,
+    color: "#222",
+    weight: 1,
+    fillColor: iconColor,
+    fillOpacity: 1
+  }).addTo(map);
+
+  marker.bindPopup(popupHtml, POPUP_OPTIONS);
+
+  if (popupHtml) {
+    bindWaypointZoomLabel(marker, {
+      type: "Point",
+      name: "",
+      description: ""
+    });
+  }
+
+  drawn.addLayer(marker);
+}
+
+function drawGPXRoute(points, sourceName) {
+  if (!points || points.length < 2) {
+    throw new Error("No valid route points in GPX");
+  }
+
+  const latlngs = points.map(p => [p.lat, normalizePacificLon(p.lon)]);
+  const segments = splitPacificSegments(latlngs);
+
+  segments.forEach(seg => {
+    const line = L.polyline(seg, {
+      color: "#FFD400",
+      weight: 5
+    }).addTo(map);
+    drawn.addLayer(line);
+  });
+
+  points.forEach((p, i) => {
+    const extraRows = [];
+    if (p.comment) extraRows.push({ key: "Comment", value: p.comment });
+
+    const popupHtml = buildPopupHtml(
+      p.name || "Waypoint",
+      p.description || "",
+      extraRows
+    );
+
+    const latlng = [p.lat, normalizePacificLon(p.lon)];
+
+    let iconColor = "#ffff00";
+    if (i === 0) iconColor = "#00aa00";
+    if (i === points.length - 1) iconColor = "#0000ff";
+
+    const marker = L.circleMarker(latlng, {
+      radius: 3,
+      color: "#222",
+      weight: 1,
+      fillColor: iconColor,
+      fillOpacity: 1
+    }).addTo(map);
+
+    marker.bindPopup(popupHtml, POPUP_OPTIONS);
+
+    bindWaypointZoomLabel(marker, {
+      type: "Point",
+      name: p.name || "",
+      description: p.description || ""
+    });
+
+    drawn.addLayer(marker);
+  });
+
+  fitDrawnBounds();
+  console.log("Flight Route Loaded:", sourceName, "GPX", points.length);
+}
+
+/* -----------------------------
+   KML helpers
+----------------------------- */
+
+function parseCoordinates(coordText) {
+  if (!coordText) return [];
+
+  return coordText
+    .trim()
+    .split(/\s+/)
+    .map(row => {
+      const parts = row.split(",");
+      const lon = parseFloat(parts[0]);
+      const lat = parseFloat(parts[1]);
+      const alt = parts.length > 2 ? parseFloat(parts[2]) : null;
+
+      return { lat, lon, alt };
+    })
+    .filter(p => !isBadCoord(p.lat, p.lon));
+}
+
+function parseStyleNode(styleNode) {
+  if (!styleNode) return {};
+
+  const lineStyleNode = styleNode.getElementsByTagName("LineStyle")[0];
+  const polyStyleNode = styleNode.getElementsByTagName("PolyStyle")[0];
+  const labelStyleNode = styleNode.getElementsByTagName("LabelStyle")[0];
+  const iconStyleNode = styleNode.getElementsByTagName("IconStyle")[0];
+
+  const style = {};
+
+  if (lineStyleNode) {
+    style.lineColor = textOfFirst(lineStyleNode, "color");
+    style.lineWidth = parseFloat(textOfFirst(lineStyleNode, "width")) || 3;
+  }
+
+  if (polyStyleNode) {
+    style.polyColor = textOfFirst(polyStyleNode, "color");
+    const fillText = textOfFirst(polyStyleNode, "fill");
+    const outlineText = textOfFirst(polyStyleNode, "outline");
+    style.fill = fillText === "" ? true : fillText !== "0";
+    style.outline = outlineText === "" ? true : outlineText !== "0";
+  }
+
+  if (labelStyleNode) {
+    style.labelColor = textOfFirst(labelStyleNode, "color");
+    style.labelScale = parseFloat(textOfFirst(labelStyleNode, "scale")) || 1;
+  }
+
+  if (iconStyleNode) {
+    style.iconColor = textOfFirst(iconStyleNode, "color");
+    style.iconScale = parseFloat(textOfFirst(iconStyleNode, "scale")) || 1;
+    const iconNode = iconStyleNode.getElementsByTagName("Icon")[0];
+    if (iconNode) {
+      style.iconHref = textOfFirst(iconNode, "href");
+    }
+  }
+
+  return style;
+}
+
+function mergeStyles(baseStyle, overrideStyle) {
   return {
-    lat: avg.lat,
-    lng: avg.lng,
-    accuracy: candidatePoint.accuracy,
-    time: candidatePoint.time
+    ...(baseStyle || {}),
+    ...(overrideStyle || {})
   };
 }
 
-function startNewSolidSegment(point) {
-  currentSolidSegment = [clonePoint(point)];
-  userTrailSolidSegments.push(currentSolidSegment);
-  currentSolidLine = createSolidTrailLine(point);
+function buildStyleIndex(xml) {
+  const styleMap = {};
+  const styleNodes = [...xml.getElementsByTagName("Style")];
+
+  styleNodes.forEach(styleNode => {
+    const id = styleNode.getAttribute("id");
+    if (!id) return;
+    styleMap["#" + id] = parseStyleNode(styleNode);
+  });
+
+  return styleMap;
 }
 
-function appendToCurrentSolidSegment(point) {
-  if (!currentSolidSegment || !currentSolidLine) {
-    startNewSolidSegment(point);
+function buildStyleMapIndex(xml) {
+  const styleMapIndex = {};
+  const styleMapNodes = [...xml.getElementsByTagName("StyleMap")];
+
+  styleMapNodes.forEach(node => {
+    const id = node.getAttribute("id");
+    if (!id) return;
+
+    const pairs = [...node.getElementsByTagName("Pair")];
+    let normalUrl = "";
+
+    pairs.forEach(pair => {
+      const key = textOfFirst(pair, "key");
+      const styleUrl = textOfFirst(pair, "styleUrl");
+      if (key === "normal" && styleUrl) {
+        normalUrl = styleUrl;
+      }
+    });
+
+    if (normalUrl) {
+      styleMapIndex["#" + id] = normalUrl;
+    }
+  });
+
+  return styleMapIndex;
+}
+
+function buildExtendedDataRows(placemark) {
+  const rows = [];
+
+  const simpleDatas = placemark.getElementsByTagName("SimpleData");
+  [...simpleDatas].forEach(node => {
+    const key = node.getAttribute("name") || "Data";
+    const value = escapeHtml(node.textContent || "");
+    if (value) rows.push({ key, value });
+  });
+
+  const datas = placemark.getElementsByTagName("Data");
+  [...datas].forEach(node => {
+    const key = node.getAttribute("name") || "Data";
+    const valueNode = node.getElementsByTagName("value")[0];
+    const value = valueNode ? escapeHtml(node.getElementsByTagName("value")[0].textContent || "") : "";
+    if (value) rows.push({ key, value });
+  });
+
+  return rows;
+}
+
+function extractKMLFeatures(text) {
+  const xml = parseXml(text);
+  const styleIndex = buildStyleIndex(xml);
+  const styleMapIndex = buildStyleMapIndex(xml);
+  const placemarks = [...xml.getElementsByTagName("Placemark")];
+
+  const features = [];
+
+  placemarks.forEach(pm => {
+    const name = textOfFirst(pm, "name");
+    const description = textOfFirst(pm, "description");
+
+    let styleUrl = textOfFirst(pm, "styleUrl");
+    if (styleMapIndex[styleUrl]) {
+      styleUrl = styleMapIndex[styleUrl];
+    }
+
+    const sharedStyle = styleIndex[styleUrl] || {};
+    const inlineStyleNode = getDirectChild(pm, "Style");
+    const inlineStyle = parseStyleNode(inlineStyleNode);
+    const style = mergeStyles(sharedStyle, inlineStyle);
+
+    const extraRows = buildExtendedDataRows(pm);
+
+    const pointNodes = pm.getElementsByTagName("Point");
+    const lineNodes = pm.getElementsByTagName("LineString");
+    const polyNodes = pm.getElementsByTagName("Polygon");
+
+    [...pointNodes].forEach(node => {
+      const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+      if (coords.length) {
+        features.push({
+          type: "Point",
+          name,
+          description,
+          extraRows,
+          style,
+          coords: coords[0]
+        });
+      }
+    });
+
+    [...lineNodes].forEach(node => {
+      const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+      if (coords.length >= 2) {
+        features.push({
+          type: "LineString",
+          name,
+          description,
+          extraRows,
+          style,
+          coords
+        });
+      }
+    });
+
+    [...polyNodes].forEach(node => {
+      const rings = [];
+
+      const outerNodes = [...node.getElementsByTagName("outerBoundaryIs")];
+      outerNodes.forEach(outer => {
+        const outerCoords = parseCoordinates(textOfFirst(outer, "coordinates"));
+        if (outerCoords.length >= 3) rings.push(outerCoords);
+      });
+
+      const innerNodes = [...node.getElementsByTagName("innerBoundaryIs")];
+      innerNodes.forEach(inner => {
+        const innerCoords = parseCoordinates(textOfFirst(inner, "coordinates"));
+        if (innerCoords.length >= 3) rings.push(innerCoords);
+      });
+
+      if (rings.length) {
+        features.push({
+          type: "Polygon",
+          name,
+          description,
+          extraRows,
+          style,
+          rings
+        });
+      }
+    });
+  });
+
+  return features;
+}
+
+/* -----------------------------
+   KML draw
+----------------------------- */
+
+function drawKMLPoint(feature) {
+  const popupHtml = buildPopupHtml(
+    feature.name || "Waypoint",
+    feature.description || "",
+    feature.extraRows || []
+  );
+
+  const latlng = [feature.coords.lat, normalizePacificLon(feature.coords.lon)];
+  const labelStyle = getLabelStyle(feature.style);
+  const iconStyle = getIconStyle(feature.style);
+  const isAirspaceLabel = isAirspaceLabelFeature(feature);
+
+  if (isAirspaceLabel) {
+    const cleanedName = cleanLabelText(feature.name);
+    if (!cleanedName) return;
+
+    const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
+    const fontSize = Math.max(7, Math.round(9 * labelStyle.scale));
+
+    const labelHtml =
+      `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
+
+    const labelOnlyMarker = L.marker(latlng, {
+      opacity: 0,
+      keyboard: false
+    }).addTo(map);
+
+    labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
+
+    labelOnlyMarker.bindTooltip(labelHtml, {
+      permanent: true,
+      direction: "top",
+      offset: [0, 0],
+      className: "kml-label",
+      opacity: 1
+    });
+
+    drawn.addLayer(labelOnlyMarker);
     return;
   }
 
-  currentSolidSegment.push(clonePoint(point));
-  currentSolidLine.addLatLng([point.lat, point.lng]);
-}
+  if (iconStyle.href) {
+    const iconSize = Math.max(8, Math.round(9 * iconStyle.scale));
+    const customIcon = L.icon({
+      iconUrl: iconStyle.href,
+      iconSize: [iconSize, iconSize],
+      iconAnchor: [iconSize / 2, iconSize / 2],
+      popupAnchor: [0, -12]
+    });
 
-function serializeTrailState() {
-  try {
-    const solidSegments = userTrailSolidSegments
-      .map(seg => seg.map(clonePoint))
-      .filter(seg => seg.length > 0);
+    const marker = L.marker(latlng, {
+      icon: customIcon,
+      zIndexOffset: 2000
+    }).addTo(map);
 
-    const dashedSegments = userTrailDashedSegments
-      .map(seg => seg.map(clonePoint))
-      .filter(seg => seg.length >= 2)
-      .slice(-50);
+    marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
-    const allSolidPoints = solidSegments.flat();
-    const trimmedSolidSegments = [];
-
-    let remaining = USER_TRAIL_STORAGE_LIMIT;
-    for (let i = solidSegments.length - 1; i >= 0; i--) {
-      const seg = solidSegments[i];
-      if (remaining <= 0) break;
-
-      const takeSeg = seg.slice(-remaining);
-      trimmedSolidSegments.unshift(takeSeg);
-      remaining -= takeSeg.length;
+    if (isTriangleShapePoint(feature)) {
+      bindPermanentHorizontalTriangleLabel(marker, feature);
+    } else if (isIcon52ShapePoint(feature)) {
+      bindPermanentHorizontalTriangleLabel(marker, feature);
+    } else {
+      bindWaypointZoomLabel(marker, feature);
     }
 
-    const latestTime = allSolidPoints.length
-      ? allSolidPoints[allSolidPoints.length - 1].time
-      : Date.now();
+    drawn.addLayer(marker);
+    return;
+  }
 
-    const payload = {
-      savedAt: Date.now(),
-      latestPointTime: latestTime,
-      solidSegments: trimmedSolidSegments,
-      dashedSegments
-    };
+  const markerColor = iconStyle.color || "#ffff00";
+  const markerOpacity = iconStyle.opacity || 1;
+  const markerRadius = Math.max(4, 4 * iconStyle.scale);
 
-    localStorage.setItem(USER_TRAIL_STORAGE_KEY, JSON.stringify(payload));
-  } catch (err) {
-    console.warn("Trail state save failed:", err);
+  const marker = L.circleMarker(latlng, {
+    radius: markerRadius,
+    color: "#222",
+    weight: 1,
+    fillColor: markerColor,
+    fillOpacity: markerOpacity
+  }).addTo(map);
+
+  marker.bindPopup(popupHtml, POPUP_OPTIONS);
+
+  if (isAlwaysVisibleShapePointLabel(feature)) {
+    bindPermanentHorizontalTriangleLabel(marker, feature);
+  } else {
+    bindWaypointZoomLabel(marker, feature);
+  }
+
+  drawn.addLayer(marker);
+}
+
+function drawKMLLine(feature) {
+  const lineStyle = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
+  const weight = feature.style.lineWidth || 4;
+
+  const latlngs = feature.coords.map(c => [c.lat, normalizePacificLon(c.lon)]);
+  const segments = splitPacificSegments(latlngs);
+
+  segments.forEach(seg => {
+    const line = L.polyline(seg, {
+      color: lineStyle.color,
+      weight: weight,
+      opacity: lineStyle.opacity
+    }).addTo(map);
+
+    if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
+      const popupHtml = buildPopupHtml(
+        feature.name || "LineString",
+        feature.description || "",
+        feature.extraRows || []
+      );
+      line.bindPopup(popupHtml, POPUP_OPTIONS);
+    }
+
+    drawn.addLayer(line);
+  });
+}
+
+function drawKMLPolygon(feature) {
+  const lineStyle = kmlColorToCss(feature.style.lineColor, "#00aa55", 0.9);
+  const fillStyle = kmlColorToCss(feature.style.polyColor, "#00CC66", 0.3);
+
+  const rings = feature.rings.map(ring =>
+    ring.map(c => [c.lat, normalizePacificLon(c.lon)])
+  );
+
+  const polygon = L.polygon(rings, {
+    color: lineStyle.color,
+    opacity: feature.style.outline === false ? 0 : lineStyle.opacity,
+    weight: feature.style.outline === false ? 0 : (feature.style.lineWidth || 2),
+    fillColor: fillStyle.color,
+    fillOpacity: feature.style.fill === false ? 0 : fillStyle.opacity
+  }).addTo(map);
+
+  if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
+    const popupHtml = buildPopupHtml(
+      feature.name || "Polygon",
+      feature.description || "",
+      feature.extraRows || []
+    );
+    polygon.bindPopup(popupHtml, POPUP_OPTIONS);
+  }
+
+  drawn.addLayer(polygon);
+}
+
+function drawRouteEndpointMarkers(routeEndpoints) {
+  if (!routeEndpoints) return;
+
+  const depFeature = routeEndpoints.departureFeature;
+  const destFeature = routeEndpoints.destinationFeature;
+
+  if (destFeature?.coords) {
+    const destLatLng = [destFeature.coords.lat, normalizePacificLon(destFeature.coords.lon)];
+
+    const destinationIcon = L.icon({
+      iconUrl: "https://maps.google.com/mapfiles/kml/paddle/blu-circle.png",
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+      popupAnchor: [0, -10]
+    });
+
+    const destMarker = L.marker(destLatLng, {
+      icon: destinationIcon,
+      zIndexOffset: 1000
+    }).addTo(map);
+
+    destMarker.bindPopup(
+      buildPopupHtml(destFeature.name || "", destFeature.description || "", destFeature.extraRows || []),
+      POPUP_OPTIONS
+    );
+
+    drawn.addLayer(destMarker);
   }
 }
 
-function restoreTrailState() {
-  try {
-    const raw = localStorage.getItem(USER_TRAIL_STORAGE_KEY);
-    if (!raw) return;
+function drawKMLFeatures(features, sourceName) {
+  if (!features.length) {
+    throw new Error("No valid features in KML");
+  }
 
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return;
+  const pointFeatures = features.filter(f => f.type === "Point");
+  const lineFeatures = features.filter(f => f.type === "LineString");
+  const polygonFeatures = features.filter(f => f.type === "Polygon");
+  const routeEndpoints = getRouteEndpoints(pointFeatures);
 
-    const savedAt = Number(parsed.savedAt) || 0;
-    if (savedAt && Date.now() - savedAt > USER_TRAIL_STORAGE_MAX_AGE_MS) {
-      localStorage.removeItem(USER_TRAIL_STORAGE_KEY);
+  lineFeatures.forEach(drawKMLLine);
+  polygonFeatures.forEach(drawKMLPolygon);
+
+  let lastAirspaceLabelName = "";
+
+  pointFeatures.forEach(f => {
+    if (isEndpointPointFeature(f, routeEndpoints)) {
       return;
     }
 
-    const solidSegments = Array.isArray(parsed.solidSegments) ? parsed.solidSegments : [];
-    const dashedSegments = Array.isArray(parsed.dashedSegments) ? parsed.dashedSegments : [];
+    if (isAirspaceLabelFeature(f)) {
+      const currentName = String(f.name || "").trim();
 
-    for (const seg of solidSegments) {
-      if (!Array.isArray(seg) || seg.length === 0) continue;
+      if (currentName && currentName === lastAirspaceLabelName) {
+        return;
+      }
 
-      const clonedSeg = seg.map(clonePoint);
-      userTrailSolidSegments.push(clonedSeg);
-
-      const line = L.polyline(
-        clonedSeg.map(p => [p.lat, p.lng]),
-        {
-          weight: 2.5,
-          opacity: 0.5,
-          color: "#2b8cff"
-        }
-      ).addTo(map);
-
-      userTrailSolidLines.push(line);
+      lastAirspaceLabelName = currentName;
+      drawKMLPoint(f);
+      return;
     }
 
-    if (userTrailSolidSegments.length > 0) {
-      currentSolidSegment = userTrailSolidSegments[userTrailSolidSegments.length - 1];
-      currentSolidLine = userTrailSolidLines[userTrailSolidLines.length - 1];
+    lastAirspaceLabelName = "";
+    drawKMLPoint(f);
+  });
 
-      lastAcceptedUserPoint = clonePoint(currentSolidSegment[currentSolidSegment.length - 1]);
-      lastUserLatLng = [lastAcceptedUserPoint.lat, lastAcceptedUserPoint.lng];
+  drawRouteEndpointMarkers(routeEndpoints);
 
-      recentAcceptedUserPoints = currentSolidSegment
-        .slice(-USER_TRAIL_SMOOTHING_WINDOW)
-        .map(clonePoint);
+  fitDrawnBounds();
 
-      lastProcessedGpsTimestamp = lastAcceptedUserPoint.time || null;
+  console.log("Flight Route Loaded:", sourceName, "KML", {
+    points: pointFeatures.length,
+    lines: lineFeatures.length,
+    polygons: polygonFeatures.length,
+    departureName: routeEndpoints.departureFeature?.name || "",
+    destinationName: routeEndpoints.destinationFeature?.name || "",
+    departureCoord: routeEndpoints.departureCoord,
+    destinationCoord: routeEndpoints.destinationCoord
+  });
+}
+
+/* -----------------------------
+   load
+----------------------------- */
+
+async function loadByFilename(filename) {
+  const ext = getExtension(filename);
+  if (!ext) {
+    throw new Error("Only .gpx or .kml supported");
+  }
+
+  const text = await fetchTextFile(filename);
+
+  if (ext === "gpx") {
+    const points = parseGPX(text);
+    drawGPXRoute(points, filename);
+    return;
+  }
+
+  if (ext === "kml") {
+    const features = extractKMLFeatures(text);
+    drawKMLFeatures(features, filename);
+    return;
+  }
+}
+
+async function autoLoadDefault() {
+  try {
+    await loadByFilename("route.gpx");
+    return;
+  } catch (e1) {
+    try {
+      await loadByFilename("route.kml");
+      return;
+    } catch (e2) {
+      throw new Error("No default route.gpx or route.kml found");
     }
+  }
+}
 
-    for (const seg of dashedSegments) {
-      if (!Array.isArray(seg) || seg.length < 2) continue;
+async function init() {
+  try {
+    const requested = getRequestedFile();
 
-      const fromPoint = clonePoint(seg[0]);
-      const toPoint = clonePoint(seg[1]);
-
-      const line = L.polyline(
-        [
-          [fromPoint.lat, fromPoint.lng],
-          [toPoint.lat, toPoint.lng]
-        ],
-        {
-          weight: 2.5,
-          opacity: 0.35,
-          color: "#2b8cff",
-          dashArray: "4,8"
-        }
-      ).addTo(map);
-
-      userTrailDashedLines.push(line);
-      userTrailDashedSegments.push([fromPoint, toPoint]);
+    if (requested) {
+      await loadByFilename(requested);
+    } else {
+      await autoLoadDefault();
     }
-
-    trimUserTrailData();
   } catch (err) {
-    console.warn("Trail state restore failed:", err);
+    console.error(err);
+    alert("Error: " + (err.message || err));
   }
 }
 
-function appendUserTrailPoint(lat, lng, accuracy, timestamp) {
-  const rawPoint = {
-    lat,
-    lng,
-    accuracy: typeof accuracy === "number" ? accuracy : null,
-    time: timestamp || Date.now()
-  };
+init();
+</script>
+  <script src="aircraft.js?v=20260314_11"></script>
 
-  const validationBase = getReferencePointForValidation() || lastAcceptedUserPoint;
-  const reliability = isReliableUserTrailPoint(validationBase, rawPoint);
-
-  if (!lastAcceptedUserPoint && reliability === false) {
-    return;
-  }
-
-  if (!lastAcceptedUserPoint) {
-    startNewSolidSegment(rawPoint);
-    lastAcceptedUserPoint = clonePoint(rawPoint);
-    rememberAcceptedPoint(rawPoint);
-    trimUserTrailData();
-    serializeTrailState();
-    return;
-  }
-
-  if (reliability === null) {
-    return;
-  }
-
-  if (reliability === false) {
-    if (!pendingGapStartPoint) {
-      pendingGapStartPoint = clonePoint(lastAcceptedUserPoint);
-    }
-    return;
-  }
-
-  const smoothedPoint = getSmoothedAcceptedPoint(rawPoint);
-
-  if (pendingGapStartPoint) {
-    if (shouldCreateDashedReconnect(pendingGapStartPoint, smoothedPoint)) {
-      createDashedTrailLine(pendingGapStartPoint, smoothedPoint);
-    }
-
-    startNewSolidSegment(smoothedPoint);
-    pendingGapStartPoint = null;
-    lastAcceptedUserPoint = clonePoint(smoothedPoint);
-    rememberAcceptedPoint(smoothedPoint);
-
-    trimUserTrailData();
-    serializeTrailState();
-    return;
-  }
-
-  appendToCurrentSolidSegment(smoothedPoint);
-  lastAcceptedUserPoint = clonePoint(smoothedPoint);
-  rememberAcceptedPoint(smoothedPoint);
-
-  trimUserTrailData();
-  serializeTrailState();
-}
-
-function updateUserLocation(position) {
-  const lat = position.coords.latitude;
-  const lon = position.coords.longitude;
-  const accuracy = position.coords.accuracy || 0;
-  const speedKt = metersPerSecondToKnots(position.coords.speed);
-  const gpsTimestamp = Number(position.timestamp) || Date.now();
-
-  if (lastProcessedGpsTimestamp != null && gpsTimestamp <= lastProcessedGpsTimestamp) {
-    lastUserLatLng = [lat, lon];
-  } else {
-    lastProcessedGpsTimestamp = gpsTimestamp;
-    lastUserLatLng = [lat, lon];
-    appendUserTrailPoint(lat, lon, accuracy, gpsTimestamp);
-  }
-
-  lastKnownSpeedKt = speedKt;
-
-  if (!userMarker) {
-    userMarker = L.circleMarker(lastUserLatLng, {
-      radius: 7,
-      color: "#ffffff",
-      weight: 2,
-      fillColor: "#2b8cff",
-      fillOpacity: 1,
-      opacity: 1
-    }).addTo(map);
-  } else {
-    userMarker.setLatLng(lastUserLatLng);
-  }
-
-  const clampedAccuracy = Math.max(8, Math.min(accuracy, 35));
-
-  if (!userAccuracyCircle) {
-    userAccuracyCircle = L.circle(lastUserLatLng, {
-      radius: clampedAccuracy,
-      color: "#2b8cff",
-      weight: 1,
-      opacity: 0.22,
-      fillColor: "#2b8cff",
-      fillOpacity: 0.04
-    }).addTo(map);
-  } else {
-    userAccuracyCircle.setLatLng(lastUserLatLng);
-    userAccuracyCircle.setRadius(clampedAccuracy);
-  }
-
-  if (speedKt > RUNNING_SPEED_MAX_KT) {
-    if (userHeadingMarker) {
-      map.removeLayer(userHeadingMarker);
-      userHeadingMarker = null;
-    }
-    return;
-  }
-
-  updateCompassArrowFromOrientation();
-}
-
-function startGpsTracking() {
-  if (!navigator.geolocation) {
-    console.warn("Geolocation not supported");
-    return;
-  }
-
-  if (gpsWatchId != null) {
-    navigator.geolocation.clearWatch(gpsWatchId);
-  }
-
-  gpsWatchId = navigator.geolocation.watchPosition(
-    updateUserLocation,
-    err => {
-      console.error("GPS error:", err);
-    },
-    {
-      enableHighAccuracy: true,
-      maximumAge: 1000,
-      timeout: 10000
-    }
-  );
-}
-
-/* ------------------ INIT ------------------ */
-
-function initAircraftTracking() {
-  injectAircraftUiCss();
-
-  if (map && map.zoomControl) {
-    map.removeControl(map.zoomControl);
-  }
-
-  createToggleButton();
-  restoreTrailState();
-  startGpsTracking();
-
-  if (map && typeof map.on === "function") {
-    map.on("dragstart", () => {
-      if (activeFollowTargetKey) {
-        activeFollowTargetKey = null;
-        refreshAircraftFollowButtons();
-      }
-      if (!suppressNextMapClose) {
-        hideAircraftDetailPanel();
-      }
-    });
-
-    map.on("click", () => {
-      if (suppressNextMapClose) return;
-      hideAircraftDetailPanel();
-    });
-  }
-
-  if (TARGETS.length > 0) {
-    pollAircraft();
-    setInterval(pollAircraft, POLL_INTERVAL_MS);
-  }
-}
-
-initAircraftTracking();
+</body>
+</html>
