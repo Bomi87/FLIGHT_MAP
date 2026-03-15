@@ -240,6 +240,29 @@ function normalizeHex(v) {
   return String(v || "").trim().toLowerCase();
 }
 
+function injectAircraftUiCss() {
+  if (document.getElementById("aircraft-ui-css")) return;
+
+  const style = document.createElement("style");
+  style.id = "aircraft-ui-css";
+  style.textContent = `
+    .aircraft-label-tooltip {
+      pointer-events: none !important;
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+    .aircraft-label-tooltip::before {
+      display: none !important;
+    }
+    .aircraft-div-icon {
+      background: transparent !important;
+      border: none !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 /* ------------------ BUTTON LABEL ------------------ */
 
 function getAircraftButtonLabel(ac, target) {
@@ -277,20 +300,6 @@ function formatMachText(ac) {
     return "M" + String(Number(ac.mach).toFixed(2)).replace(/^0/, "");
   }
   return "";
-}
-
-function formatSpeedLines(ac) {
-  const lines = [];
-
-  if (ac.ias != null && !isNaN(ac.ias)) {
-    lines.push("IAS " + Math.round(Number(ac.ias)) + "KT");
-  }
-
-  if (ac.gs != null && !isNaN(ac.gs)) {
-    lines.push("GS " + Math.round(Number(ac.gs)) + "KT");
-  }
-
-  return lines;
 }
 
 function formatVerticalRateText(ac) {
@@ -343,6 +352,8 @@ function formatAircraftLabelHtml(ac, color) {
       border-top:2px solid ${escapeHtml(color)};
       padding-top:2px;
       min-width:42px;
+      user-select:none;
+      -webkit-user-select:none;
     ">
       <div style="
         font-size:11px;
@@ -372,25 +383,18 @@ function ensureAircraftDetailPanel() {
   panel.style.maxWidth = "220px";
   panel.style.padding = "6px 8px";
   panel.style.borderRadius = "8px";
-
-  /* 배경은 더 약하게 */
   panel.style.background = "rgba(0,0,0,0.18)";
-
   panel.style.color = "#ffffff";
   panel.style.fontSize = "12px";
   panel.style.lineHeight = "1.35";
   panel.style.fontWeight = "700";
-
   panel.style.pointerEvents = "none";
-
-  /* ✈️ 가독성 핵심 */
   panel.style.textShadow = "0 0 4px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.85)";
 
   document.body.appendChild(panel);
   return panel;
 }
 
- 
 function buildDetailRow(label, value, valueColor = "#ffffff") {
   return `
     <div style="display:grid;grid-template-columns:44px auto;column-gap:8px;margin-bottom:2px;">
@@ -513,19 +517,21 @@ function getAircraftIconSize(typeCodeRaw) {
 
 function buildAircraftIcon(trackDeg = 0, color = "#ff8800", sizePx = 36) {
   const svgSize = Math.max(24, sizePx - 4);
-  const anchor = Math.round(sizePx / 2);
+  const hitSize = Math.max(sizePx, 52);
+  const anchor = Math.round(hitSize / 2);
 
   return L.divIcon({
     className: "aircraft-div-icon",
     html: `
       <div style="
-        width:${sizePx}px;
-        height:${sizePx}px;
+        width:${hitSize}px;
+        height:${hitSize}px;
         display:flex;
         align-items:center;
         justify-content:center;
         transform:rotate(${trackDeg}deg);
         transform-origin:center center;
+        touch-action:none;
       ">
         <svg width="${svgSize}" height="${svgSize}" viewBox="0 0 100 100">
           <g
@@ -557,9 +563,27 @@ function buildAircraftIcon(trackDeg = 0, color = "#ff8800", sizePx = 36) {
         </svg>
       </div>
     `,
-    iconSize: [sizePx, sizePx],
+    iconSize: [hitSize, hitSize],
     iconAnchor: [anchor, anchor]
   });
+}
+
+function bindAircraftMarkerEvents(marker, target, getAircraft) {
+  const openPanel = (e) => {
+    if (e?.originalEvent?.preventDefault) e.originalEvent.preventDefault();
+    if (e?.originalEvent?.stopPropagation) e.originalEvent.stopPropagation();
+
+    suppressNextMapClose = true;
+    const ac = getAircraft();
+    if (ac) showAircraftDetailPanel(target, ac);
+
+    setTimeout(() => {
+      suppressNextMapClose = false;
+    }, 250);
+  };
+
+  marker.on("click", openPanel);
+  marker.on("touchstart", openPanel);
 }
 
 /* ------------------ FOLLOW / CONTROL BUTTONS ------------------ */
@@ -824,13 +848,7 @@ function ensureAircraftMarker(target, ac) {
     });
     state.tooltipBound = true;
 
-    state.marker.on("click", () => {
-      suppressNextMapClose = true;
-      showAircraftDetailPanel(target, ac);
-      setTimeout(() => {
-        suppressNextMapClose = false;
-      }, 120);
-    });
+    bindAircraftMarkerEvents(state.marker, target, () => state.lastAircraft || ac);
   } else {
     state.marker.setLatLng(newLatLng);
     state.marker.setIcon(icon);
@@ -958,13 +976,7 @@ function animateAircraftIfNeeded(target, prevAc, nextAc) {
       });
       state.tooltipBound = true;
 
-      state.marker.on("click", () => {
-        suppressNextMapClose = true;
-        showAircraftDetailPanel(target, nextAc);
-        setTimeout(() => {
-          suppressNextMapClose = false;
-        }, 120);
-      });
+      bindAircraftMarkerEvents(state.marker, target, () => state.lastAircraft || nextAc);
     } else {
       state.marker.setLatLng([lat, lon]);
       state.marker.setIcon(icon);
@@ -1667,6 +1679,8 @@ function startGpsTracking() {
 /* ------------------ INIT ------------------ */
 
 function initAircraftTracking() {
+  injectAircraftUiCss();
+
   if (map && map.zoomControl) {
     map.removeControl(map.zoomControl);
   }
