@@ -330,14 +330,16 @@ function formatAircraftLabelHtml(ac, color) {
   return `
     <div style="
       font-size:10px;
-      color:#ffffff;
+      color:#000000;
       font-weight:800;
       white-space:nowrap;
       text-align:center;
       line-height:1.1;
       text-shadow:
-        0 0 4px rgba(0,0,0,0.95),
-        0 0 8px rgba(0,0,0,0.85);
+        -1px -1px 0 #ffffff,
+         1px -1px 0 #ffffff,
+        -1px  1px 0 #ffffff,
+         1px  1px 0 #ffffff;
       border-top:2px solid ${escapeHtml(color)};
       padding-top:2px;
       min-width:42px;
