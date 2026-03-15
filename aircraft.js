@@ -24,11 +24,11 @@ const COMPASS_HEADING_SMOOTHING = 0.18;
 const USER_HEADING_CHANGE_MIN_DEG = 2;
 
 /* --- GPS TRAIL FILTER SETTINGS --- */
-const USER_TRAIL_MAX_ACCURACY_M = 45;          // 기존 40 -> 45로 완화
+const USER_TRAIL_MAX_ACCURACY_M = 45;
 const USER_TRAIL_JUMP_MAX_DIST_M = 60;
 const USER_TRAIL_JUMP_MAX_TIME_S = 5;
 const USER_TRAIL_MAX_SPEED_MPS = 8;
-const USER_TRAIL_MIN_MOVE_M = 3;
+const USER_TRAIL_MIN_MOVE_M = 5;
 
 /* ------------------ STATE ------------------ */
 
@@ -59,14 +59,18 @@ let lastUserHeadingDeg = null;
 let lastKnownSpeedKt = null;
 let compassStarted = false;
 
+/* --- improved user trail state --- */
+let lastAcceptedUserPoint = null;
+let pendingGapStartPoint = null;
+
 let userTrailSolidSegments = [];
 let userTrailDashedSegments = [];
-let currentUserSolidSegment = [];
+
 let userTrailSolidLines = [];
 let userTrailDashedLines = [];
 
-let lastAcceptedUserPoint = null;
-let pendingGapStartPoint = null;
+let currentSolidSegment = null;
+let currentSolidLine = null;
 
 /* ------------------ BUTTONS ------------------ */
 
@@ -687,58 +691,71 @@ async function startDeviceCompass() {
 
 /* ------------------ USER TRAIL HELPERS ------------------ */
 
-function redrawUserTrail() {
-  userTrailSolidLines.forEach(line => {
-    if (map.hasLayer(line)) map.removeLayer(line);
-  });
-  userTrailDashedLines.forEach(line => {
-    if (map.hasLayer(line)) map.removeLayer(line);
-  });
+function createSolidTrailLine(initialPoint) {
+  const line = L.polyline([[initialPoint.lat, initialPoint.lng]], {
+    weight: 2.5,
+    opacity: 0.5,
+    color: "#2b8cff"
+  }).addTo(map);
 
-  userTrailSolidLines = [];
-  userTrailDashedLines = [];
-
-  for (const seg of userTrailSolidSegments) {
-    if (seg.length >= 2) {
-      const line = L.polyline(seg.map(p => [p.lat, p.lng]), {
-        weight: 2.5,
-        opacity: 0.5,
-        color: "#2b8cff"
-      }).addTo(map);
-      userTrailSolidLines.push(line);
-    }
-  }
-
-  for (const seg of userTrailDashedSegments) {
-    if (seg.length >= 2) {
-      const line = L.polyline(seg.map(p => [p.lat, p.lng]), {
-        weight: 2.5,
-        opacity: 0.45,
-        color: "#2b8cff",
-        dashArray: "6,6"
-      }).addTo(map);
-      userTrailDashedLines.push(line);
-    }
-  }
+  userTrailSolidLines.push(line);
+  return line;
 }
 
-function trimUserTrailSegments() {
+function createDashedTrailLine(fromPoint, toPoint) {
+  const line = L.polyline(
+    [
+      [fromPoint.lat, fromPoint.lng],
+      [toPoint.lat, toPoint.lng]
+    ],
+    {
+      weight: 2.5,
+      opacity: 0.35,
+      color: "#2b8cff",
+      dashArray: "4,8"
+    }
+  ).addTo(map);
+
+  userTrailDashedLines.push(line);
+  userTrailDashedSegments.push([fromPoint, toPoint]);
+}
+
+function trimOldestSolidTrailData() {
   let totalSolidPoints = userTrailSolidSegments.reduce((sum, seg) => sum + seg.length, 0);
 
   while (totalSolidPoints > MAX_USER_TRAIL_POINTS && userTrailSolidSegments.length > 0) {
-    if (userTrailSolidSegments[0].length <= 1) {
-      totalSolidPoints -= userTrailSolidSegments[0].length;
-      userTrailSolidSegments.shift();
-    } else {
-      userTrailSolidSegments[0].shift();
-      totalSolidPoints -= 1;
-    }
-  }
+    const firstSeg = userTrailSolidSegments[0];
+    const firstLine = userTrailSolidLines[0];
 
-  const maxDashedSegments = Math.max(20, Math.floor(MAX_USER_TRAIL_POINTS / 10));
-  while (userTrailDashedSegments.length > maxDashedSegments) {
-    userTrailDashedSegments.shift();
+    if (!firstSeg || !firstLine) break;
+
+    if (firstSeg.length <= 2) {
+      if (map.hasLayer(firstLine)) map.removeLayer(firstLine);
+      userTrailSolidSegments.shift();
+      userTrailSolidLines.shift();
+      totalSolidPoints -= firstSeg.length;
+      continue;
+    }
+
+    firstSeg.shift();
+    firstLine.setLatLngs(firstSeg.map(p => [p.lat, p.lng]));
+    totalSolidPoints -= 1;
   }
+}
+
+function trimOldestDashedTrailData() {
+  const maxDashedSegments = Math.max(20, Math.floor(MAX_USER_TRAIL_POINTS / 10));
+
+  while (userTrailDashedSegments.length > maxDashedSegments && userTrailDashedLines.length > 0) {
+    const firstLine = userTrailDashedLines.shift();
+    userTrailDashedSegments.shift();
+    if (map.hasLayer(firstLine)) map.removeLayer(firstLine);
+  }
+}
+
+function trimUserTrailData() {
+  trimOldestSolidTrailData();
+  trimOldestDashedTrailData();
 }
 
 function isReliableUserTrailPoint(prevPoint, nextPoint) {
@@ -778,6 +795,22 @@ function isReliableUserTrailPoint(prevPoint, nextPoint) {
   return true;
 }
 
+function startNewSolidSegment(point) {
+  currentSolidSegment = [point];
+  userTrailSolidSegments.push(currentSolidSegment);
+  currentSolidLine = createSolidTrailLine(point);
+}
+
+function appendToCurrentSolidSegment(point) {
+  if (!currentSolidSegment || !currentSolidLine) {
+    startNewSolidSegment(point);
+    return;
+  }
+
+  currentSolidSegment.push(point);
+  currentSolidLine.addLatLng([point.lat, point.lng]);
+}
+
 function appendUserTrailPoint(lat, lng, accuracy) {
   const point = {
     lat,
@@ -787,10 +820,9 @@ function appendUserTrailPoint(lat, lng, accuracy) {
   };
 
   if (!lastAcceptedUserPoint) {
-    currentUserSolidSegment = [point];
-    userTrailSolidSegments.push(currentUserSolidSegment);
+    startNewSolidSegment(point);
     lastAcceptedUserPoint = point;
-    redrawUserTrail();
+    trimUserTrailData();
     return;
   }
 
@@ -808,27 +840,20 @@ function appendUserTrailPoint(lat, lng, accuracy) {
   }
 
   if (pendingGapStartPoint) {
-    userTrailDashedSegments.push([
-      pendingGapStartPoint,
-      point
-    ]);
-
-    currentUserSolidSegment = [point];
-    userTrailSolidSegments.push(currentUserSolidSegment);
+    createDashedTrailLine(pendingGapStartPoint, point);
+    startNewSolidSegment(point);
 
     pendingGapStartPoint = null;
     lastAcceptedUserPoint = point;
 
-    trimUserTrailSegments();
-    redrawUserTrail();
+    trimUserTrailData();
     return;
   }
 
-  currentUserSolidSegment.push(point);
+  appendToCurrentSolidSegment(point);
   lastAcceptedUserPoint = point;
 
-  trimUserTrailSegments();
-  redrawUserTrail();
+  trimUserTrailData();
 }
 
 function updateUserLocation(position) {
