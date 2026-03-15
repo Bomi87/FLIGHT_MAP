@@ -15,6 +15,9 @@ const POINT_RADIUS_NM = 80;
 const MAX_LIVE_TRAIL_POINTS = 500;
 const VERTICAL_RATE_THRESHOLD = 300;
 
+/* GPS */
+const USER_GPS_ZOOM_MIN = 10;
+
 /* ------------------ STATE ------------------ */
 
 let aircraftMarker = null;
@@ -27,6 +30,13 @@ let trackingStarted = false;
 
 let animationFrameId = null;
 let animationToken = 0;
+
+/* FOLLOW / GPS */
+let followMode = "aircraft"; // aircraft | user
+let userMarker = null;
+let userAccuracyCircle = null;
+let userWatchId = null;
+let lastUserPosition = null;
 
 /* ------------------ STATUS BOX ------------------ */
 
@@ -69,6 +79,208 @@ function hideStatus() {
     box.textContent = "";
     box.style.display = "none";
   }
+}
+
+/* ------------------ FOLLOW BUTTON ------------------ */
+
+function updateFollowButtonUi() {
+  const btn = document.getElementById("follow-toggle-btn");
+  if (!btn) return;
+
+  if (followMode === "user") {
+    btn.textContent = "GPS";
+    btn.style.background = "#dceeff";
+    btn.style.color = "#004a99";
+    btn.title = "GPS follow ON";
+  } else {
+    btn.textContent = "AC";
+    btn.style.background = "#fff";
+    btn.style.color = "#333";
+    btn.title = "Aircraft follow ON";
+  }
+}
+
+function focusAircraftNow() {
+  if (
+    lastAircraft &&
+    Number.isFinite(lastAircraft.latitude) &&
+    Number.isFinite(lastAircraft.longitude)
+  ) {
+    try {
+      map.setView(
+        [lastAircraft.latitude, lastAircraft.longitude],
+        Math.max(map.getZoom?.() || 8, 8),
+        { animate: true }
+      );
+    } catch {}
+  }
+}
+
+function focusUserNow() {
+  if (
+    lastUserPosition &&
+    Number.isFinite(lastUserPosition.lat) &&
+    Number.isFinite(lastUserPosition.lon)
+  ) {
+    try {
+      map.setView(
+        [lastUserPosition.lat, lastUserPosition.lon],
+        Math.max(map.getZoom?.() || USER_GPS_ZOOM_MIN, USER_GPS_ZOOM_MIN),
+        { animate: true }
+      );
+    } catch {}
+    return true;
+  }
+  return false;
+}
+
+function createFollowToggleButton() {
+  let btn = document.getElementById("follow-toggle-btn");
+  if (btn) return;
+
+  btn = document.createElement("button");
+  btn.id = "follow-toggle-btn";
+  btn.style.position = "fixed";
+  btn.style.right = "10px";
+  btn.style.top = "120px"; // 지도 선택 박스 아래쪽
+  btn.style.zIndex = "99999";
+  btn.style.minWidth = "54px";
+  btn.style.height = "38px";
+  btn.style.padding = "0 10px";
+  btn.style.border = "1px solid #888";
+  btn.style.borderRadius = "8px";
+  btn.style.background = "#fff";
+  btn.style.fontSize = "12px";
+  btn.style.fontWeight = "700";
+  btn.style.cursor = "pointer";
+  btn.style.boxShadow = "0 1px 4px rgba(0,0,0,0.15)";
+  btn.style.webkitTapHighlightColor = "transparent";
+
+  btn.onclick = () => {
+    if (followMode === "aircraft") {
+      followMode = "user";
+      updateFollowButtonUi();
+
+      const focused = focusUserNow();
+      if (!focused) {
+        showStatus("Waiting for GPS position...", "#004a99");
+      } else {
+        hideStatus();
+      }
+    } else {
+      followMode = "aircraft";
+      updateFollowButtonUi();
+      hideStatus();
+      focusAircraftNow();
+    }
+  };
+
+  document.body.appendChild(btn);
+  updateFollowButtonUi();
+}
+
+/* ------------------ USER GPS ------------------ */
+
+function makeUserLocationIcon() {
+  return L.divIcon({
+    className: "user-location-div-icon",
+    html: `
+      <div style="
+        width:22px;
+        height:22px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+      ">
+        <svg width="20" height="20" viewBox="0 0 100 100">
+          <path
+            d="M50 8 L88 86 L50 70 L12 86 Z"
+            fill="#1e78ff"
+            stroke="#ffffff"
+            stroke-width="8"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </div>
+    `,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11]
+  });
+}
+
+function startUserLocation() {
+  if (!navigator.geolocation) {
+    console.warn("Geolocation not supported");
+    return;
+  }
+
+  userWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const lat = Number(pos.coords.latitude);
+      const lon = Number(pos.coords.longitude);
+      const accuracy = Number(pos.coords.accuracy);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+      lastUserPosition = { lat, lon, accuracy };
+
+      if (!userMarker) {
+        userMarker = L.marker([lat, lon], {
+          icon: makeUserLocationIcon(),
+          zIndexOffset: 1500
+        }).addTo(map);
+
+        userMarker.bindTooltip("My Position", {
+          permanent: false,
+          direction: "top",
+          offset: [0, -10]
+        });
+      } else {
+        userMarker.setLatLng([lat, lon]);
+      }
+
+      if (Number.isFinite(accuracy) && accuracy > 0) {
+        if (!userAccuracyCircle) {
+          userAccuracyCircle = L.circle([lat, lon], {
+            radius: accuracy,
+            color: "#1e78ff",
+            weight: 1,
+            opacity: 0.5,
+            fillColor: "#1e78ff",
+            fillOpacity: 0.08
+          }).addTo(map);
+        } else {
+          userAccuracyCircle.setLatLng([lat, lon]);
+          userAccuracyCircle.setRadius(accuracy);
+        }
+      }
+
+      if (followMode === "user") {
+        hideStatus();
+        try {
+          map.setView(
+            [lat, lon],
+            Math.max(map.getZoom?.() || USER_GPS_ZOOM_MIN, USER_GPS_ZOOM_MIN),
+            { animate: true }
+          );
+        } catch {}
+      }
+
+      console.log("User GPS:", lat, lon, "accuracy:", accuracy);
+    },
+    (err) => {
+      console.warn("GPS error:", err);
+
+      if (followMode === "user") {
+        showStatus("GPS unavailable or permission denied.", "#a60");
+      }
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 3000,
+      timeout: 10000
+    }
+  );
 }
 
 /* ------------------ FORMATTERS ------------------ */
@@ -139,7 +351,7 @@ function formatMach(ac) {
   if (!Number.isFinite(mach) || mach <= 0) return "";
 
   const machStr = mach.toFixed(2).replace(/^0/, "");
-  return "M" + machStr; // M.78
+  return "M" + machStr;
 }
 
 function formatIAS(ac) {
@@ -604,8 +816,7 @@ async function updateAircraft() {
   try {
     let ac = null;
 
-    // 이미 추적 시작 후에는 checking 문구를 계속 띄우지 않음
-    if (!trackingStarted) {
+    if (!trackingStarted && followMode === "aircraft") {
       showStatus("Checking aircraft...", "#444");
     }
 
@@ -656,7 +867,6 @@ async function updateAircraft() {
       return;
     }
 
-    // 정상 위치 확보 시 상태 박스 완전히 숨김
     hideStatus();
 
     addLiveTrailPoint(lat, lon);
@@ -664,10 +874,10 @@ async function updateAircraft() {
 
     if (!trackingStarted) {
       trackingStarted = true;
-
-      // 최초 성공 시 한번 더 숨김 처리
       hideStatus();
+    }
 
+    if (followMode === "aircraft") {
       try {
         map.setView([lat, lon], Math.max(map.getZoom?.() || 8, 8), {
           animate: true
@@ -700,4 +910,8 @@ async function startAircraftTracking() {
   setInterval(updateAircraft, POLL_INTERVAL_MS);
 }
 
+/* ------------------ BOOT ------------------ */
+
+createFollowToggleButton();
+startUserLocation();
 startAircraftTracking();
