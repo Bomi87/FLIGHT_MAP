@@ -23,7 +23,7 @@ const RUNNING_SPEED_MAX_KT = 8.0;
 const COMPASS_HEADING_SMOOTHING = 0.18;
 const USER_HEADING_CHANGE_MIN_DEG = 2;
 
-/* --- 100점 GPS TRAIL SETTINGS --- */
+/* --- GPS TRAIL SETTINGS --- */
 const USER_TRAIL_MAX_ACCURACY_M = 55;       // 완전 컷 기준
 const USER_TRAIL_BASE_MAX_ACCURACY_M = 50;  // 정상 허용 기준
 const USER_TRAIL_JUMP_MAX_TIME_S = 5;
@@ -34,8 +34,9 @@ const USER_TRAIL_DASH_MAX_DIST_M = 120;     // 너무 긴 점선 금지
 const USER_TRAIL_DASH_MAX_TIME_S = 25;
 
 const USER_TRAIL_SMOOTHING_WINDOW = 3;      // 최근 3점 기반
-const USER_TRAIL_STORAGE_KEY = "userTrailState_v1";
+const USER_TRAIL_STORAGE_KEY = "userTrailState_v2";
 const USER_TRAIL_STORAGE_LIMIT = 300;
+const USER_TRAIL_STORAGE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12시간
 
 /* ------------------ STATE ------------------ */
 
@@ -66,7 +67,7 @@ let lastUserHeadingDeg = null;
 let lastKnownSpeedKt = null;
 let compassStarted = false;
 
-/* --- improved user trail state --- */
+/* --- user trail state --- */
 let lastAcceptedUserPoint = null;
 let pendingGapStartPoint = null;
 
@@ -80,6 +81,7 @@ let currentSolidSegment = null;
 let currentSolidLine = null;
 
 let recentAcceptedUserPoints = [];
+let lastProcessedGpsTimestamp = null;
 
 /* ------------------ BUTTONS ------------------ */
 
@@ -814,7 +816,7 @@ function getReferencePointForValidation() {
 
 function getDynamicJumpAllowance(nextAccuracy) {
   const acc = Number(nextAccuracy) || 0;
-  return Math.max(USER_TRAIL_JUMP_MAX_DIST_M, acc * 1.5);
+  return Math.max(60, acc * 1.5);
 }
 
 function isReliableUserTrailPoint(prevPoint, nextPoint) {
@@ -912,12 +914,37 @@ function appendToCurrentSolidSegment(point) {
 
 function serializeTrailState() {
   try {
-    const solidPointsFlat = userTrailSolidSegments.flat().slice(-USER_TRAIL_STORAGE_LIMIT);
-    const dashedFlat = userTrailDashedSegments.slice(-50);
+    const solidSegments = userTrailSolidSegments
+      .map(seg => seg.map(clonePoint))
+      .filter(seg => seg.length > 0);
+
+    const dashedSegments = userTrailDashedSegments
+      .map(seg => seg.map(clonePoint))
+      .filter(seg => seg.length >= 2)
+      .slice(-50);
+
+    const allSolidPoints = solidSegments.flat();
+    const trimmedSolidSegments = [];
+
+    let remaining = USER_TRAIL_STORAGE_LIMIT;
+    for (let i = solidSegments.length - 1; i >= 0; i--) {
+      const seg = solidSegments[i];
+      if (remaining <= 0) break;
+
+      const takeSeg = seg.slice(-remaining);
+      trimmedSolidSegments.unshift(takeSeg);
+      remaining -= takeSeg.length;
+    }
+
+    const latestTime = allSolidPoints.length
+      ? allSolidPoints[allSolidPoints.length - 1].time
+      : Date.now();
 
     const payload = {
-      solidPoints: solidPointsFlat,
-      dashedSegments: dashedFlat
+      savedAt: Date.now(),
+      latestPointTime: latestTime,
+      solidSegments: trimmedSolidSegments,
+      dashedSegments
     };
 
     localStorage.setItem(USER_TRAIL_STORAGE_KEY, JSON.stringify(payload));
@@ -932,15 +959,25 @@ function restoreTrailState() {
     if (!raw) return;
 
     const parsed = JSON.parse(raw);
-    const solidPoints = Array.isArray(parsed.solidPoints) ? parsed.solidPoints : [];
+    if (!parsed || typeof parsed !== "object") return;
+
+    const savedAt = Number(parsed.savedAt) || 0;
+    if (savedAt && Date.now() - savedAt > USER_TRAIL_STORAGE_MAX_AGE_MS) {
+      localStorage.removeItem(USER_TRAIL_STORAGE_KEY);
+      return;
+    }
+
+    const solidSegments = Array.isArray(parsed.solidSegments) ? parsed.solidSegments : [];
     const dashedSegments = Array.isArray(parsed.dashedSegments) ? parsed.dashedSegments : [];
 
-    if (solidPoints.length > 0) {
-      userTrailSolidSegments = [solidPoints.map(clonePoint)];
-      currentSolidSegment = userTrailSolidSegments[0];
+    for (const seg of solidSegments) {
+      if (!Array.isArray(seg) || seg.length === 0) continue;
+
+      const clonedSeg = seg.map(clonePoint);
+      userTrailSolidSegments.push(clonedSeg);
 
       const line = L.polyline(
-        currentSolidSegment.map(p => [p.lat, p.lng]),
+        clonedSeg.map(p => [p.lat, p.lng]),
         {
           weight: 2.5,
           opacity: 0.5,
@@ -948,8 +985,12 @@ function restoreTrailState() {
         }
       ).addTo(map);
 
-      userTrailSolidLines = [line];
-      currentSolidLine = line;
+      userTrailSolidLines.push(line);
+    }
+
+    if (userTrailSolidSegments.length > 0) {
+      currentSolidSegment = userTrailSolidSegments[userTrailSolidSegments.length - 1];
+      currentSolidLine = userTrailSolidLines[userTrailSolidLines.length - 1];
 
       lastAcceptedUserPoint = clonePoint(currentSolidSegment[currentSolidSegment.length - 1]);
       lastUserLatLng = [lastAcceptedUserPoint.lat, lastAcceptedUserPoint.lng];
@@ -957,13 +998,31 @@ function restoreTrailState() {
       recentAcceptedUserPoints = currentSolidSegment
         .slice(-USER_TRAIL_SMOOTHING_WINDOW)
         .map(clonePoint);
+
+      lastProcessedGpsTimestamp = lastAcceptedUserPoint.time || null;
     }
 
     for (const seg of dashedSegments) {
       if (!Array.isArray(seg) || seg.length < 2) continue;
+
       const fromPoint = clonePoint(seg[0]);
       const toPoint = clonePoint(seg[1]);
-      createDashedTrailLine(fromPoint, toPoint);
+
+      const line = L.polyline(
+        [
+          [fromPoint.lat, fromPoint.lng],
+          [toPoint.lat, toPoint.lng]
+        ],
+        {
+          weight: 2.5,
+          opacity: 0.35,
+          color: "#2b8cff",
+          dashArray: "4,8"
+        }
+      ).addTo(map);
+
+      userTrailDashedLines.push(line);
+      userTrailDashedSegments.push([fromPoint, toPoint]);
     }
 
     trimUserTrailData();
@@ -1037,8 +1096,17 @@ function updateUserLocation(position) {
   const lon = position.coords.longitude;
   const accuracy = position.coords.accuracy || 0;
   const speedKt = metersPerSecondToKnots(position.coords.speed);
+  const gpsTimestamp = Number(position.timestamp) || Date.now();
 
-  lastUserLatLng = [lat, lon];
+  if (lastProcessedGpsTimestamp != null && gpsTimestamp <= lastProcessedGpsTimestamp) {
+    // 중복 또는 역순 GPS 콜백 무시
+    lastUserLatLng = [lat, lon];
+  } else {
+    lastProcessedGpsTimestamp = gpsTimestamp;
+    lastUserLatLng = [lat, lon];
+    appendUserTrailPoint(lat, lon, accuracy, gpsTimestamp);
+  }
+
   lastKnownSpeedKt = speedKt;
 
   if (!userMarker) {
@@ -1069,8 +1137,6 @@ function updateUserLocation(position) {
     userAccuracyCircle.setLatLng(lastUserLatLng);
     userAccuracyCircle.setRadius(clampedAccuracy);
   }
-
-appendUserTrailPoint(lat, lon, accuracy, position.timestamp);
 
   if (speedKt > RUNNING_SPEED_MAX_KT) {
     if (userHeadingMarker) {
