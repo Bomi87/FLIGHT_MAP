@@ -16,6 +16,7 @@ const MAX_LIVE_TRAIL_POINTS = 500;
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
 const USER_GPS_ZOOM_MIN = 10;
+const AIRCRAFT_FOCUS_ZOOM_MAX = 8;
 const MAX_USER_TRAIL_POINTS = 1000;
 
 const RUNNING_SPEED_MAX_KT = 8.0;
@@ -53,26 +54,9 @@ let lastUserHeadingDeg = null;
 let lastKnownSpeedKt = null;
 let compassStarted = false;
 
-/* ------------------ TOGGLE BUTTON ------------------ */
+/* ------------------ BUTTONS ------------------ */
 
-let focusToggleMode = "aircraft";   // 현재 기준 위치
-
-function createToggleButton() {
-  let wrap = document.getElementById("custom-follow-controls");
-  if (wrap) return;
-
-  wrap = document.createElement("div");
-  wrap.id = "custom-follow-controls";
-  wrap.style.position = "fixed";
-  wrap.style.top = "115px";   
-  wrap.style.right = "10px";
-  wrap.style.zIndex = "99999";
-
-  const btn = document.createElement("button");
-  btn.id = "toggle-focus-btn";
-  btn.type = "button";
-  btn.textContent = "A/C";
-
+function applyControlButtonStyle(btn) {
   btn.style.width = "54px";
   btn.style.height = "34px";
   btn.style.border = "1px solid rgba(0,0,0,0.2)";
@@ -84,35 +68,60 @@ function createToggleButton() {
   btn.style.cursor = "pointer";
   btn.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
   btn.style.backdropFilter = "blur(4px)";
+}
 
- btn.onclick = async () => {
-  if (focusToggleMode === "aircraft") {
+function createToggleButton() {
+  let wrap = document.getElementById("custom-follow-controls");
+  if (wrap) return;
+
+  wrap = document.createElement("div");
+  wrap.id = "custom-follow-controls";
+  wrap.style.position = "fixed";
+  wrap.style.top = "108px";   // 더 아래로 내리려면 이 값 증가
+  wrap.style.right = "10px";
+  wrap.style.zIndex = "99999";
+  wrap.style.display = "flex";
+  wrap.style.flexDirection = "column";
+  wrap.style.gap = "6px";
+
+  const acBtn = document.createElement("button");
+  acBtn.id = "focus-aircraft-btn";
+  acBtn.type = "button";
+  acBtn.textContent = "A/C";
+  applyControlButtonStyle(acBtn);
+
+  acBtn.onclick = () => {
+    if (!lastAircraftLatLng) return;
+
+    const targetZoom = Math.min(map.getZoom(), AIRCRAFT_FOCUS_ZOOM_MAX);
+
+    map.flyTo(lastAircraftLatLng, targetZoom, {
+      animate: true,
+      duration: 0.8
+    });
+  };
+
+  const gpsBtn = document.createElement("button");
+  gpsBtn.id = "focus-gps-btn";
+  gpsBtn.type = "button";
+  gpsBtn.textContent = "GPS";
+  applyControlButtonStyle(gpsBtn);
+
+  gpsBtn.onclick = async () => {
     await startDeviceCompass();
 
-    if (lastUserLatLng) {
-      const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
-      map.flyTo(lastUserLatLng, targetZoom, {
-        animate: true,
-        duration: 0.8
-      });
-    }
+    if (!lastUserLatLng) return;
 
-    focusToggleMode = "gps";
-    btn.textContent = "GPS";
-  } else {
-    if (lastAircraftLatLng) {
-      const targetZoom = 8;
-      map.flyTo(lastAircraftLatLng, targetZoom, {
-        animate: true,
-        duration: 0.8
-      });
-    }
+    const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
 
-    focusToggleMode = "aircraft";
-    btn.textContent = "A/C";
-  }
-};
-  wrap.appendChild(btn);
+    map.flyTo(lastUserLatLng, targetZoom, {
+      animate: true,
+      duration: 0.8
+    });
+  };
+
+  wrap.appendChild(acBtn);
+  wrap.appendChild(gpsBtn);
   document.body.appendChild(wrap);
 }
 
@@ -160,9 +169,11 @@ function formatAltitudeText(ac) {
   if (altFt == null || isNaN(altFt)) return "";
 
   const ft = Math.round(Number(altFt));
+
   if (ft >= 18000) {
     return "FL" + String(Math.round(ft / 100)).padStart(3, "0");
   }
+
   return ft.toLocaleString() + " ft";
 }
 
@@ -170,35 +181,21 @@ function formatMachText(ac) {
   if (ac.mach != null && !isNaN(ac.mach)) {
     return "M" + String(Number(ac.mach).toFixed(2)).replace(/^0/, "");
   }
-
-  const gs = Number(ac.gs);
-  if (!isNaN(gs) && gs > 0) {
-    const altFt = Number(ac.alt_baro ?? ac.alt_geom ?? 0);
-    let soundKt = 661;
-
-    if (altFt >= 35000) soundKt = 573;
-    else if (altFt >= 30000) soundKt = 590;
-    else if (altFt >= 25000) soundKt = 610;
-    else if (altFt >= 20000) soundKt = 630;
-    else if (altFt >= 10000) soundKt = 650;
-
-    const mach = gs / soundKt;
-    if (mach > 0.2) {
-      return "M" + String(mach.toFixed(2)).replace(/^0/, "");
-    }
-  }
-
   return "";
 }
 
-function formatIasText(ac) {
+function formatSpeedLines(ac) {
+  const lines = [];
+
   if (ac.ias != null && !isNaN(ac.ias)) {
-    return Math.round(Number(ac.ias)) + "KT";
+    lines.push("IAS " + Math.round(Number(ac.ias)) + "KT");
   }
+
   if (ac.gs != null && !isNaN(ac.gs)) {
-    return Math.round(Number(ac.gs)) + "KT";
+    lines.push("GS " + Math.round(Number(ac.gs)) + "KT");
   }
-  return "";
+
+  return lines;
 }
 
 function formatAircraftLabelHtml(ac) {
@@ -207,11 +204,10 @@ function formatAircraftLabelHtml(ac) {
   const type = (ac.t || ac.type || "").trim();
   const altitudeText = formatAltitudeText(ac);
   const machText = formatMachText(ac);
-  const iasText = formatIasText(ac);
+  const speedLines = formatSpeedLines(ac);
 
   const line1 = [flight, reg ? `(${reg})` : ""].filter(Boolean).join(" ");
   const line2 = [type, altitudeText].filter(Boolean).join(" ");
-  const line3 = [machText, iasText].filter(Boolean).join(" / ");
 
   return `
     <div style="
@@ -229,7 +225,8 @@ function formatAircraftLabelHtml(ac) {
     ">
       ${line1 ? `<div>${escapeHtml(line1)}</div>` : ""}
       ${line2 ? `<div>${escapeHtml(line2)}</div>` : ""}
-      ${line3 ? `<div>${escapeHtml(line3)}</div>` : ""}
+      ${machText ? `<div>${escapeHtml(machText)}</div>` : ""}
+      ${speedLines.map(x => `<div>${escapeHtml(x)}</div>`).join("")}
     </div>
   `;
 }
@@ -239,38 +236,40 @@ function formatAircraftLabelHtml(ac) {
 function buildAircraftIcon(trackDeg = 0) {
   return L.divIcon({
     className: "aircraft-div-icon",
-    iconSize: [38, 38],
-    iconAnchor: [19, 19],
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
     html: `
       <div style="
-        width:38px;
-        height:38px;
+        width:40px;
+        height:40px;
         display:flex;
         align-items:center;
         justify-content:center;
         transform: rotate(${normalizeDeg(trackDeg)}deg);
         transform-origin:center center;
       ">
-        <svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true">
           <path
-            d="M12 2
-               L13.8 8.8
-               L21 10.2
-               L21 12
-               L13.8 12.8
-               L15.2 21
-               L13.2 21
-               L12 15.8
-               L10.8 21
-               L8.8 21
-               L10.2 12.8
-               L3 12
-               L3 10.2
-               L10.2 8.8
-               Z"
+            d="
+              M32 4
+              L36 22
+              L52 28
+              L52 33
+              L36 33
+              L40 58
+              L35 60
+              L32 40
+              L29 60
+              L24 58
+              L28 33
+              L12 33
+              L12 28
+              L28 22
+              Z
+            "
             fill="#ff9c4a"
-            stroke="#b76522"
-            stroke-width="1.4"
+            stroke="#c46a1f"
+            stroke-width="2"
             stroke-linejoin="round"
           />
         </svg>
@@ -455,7 +454,9 @@ function pickAircraftFromResponse(data) {
 
   if (Array.isArray(data.ac) && data.ac.length > 0) {
     if (targetHex) {
-      const foundByHex = data.ac.find(x => String(x.hex || "").toLowerCase() === targetHex);
+      const foundByHex = data.ac.find(
+        x => String(x.hex || "").toLowerCase() === targetHex
+      );
       if (foundByHex) return foundByHex;
     }
 
