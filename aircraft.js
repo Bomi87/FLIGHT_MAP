@@ -240,6 +240,17 @@ function normalizeHex(v) {
   return String(v || "").trim().toLowerCase();
 }
 
+/* KML 쪽 0~360 좌표계에 맞춰 항공기 longitude 보정 */
+function normalizeAircraftLon(lon) {
+  let x = Number(lon);
+  if (!isFinite(x)) return x;
+
+  while (x < 0) x += 360;
+  while (x >= 360) x -= 360;
+
+  return x;
+}
+
 function injectAircraftUiCss() {
   if (document.getElementById("aircraft-ui-css")) return;
 
@@ -857,7 +868,7 @@ function ensureAircraftMarker(target, ac) {
   if (!state) return;
 
   const lat = Number(ac.lat);
-  const lon = Number(ac.lon);
+  const lon = normalizeAircraftLon(ac.lon);
   const track = Number(ac.track || ac.true_heading || ac.mag_heading || 0);
 
   if (isNaN(lat) || isNaN(lon)) return;
@@ -912,7 +923,7 @@ function updateLiveTrail(target, ac) {
   if (!state) return;
 
   const lat = Number(ac.lat);
-  const lon = Number(ac.lon);
+  const lon = normalizeAircraftLon(ac.lon);
   if (isNaN(lat) || isNaN(lon)) return;
 
   const point = [lat, lon];
@@ -966,9 +977,9 @@ function animateAircraftIfNeeded(target, prevAc, nextAc) {
   }
 
   const fromLat = Number(prevAc.lat);
-  const fromLon = Number(prevAc.lon);
+  const fromLon = normalizeAircraftLon(prevAc.lon);
   const toLat = Number(nextAc.lat);
-  const toLon = Number(nextAc.lon);
+  const toLon = normalizeAircraftLon(nextAc.lon);
 
   if ([fromLat, fromLon, toLat, toLon].some(v => isNaN(v))) {
     updateAircraftForTarget(target, nextAc);
