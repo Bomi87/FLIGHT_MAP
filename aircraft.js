@@ -324,11 +324,12 @@ function formatVerticalRateText(ac) {
 }
 
 function getVerticalState(ac) {
-  const vr = Number(ac.vert_rate);
-
-  if (isNaN(vr)) {
-    return { arrow: "→", color: "#ffffff" };
+  if (ac.vert_rate == null || ac.vert_rate === "") {
+    return null;
   }
+
+  const vr = Number(ac.vert_rate);
+  if (isNaN(vr)) return null;
 
   if (vr > 300) {
     return { arrow: "▲", color: "#ff3b30" };
@@ -340,17 +341,17 @@ function getVerticalState(ac) {
 
   return { arrow: "→", color: "#ffffff" };
 }
-
 /* 항상 보이는 작은 라벨 */
 function formatAircraftLabelHtml(ac, color) {
   const flight = (ac.flight || ac.callsign || "").trim();
   const reg = (ac.r || ac.reg || "").trim();
   const altitudeText = formatAltitudeText(ac);
-  const vertical = { ...getVerticalState(ac) };
+ const verticalState = getVerticalState(ac);
+const vertical = verticalState ? { ...verticalState } : null;
 
-  if (vertical.arrow === "→") {
-    vertical.color = "#000000";
-  }
+if (vertical && vertical.arrow === "→") {
+  vertical.color = "#000000";
+}
 
   const smallLine1 = flight || reg || "UNKNOWN";
   const smallLine2 = altitudeText || "";
