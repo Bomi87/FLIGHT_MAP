@@ -150,7 +150,6 @@
       font-size: 12px;
     }
 
-    /* PC에서만 크게 */
     @media (min-width: 768px) {
       .waypoint-label-text {
         font-size: 13px;
@@ -171,6 +170,12 @@
       preferCanvas: true,
       maxBoundsViscosity: 1.0
     }).setView([48, 180], 3);
+
+    function refreshMapSize() {
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 50);
+    }
 
     function isDesktopView() {
       return window.innerWidth >= 768;
@@ -309,6 +314,7 @@
         const bounds = drawn.getBounds();
         if (bounds && bounds.isValid && bounds.isValid()) {
           map.fitBounds(bounds, { padding: [20, 20] });
+          refreshMapSize();
         }
       } catch (e) {
         console.warn(e);
@@ -1331,11 +1337,17 @@
         } else {
           await autoLoadDefault();
         }
+
+        refreshMapSize();
       } catch (err) {
         console.error(err);
         alert("Error: " + (err.message || err));
       }
     }
+
+    window.addEventListener("resize", refreshMapSize);
+    window.addEventListener("load", refreshMapSize);
+    window.addEventListener("pageshow", refreshMapSize);
 
     init();
   </script>
