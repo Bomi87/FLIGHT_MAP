@@ -566,6 +566,40 @@ function refreshAircraftFollowButtons() {
 }
 
 function createToggleButton() {
+  if (!document.getElementById("custom-gps-control")) {
+    const gpsWrap = document.createElement("div");
+    gpsWrap.id = "custom-gps-control";
+    gpsWrap.style.position = "fixed";
+    gpsWrap.style.top = "10px";
+    gpsWrap.style.left = "10px";
+    gpsWrap.style.zIndex = "99999";
+
+    const gpsBtn = document.createElement("button");
+    gpsBtn.id = "focus-gps-btn";
+    gpsBtn.type = "button";
+    gpsBtn.textContent = "GPS";
+    gpsBtn.style.width = "104px";
+    applyControlButtonStyle(gpsBtn);
+    gpsBtn.onclick = async () => {
+      activeFollowTargetKey = null;
+      refreshAircraftFollowButtons();
+
+      await startDeviceCompass();
+
+      if (!lastUserLatLng) return;
+
+      const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
+
+      map.flyTo(lastUserLatLng, targetZoom, {
+        animate: true,
+        duration: 0.8
+      });
+    };
+
+    gpsWrap.appendChild(gpsBtn);
+    document.body.appendChild(gpsWrap);
+  }
+
   let wrap = document.getElementById("custom-follow-controls");
   if (wrap) return;
 
@@ -578,6 +612,7 @@ function createToggleButton() {
   wrap.style.display = "flex";
   wrap.style.flexDirection = "column";
   wrap.style.gap = "6px";
+  wrap.style.maxWidth = "calc(100vw - 16px)";
 
   const acBtn = document.createElement("button");
   acBtn.id = "focus-aircraft-btn";
@@ -591,35 +626,16 @@ function createToggleButton() {
 
   const aircraftList = document.createElement("div");
   aircraftList.id = "aircraft-follow-list";
-  aircraftList.style.display = "flex";
-  aircraftList.style.flexDirection = "column";
+  aircraftList.style.display = "grid";
+  aircraftList.style.gridTemplateColumns = "repeat(3, max-content)";
+  aircraftList.style.gridAutoRows = "max-content";
   aircraftList.style.gap = "6px";
-
-  const gpsBtn = document.createElement("button");
-  gpsBtn.id = "focus-gps-btn";
-  gpsBtn.type = "button";
-  gpsBtn.textContent = "GPS";
-  gpsBtn.style.width = "104px";
-  applyControlButtonStyle(gpsBtn);
-  gpsBtn.onclick = async () => {
-    activeFollowTargetKey = null;
-    refreshAircraftFollowButtons();
-
-    await startDeviceCompass();
-
-    if (!lastUserLatLng) return;
-
-    const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
-
-    map.flyTo(lastUserLatLng, targetZoom, {
-      animate: true,
-      duration: 0.8
-    });
-  };
+  aircraftList.style.alignItems = "start";
+  aircraftList.style.justifyContent = "start";
+  aircraftList.style.maxWidth = "calc(100vw - 16px)";
 
   wrap.appendChild(acBtn);
   wrap.appendChild(aircraftList);
-  wrap.appendChild(gpsBtn);
   document.body.appendChild(wrap);
 
   refreshAircraftFollowButtons();
