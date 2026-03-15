@@ -312,20 +312,19 @@ function getVerticalState(ac) {
   const vr = Number(ac.vert_rate);
 
   if (isNaN(vr)) {
-    return { arrow: "→", color: "#ffffff" };
+    return { arrow: "→", color: "#000000" };
   }
 
   if (vr > 300) {
-    return { arrow: "▲", color: "#ff4d4f" };
+    return { arrow: "▲", color: "#ff3b30" };
   }
 
   if (vr < -300) {
-    return { arrow: "▼", color: "#4da6ff" };
+    return { arrow: "▼", color: "#007aff" };
   }
 
-  return { arrow: "→", color: "#ffffff" };
+  return { arrow: "→", color: "#000000" };
 }
-
 /* 항상 보이는 작은 라벨 */
 function formatAircraftLabelHtml(ac, color) {
   const flight = (ac.flight || ac.callsign || "").trim();
@@ -338,32 +337,52 @@ function formatAircraftLabelHtml(ac, color) {
 
   return `
     <div style="
-      font-size:9px;
-      color:#000000;
-      font-weight:800;
+      display:inline-block;
+      background:#ffffff;
+      border:1px solid rgba(0,0,0,0.22);
+      border-radius:4px;
+      box-shadow:0 1px 3px rgba(0,0,0,0.22);
+      padding:2px 5px 3px 5px;
+      min-width:46px;
       white-space:nowrap;
       text-align:center;
       line-height:1.0;
-      text-shadow:
-        -1px -1px 0 #ffffff,
-         1px -1px 0 #ffffff,
-        -1px  1px 0 #ffffff,
-         1px  1px 0 #ffffff;
-      border-top:2px solid ${escapeHtml(color)};
-      padding:1px 4px 2px 4px;
-      min-width:34px;
       user-select:none;
       -webkit-user-select:none;
     ">
       <div style="
+        width:100%;
+        height:2px;
+        background:${escapeHtml(color)};
+        margin:0 0 2px 0;
+        border-radius:2px;
+      "></div>
+
+      <div style="
         font-size:10px;
         font-weight:900;
         color:${vertical.color};
-        margin-bottom:0;
         line-height:1;
+        margin:0 0 1px 0;
       ">${vertical.arrow}</div>
-      <div>${escapeHtml(smallLine1)}</div>
-      ${smallLine2 ? `<div>${escapeHtml(smallLine2)}</div>` : ""}
+
+      <div style="
+        font-size:10px;
+        font-weight:800;
+        color:#000000;
+        line-height:1.05;
+        margin:0;
+      ">${escapeHtml(smallLine1)}</div>
+
+      ${smallLine2 ? `
+        <div style="
+          font-size:10px;
+          font-weight:800;
+          color:#000000;
+          line-height:1.05;
+          margin:1px 0 0 0;
+        ">${escapeHtml(smallLine2)}</div>
+      ` : ""}
     </div>
   `;
 }
