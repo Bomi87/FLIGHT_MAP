@@ -379,13 +379,15 @@ if (vertical && vertical.arrow === "→") {
         border-radius:2px;
       "></div>
 
-      <div style="
-        font-size:10px;
-        font-weight:900;
-        color:${vertical.color};
-        line-height:1;
-        margin:0 0 1px 0;
-      ">${vertical.arrow}</div>
+     ${vertical ? `
+<div style="
+  font-size:10px;
+  font-weight:900;
+  color:${vertical.color};
+  line-height:1;
+  margin:0 0 1px 0;
+">${vertical.arrow}</div>
+` : ""}
 
       <div style="
         font-size:10px;
