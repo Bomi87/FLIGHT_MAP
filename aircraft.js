@@ -390,9 +390,7 @@ function ensureAircraftDetailPanel() {
   return panel;
 }
 
-  document.body.appendChild(panel);
-  return panel;
-}
+ 
 function buildDetailRow(label, value, valueColor = "#ffffff") {
   return `
     <div style="display:grid;grid-template-columns:44px auto;column-gap:8px;margin-bottom:2px;">
