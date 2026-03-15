@@ -11,20 +11,19 @@ const ADSB_API_BASES = [
 
 const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
-const POINT_RADIUS_NM = 80;
 const MAX_LIVE_TRAIL_POINTS = 500;
+const POINT_RADIUS_NM = 80;
 const VERTICAL_RATE_THRESHOLD = 300;
 
-/* GPS / FOLLOW */
+/* ------------------ GPS / USER SETTINGS ------------------ */
+
 const USER_GPS_ZOOM_MIN = 10;
 const MAX_USER_TRAIL_POINTS = 1000;
-const USER_HEADING_MIN_SPEED_KT = 1.5;     // 이 속도 미만이면 heading 신뢰 안함
-const USER_HEADING_SMOOTHING = 0.25;     // 0~1, 클수록 더 빨리 따라감
-const USER_HEADING_CHANGE_MIN_DEG = 5;   // 너무 작은 흔들림은 무시
 
-/* 버튼 눌렀을 때만 적용할 zoom */
-const AIRCRAFT_FOLLOW_CLICK_ZOOM = 8;
-const USER_FOLLOW_CLICK_ZOOM = 13;
+const USER_HEADING_MIN_SPEED_KT = 2.0;     // 이 이상이면 GPS heading 우선
+const GPS_HEADING_SMOOTHING = 0.35;        // 이동 중 GPS heading smoothing
+const COMPASS_HEADING_SMOOTHING = 0.18;    // 정지/저속 시 compass smoothing
+const USER_HEADING_CHANGE_MIN_DEG = 2;
 
 /* ------------------ STATE ------------------ */
 
@@ -39,15 +38,20 @@ let trackingStarted = false;
 let animationFrameId = null;
 let animationToken = 0;
 
-/* FOLLOW / GPS */
-let followMode = "aircraft"; // aircraft | user
+let lastAircraftLatLng = null;
+let lastUserLatLng = null;
+
+/* ------------------ USER / GPS STATE ------------------ */
+
 let userMarker = null;
 let userAccuracyCircle = null;
-let userWatchId = null;
-let lastUserPosition = null;
+let userHeadingMarker = null;
 let userTrail = [];
 let userTrailLine = null;
-let lastUserHeading = null;
+
+let gpsWatchId = null;
+let deviceCompassHeading = null;
+let lastUserHeadingDeg = null;
 
 /* ------------------ STATUS BOX ------------------ */
 
@@ -62,604 +66,347 @@ function getStatusBox() {
     box.style.left = "10px";
     box.style.zIndex = "99999";
     box.style.background = "rgba(255,255,255,0.92)";
-    box.style.color = "#333";
-    box.style.padding = "6px 10px";
-    box.style.fontSize = "12px";
+    box.style.color = "#222";
+    box.style.padding = "6px 8px";
+    box.style.fontSize = "11px";
     box.style.lineHeight = "1.35";
-    box.style.border = "1px solid #999";
-    box.style.borderRadius = "6px";
-    box.style.maxWidth = "320px";
-    box.style.wordBreak = "break-word";
-    box.style.boxShadow = "0 1px 4px rgba(0,0,0,0.15)";
+    box.style.border = "1px solid rgba(0,0,0,0.18)";
+    box.style.borderRadius = "8px";
+    box.style.boxShadow = "0 2px 8px rgba(0,0,0,0.12)";
+    box.style.maxWidth = "220px";
     document.body.appendChild(box);
   }
 
   return box;
 }
 
-function showStatus(message, color = "#333") {
-  const box = getStatusBox();
-  box.style.display = "block";
-  box.style.color = color;
-  box.textContent = message;
+function setStatus(text) {
+  getStatusBox().innerHTML = text;
 }
 
-function hideStatus() {
-  const box = document.getElementById("aircraft-status");
-  if (box) {
-    box.textContent = "";
-    box.style.display = "none";
-  }
-}
+/* ------------------ CONTROL BUTTONS ------------------ */
 
-/* ------------------ ANGLE / HEADING UTILS ------------------ */
+function createControlButtons() {
+  let wrap = document.getElementById("custom-follow-controls");
+  if (wrap) return;
 
-function normalizeAngle(angle) {
-  let a = angle % 360;
-  if (a < 0) a += 360;
-  return a;
-}
+  wrap = document.createElement("div");
+  wrap.id = "custom-follow-controls";
+  wrap.style.position = "fixed";
+  wrap.style.top = "52px";
+  wrap.style.right = "10px";
+  wrap.style.zIndex = "99999";
+  wrap.style.display = "flex";
+  wrap.style.flexDirection = "column";
+  wrap.style.gap = "6px";
 
-function shortestAngleDelta(from, to) {
-  let delta = normalizeAngle(to) - normalizeAngle(from);
-  if (delta > 180) delta -= 360;
-  if (delta < -180) delta += 360;
-  return delta;
-}
-
-function smoothHeading(previous, next, factor = USER_HEADING_SMOOTHING) {
-  if (!Number.isFinite(next)) return previous;
-  if (!Number.isFinite(previous)) return normalizeAngle(next);
-
-  const delta = shortestAngleDelta(previous, next);
-
-  if (Math.abs(delta) < USER_HEADING_CHANGE_MIN_DEG) {
-    return normalizeAngle(previous);
+  function makeBtn(label) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.style.width = "54px";
+    btn.style.height = "34px";
+    btn.style.border = "1px solid rgba(0,0,0,0.2)";
+    btn.style.borderRadius = "8px";
+    btn.style.background = "rgba(255,255,255,0.95)";
+    btn.style.color = "#111";
+    btn.style.fontSize = "12px";
+    btn.style.fontWeight = "700";
+    btn.style.cursor = "pointer";
+    btn.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
+    btn.style.backdropFilter = "blur(4px)";
+    return btn;
   }
 
-  return normalizeAngle(previous + delta * factor);
-}
+  const acBtn = makeBtn("A/C");
+  const gpsBtn = makeBtn("GPS");
 
-/* ------------------ FOLLOW BUTTON ------------------ */
-
-function updateFollowButtonUi() {
-  const btn = document.getElementById("follow-toggle-btn");
-  if (!btn) return;
-
-  if (followMode === "user") {
-    btn.textContent = "GPS";
-    btn.style.background = "#dceeff";
-    btn.style.color = "#004a99";
-    btn.title = "GPS follow ON";
-  } else {
-    btn.textContent = "A/C";
-    btn.style.background = "#fff";
-    btn.style.color = "#333";
-    btn.title = "Aircraft follow ON";
-  }
-}
-
-function focusAircraftNow() {
-  if (
-    lastAircraft &&
-    Number.isFinite(lastAircraft.latitude) &&
-    Number.isFinite(lastAircraft.longitude)
-  ) {
-    try {
-      map.setView(
-        [lastAircraft.latitude, lastAircraft.longitude],
-        AIRCRAFT_FOLLOW_CLICK_ZOOM,
-        { animate: true }
-      );
-    } catch {}
-  }
-}
-
-function focusUserNow() {
-  if (
-    lastUserPosition &&
-    Number.isFinite(lastUserPosition.lat) &&
-    Number.isFinite(lastUserPosition.lon)
-  ) {
-    try {
-      map.setView(
-        [lastUserPosition.lat, lastUserPosition.lon],
-        USER_FOLLOW_CLICK_ZOOM,
-        { animate: true }
-      );
-    } catch {}
-    return true;
-  }
-  return false;
-}
-
-function createFollowToggleButton() {
-  let btn = document.getElementById("follow-toggle-btn");
-  if (btn) return;
-
-  btn = document.createElement("button");
-  btn.id = "follow-toggle-btn";
-  btn.style.position = "fixed";
-  btn.style.right = "10px";
-  btn.style.top = "95px";
-  btn.style.zIndex = "99999";
-  btn.style.minWidth = "54px";
-  btn.style.height = "38px";
-  btn.style.padding = "0 10px";
-  btn.style.border = "1px solid #888";
-  btn.style.borderRadius = "8px";
-  btn.style.background = "#fff";
-  btn.style.fontSize = "12px";
-  btn.style.fontWeight = "700";
-  btn.style.cursor = "pointer";
-  btn.style.boxShadow = "0 1px 4px rgba(0,0,0,0.15)";
-  btn.style.webkitTapHighlightColor = "transparent";
-
-  btn.onclick = () => {
-    if (followMode === "aircraft") {
-      followMode = "user";
-      updateFollowButtonUi();
-
-      const focused = focusUserNow();
-      if (!focused) {
-        showStatus("Waiting for GPS position...", "#004a99");
-      } else {
-        hideStatus();
-      }
-    } else {
-      followMode = "aircraft";
-      updateFollowButtonUi();
-      hideStatus();
-      focusAircraftNow();
-    }
+  acBtn.onclick = () => {
+    focusAircraftNow();
   };
 
-  document.body.appendChild(btn);
-  updateFollowButtonUi();
+  gpsBtn.onclick = async () => {
+    await startDeviceCompass();
+    focusUserNow();
+  };
+
+  wrap.appendChild(acBtn);
+  wrap.appendChild(gpsBtn);
+  document.body.appendChild(wrap);
 }
 
-/* ------------------ USER GPS ------------------ */
+/* ------------------ MAP FOCUS (ONE-SHOT ONLY) ------------------ */
 
-function makeUserLocationIcon(heading = null) {
-  const hasHeading = Number.isFinite(heading);
-
-  return L.divIcon({
-    className: "user-location-div-icon",
-    html: `
-      <div style="
-        width:28px;
-        height:28px;
-        position:relative;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-      ">
-        ${
-          hasHeading
-            ? `
-          <div style="
-            position:absolute;
-            width:0;
-            height:0;
-            border-left:7px solid transparent;
-            border-right:7px solid transparent;
-            border-bottom:14px solid #ff3b30;
-            top:1px;
-            left:7px;
-            transform:rotate(${heading}deg);
-            transform-origin:50% 13px;
-            filter:drop-shadow(0 1px 2px rgba(0,0,0,0.35));
-          "></div>
-        `
-            : ""
-        }
-
-        <div style="
-          width:16px;
-          height:16px;
-          border-radius:50%;
-          background:#1e78ff;
-          border:3px solid #ffffff;
-          box-shadow:0 0 0 2px rgba(30,120,255,0.25), 0 1px 4px rgba(0,0,0,0.35);
-          position:absolute;
-          left:6px;
-          top:6px;
-        "></div>
-      </div>
-    `,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14]
+function focusAircraftNow() {
+  if (!lastAircraftLatLng) return;
+  const targetZoom = Math.max(map.getZoom(), 9);
+  map.flyTo(lastAircraftLatLng, targetZoom, {
+    animate: true,
+    duration: 0.8
   });
 }
 
-function redrawUserTrail() {
-  if (!userTrail.length) return;
-
-  if (!userTrailLine) {
-    userTrailLine = L.polyline(userTrail, {
-      color: "#1e78ff",
-      weight: 3,
-      opacity: 0.9,
-      smoothFactor: 1
-    }).addTo(map);
-  } else {
-    userTrailLine.setLatLngs(userTrail);
-  }
+function focusUserNow() {
+  if (!lastUserLatLng) return;
+  const targetZoom = Math.max(map.getZoom(), USER_GPS_ZOOM_MIN);
+  map.flyTo(lastUserLatLng, targetZoom, {
+    animate: true,
+    duration: 0.8
+  });
 }
 
-function addUserTrailPoint(lat, lon) {
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+/* ------------------ UTILS ------------------ */
 
-  const newPoint = [lat, lon];
-  const last = userTrail[userTrail.length - 1];
-
-  if (last && isSamePoint(last, newPoint)) return;
-
-  userTrail.push(newPoint);
-
-  if (userTrail.length > MAX_USER_TRAIL_POINTS) {
-    userTrail.shift();
-  }
-
-  redrawUserTrail();
+function formatNumber(value, digits = 0) {
+  if (value == null || isNaN(value)) return "";
+  return Number(value).toFixed(digits);
 }
 
-function getBestUserHeading(pos) {
-  const speedMps = Number(pos.coords.speed);
-  const speedKt = Number.isFinite(speedMps) ? speedMps * 1.94384 : null;
-
-  const rawHeading = Number(pos.coords.heading);
-  if (
-    Number.isFinite(rawHeading) &&
-    rawHeading >= 0 &&
-    Number.isFinite(speedKt) &&
-    speedKt >= USER_HEADING_MIN_SPEED_KT
-  ) {
-    return normalizeAngle(rawHeading);
-  }
-
-  const webkitHeading = Number(pos.coords.webkitCompassHeading);
-  if (Number.isFinite(webkitHeading)) {
-    return normalizeAngle(webkitHeading);
-  }
-
-  return null;
+function metersToFeet(m) {
+  return Number(m) * 3.28084;
 }
 
-function startUserLocation() {
-  if (!navigator.geolocation) {
-    console.warn("Geolocation not supported");
-    return;
-  }
-
-  userWatchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const lat = Number(pos.coords.latitude);
-      const lon = Number(pos.coords.longitude);
-      const accuracy = Number(pos.coords.accuracy);
-      const rawHeading = getBestUserHeading(pos);
-      const smoothedHeading = smoothHeading(lastUserHeading, rawHeading);
-
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-
-      if (Number.isFinite(smoothedHeading)) {
-        lastUserHeading = smoothedHeading;
-      }
-
-      lastUserPosition = {
-        lat,
-        lon,
-        accuracy,
-        heading: Number.isFinite(lastUserHeading) ? lastUserHeading : null
-      };
-
-      addUserTrailPoint(lat, lon);
-
-      if (!userMarker) {
-        userMarker = L.marker([lat, lon], {
-          icon: makeUserLocationIcon(lastUserHeading),
-          zIndexOffset: 1500
-        }).addTo(map);
-
-        userMarker.bindTooltip("My Position", {
-          permanent: false,
-          direction: "top",
-          offset: [0, -10]
-        });
-      } else {
-        userMarker.setLatLng([lat, lon]);
-        userMarker.setIcon(makeUserLocationIcon(lastUserHeading));
-      }
-
-      if (Number.isFinite(accuracy) && accuracy > 0) {
-        if (!userAccuracyCircle) {
-          userAccuracyCircle = L.circle([lat, lon], {
-            radius: accuracy,
-            color: "#1e78ff",
-            weight: 1,
-            opacity: 0.5,
-            fillColor: "#1e78ff",
-            fillOpacity: 0.08
-          }).addTo(map);
-        } else {
-          userAccuracyCircle.setLatLng([lat, lon]);
-          userAccuracyCircle.setRadius(accuracy);
-        }
-      }
-
-      if (followMode === "user") {
-        hideStatus();
-        try {
-          const currentZoom = map.getZoom?.();
-          map.setView(
-            [lat, lon],
-            Number.isFinite(currentZoom) ? currentZoom : USER_FOLLOW_CLICK_ZOOM,
-            { animate: true }
-          );
-        } catch {}
-      }
-
-      console.log(
-        "User GPS:",
-        lat,
-        lon,
-        "accuracy:",
-        accuracy,
-        "raw heading:",
-        rawHeading,
-        "smoothed heading:",
-        lastUserHeading
-      );
-    },
-    (err) => {
-      console.warn("GPS error:", err);
-
-      if (followMode === "user") {
-        showStatus("GPS unavailable or permission denied.", "#a60");
-      }
-    },
-    {
-      enableHighAccuracy: true,
-      maximumAge: 3000,
-      timeout: 10000
-    }
-  );
+function metersPerSecondToKnots(ms) {
+  return (Number(ms) || 0) * 1.943844;
 }
 
-/* ------------------ FORMATTERS ------------------ */
-
-function getAltitudeFeet(ac) {
-  let alt = ac.alt_geom ?? ac.alt_baro ?? ac.geo_altitude ?? ac.baro_altitude;
-
-  if (alt == null || isNaN(alt)) return null;
-
-  let ft = Number(alt);
-
-  if (ft > -2000 && ft < 20000) {
-    ft = Math.round(ft * 3.28084);
-  } else {
-    ft = Math.round(ft);
-  }
-
-  return ft;
+function normalizeDeg(deg) {
+  let d = deg % 360;
+  if (d < 0) d += 360;
+  return d;
 }
 
-function formatAltitudeFromState(ac) {
-  const ft = getAltitudeFeet(ac);
-  if (ft == null) return "";
+function shortestAngleDiff(fromDeg, toDeg) {
+  let diff = normalizeDeg(toDeg) - normalizeDeg(fromDeg);
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+  return diff;
+}
 
+function smoothHeading(prevDeg, nextDeg, smoothing) {
+  if (prevDeg == null) return normalizeDeg(nextDeg);
+  const diff = shortestAngleDiff(prevDeg, nextDeg);
+  return normalizeDeg(prevDeg + diff * smoothing);
+}
+
+function getDistanceNm(lat1, lon1, lat2, lon2) {
+  const R = 3440.065;
+  const toRad = Math.PI / 180;
+
+  const dLat = (lat2 - lat1) * toRad;
+  const dLon = (lon2 - lon1) * toRad;
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * toRad) *
+      Math.cos(lat2 * toRad) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+/* ------------------ AIRCRAFT FORMATTERS ------------------ */
+
+function formatAltitudeText(ac) {
+  const altBaro = ac.alt_baro;
+  const altGeom = ac.alt_geom;
+  const altFt = altBaro ?? altGeom;
+
+  if (altFt == null || isNaN(altFt)) return "";
+
+  const ft = Math.round(Number(altFt));
   if (ft >= 18000) {
     return "FL" + String(Math.round(ft / 100)).padStart(3, "0");
   }
-
   return ft.toLocaleString() + " ft";
 }
 
-function getVerticalRateFpm(ac) {
-  let vr = ac.baro_rate ?? ac.geom_rate ?? ac.vertical_rate;
-
-  if (vr == null || isNaN(vr)) return null;
-
-  vr = Number(vr);
-
-  if (Math.abs(vr) < 120) {
-    vr = vr * 196.850394;
+function formatMachText(ac) {
+  if (ac.mach != null && !isNaN(ac.mach)) {
+    return "M." + String(Number(ac.mach).toFixed(2)).replace(/^0/, "");
   }
 
-  return Math.round(vr);
-}
-
-function getVerticalTrendSymbol(ac) {
-  const vr = getVerticalRateFpm(ac);
-
-  if (vr == null) return "";
-  if (vr >= VERTICAL_RATE_THRESHOLD) return "↑";
-  if (vr <= -VERTICAL_RATE_THRESHOLD) return "↓";
-  return "→";
-}
-
-function formatAltitudeLine(ac) {
-  const altitude = formatAltitudeFromState(ac);
-  const trend = getVerticalTrendSymbol(ac);
-
-  if (!altitude) return "";
-  if (!trend) return altitude;
-  return `${altitude} ${trend}`;
-}
-
-function formatMach(ac) {
-  const mach = Number(ac.mach);
-  if (!Number.isFinite(mach) || mach <= 0) return "";
-
-  const machStr = mach.toFixed(2).replace(/^0/, "");
-  return "M" + machStr;
-}
-
-function formatIAS(ac) {
-  const ias = Number(ac.ias);
-  if (!Number.isFinite(ias) || ias <= 0) return "";
-  return Math.round(ias) + "kt";
-}
-
-function formatGS(ac) {
   const gs = Number(ac.gs);
-  if (!Number.isFinite(gs) || gs <= 0) return "";
-  return Math.round(gs) + "kt";
-}
+  if (!isNaN(gs) && gs > 0) {
+    const altFt = Number(ac.alt_baro ?? ac.alt_geom ?? 0);
+    const tasApprox = gs;
+    let soundKt = 661;
 
-function formatSpeedLine(ac) {
-  const mach = formatMach(ac);
-  const ias = formatIAS(ac);
-  const gs = formatGS(ac);
+    if (altFt >= 35000) soundKt = 573;
+    else if (altFt >= 30000) soundKt = 590;
+    else if (altFt >= 25000) soundKt = 610;
+    else if (altFt >= 20000) soundKt = 630;
+    else if (altFt >= 10000) soundKt = 650;
 
-  if (mach && ias) return `${mach} / ${ias}`;
-  if (mach && gs) return `${mach} / ${gs}`;
-  if (ias) return ias;
-  if (gs) return gs;
-  if (mach) return mach;
+    const mach = tasApprox / soundKt;
+    if (mach > 0.2) {
+      return "M." + String(mach.toFixed(2)).replace(/^0/, "");
+    }
+  }
 
   return "";
 }
 
-/* ------------------ LABEL ------------------ */
+function formatIasText(ac) {
+  if (ac.ias != null && !isNaN(ac.ias)) {
+    return Math.round(Number(ac.ias)) + "KT";
+  }
 
-function formatLabel(ac) {
-  const callsign = (ac.callsign || ac.flight || ac.hex || "").trim();
-  const reg = (ac.reg || ac.r || "").trim();
-  const type = (ac.type || "").trim();
+  if (ac.gs != null && !isNaN(ac.gs)) {
+    return Math.round(Number(ac.gs)) + "KT";
+  }
 
-  const altitudeLine = formatAltitudeLine(ac);
-  const speedLine = formatSpeedLine(ac);
+  return "";
+}
+
+function formatLabelHtml(ac) {
+  const flight = (ac.flight || ac.callsign || "").trim();
+  const reg = (ac.r || ac.reg || "").trim();
+  const type = (ac.t || ac.type || "").trim();
+  const altitudeText = formatAltitudeText(ac);
+  const machText = formatMachText(ac);
+  const iasText = formatIasText(ac);
+
+  const line1 = [flight, reg ? `(${reg})` : ""].filter(Boolean).join(" ");
+  const line2 = [type, altitudeText].filter(Boolean).join(" ");
+  const line3 = [machText, iasText].filter(Boolean).join(" / ");
 
   return `
     <div style="
-      display:inline-block;
-      width:auto;
-      min-width:0;
-      max-width:110px;
-      padding:4px 6px;
-      background:rgba(255,255,255,0.95);
-      border:1px solid #999;
-      border-radius:6px;
-      box-shadow:0 1px 3px rgba(0,0,0,0.15);
-      text-align:center;
-      color:#111;
-      line-height:1.10;
+      font-size:11px;
+      color:#000;
+      font-weight:700;
       white-space:nowrap;
+      text-align:center;
+      line-height:1.2;
+      text-shadow:
+        -1px -1px 0 #fff,
+         1px -1px 0 #fff,
+        -1px  1px 0 #fff,
+         1px  1px 0 #fff;
     ">
-      <div style="
-        font-size:12px;
-        font-weight:700;
-      ">${callsign || "-"}</div>
-
-      ${reg ? `
-        <div style="
-          font-size:11px;
-          font-weight:600;
-          margin-top:1px;
-        ">(${reg})</div>
-      ` : ""}
-
-      ${type ? `
-        <div style="
-          font-size:11px;
-          font-weight:700;
-          color:#333;
-          margin-top:1px;
-        ">${type}</div>
-      ` : ""}
-
-      ${altitudeLine ? `
-        <div style="
-          font-size:11px;
-          font-weight:700;
-          margin-top:1px;
-        ">${altitudeLine}</div>
-      ` : ""}
-
-      ${speedLine ? `
-        <div style="
-          font-size:10px;
-          font-weight:600;
-          color:#444;
-          margin-top:1px;
-        ">${speedLine}</div>
-      ` : ""}
+      ${line1 ? `<div>${escapeHtml(line1)}</div>` : ""}
+      ${line2 ? `<div>${escapeHtml(line2)}</div>` : ""}
+      ${line3 ? `<div>${escapeHtml(line3)}</div>` : ""}
     </div>
   `;
 }
 
-/* ------------------ ICON ------------------ */
-
-function makeAircraftIcon(track = 0) {
+function buildAircraftIcon(trackDeg = 0) {
   return L.divIcon({
     className: "aircraft-div-icon",
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
     html: `
       <div style="
-        width:36px;
-        height:36px;
+        width:30px;
+        height:30px;
         display:flex;
         align-items:center;
         justify-content:center;
-        transform:rotate(${track}deg);
+        transform: rotate(${normalizeDeg(trackDeg)}deg);
         transform-origin:center center;
       ">
-        <svg width="32" height="32" viewBox="0 0 100 100">
-          <g
-            fill="#ff8800"
-            stroke="black"
-            stroke-width="3"
-            stroke-linejoin="round"
-          >
-            <path d="
-              M50 2
-              L56 26
-              L88 36
-              L88 44
-              L56 42
-              L54 70
-              L68 82
-              L64 86
-              L52 78
-              L52 96
-              L48 96
-              L48 78
-              L36 86
-              L32 82
-              L46 70
-              L44 42
-              L12 44
-              L12 36
-              L44 26
-              Z
-            "/>
-          </g>
-        </svg>
+        <div style="
+          width:0;
+          height:0;
+          border-left:8px solid transparent;
+          border-right:8px solid transparent;
+          border-bottom:20px solid #111;
+          filter: drop-shadow(0 0 1px rgba(255,255,255,0.8));
+        "></div>
       </div>
-    `,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18]
+    `
   });
 }
 
-/* ------------------ TRAIL ------------------ */
+/* ------------------ AIRCRAFT DRAW ------------------ */
 
-function isSamePoint(a, b) {
-  return (
-    Math.abs(a[0] - b[0]) < 0.00001 &&
-    Math.abs(a[1] - b[1]) < 0.00001
-  );
+function ensureAircraftMarker(ac) {
+  const lat = Number(ac.lat);
+  const lon = Number(ac.lon);
+  const track = Number(ac.track || ac.true_heading || ac.mag_heading || 0);
+
+  if (isNaN(lat) || isNaN(lon)) return;
+
+  const newLatLng = [lat, lon];
+  lastAircraftLatLng = newLatLng;
+
+  const icon = buildAircraftIcon(track);
+  const labelHtml = formatLabelHtml(ac);
+
+  if (!aircraftMarker) {
+    aircraftMarker = L.marker(newLatLng, {
+      icon,
+      zIndexOffset: 1000
+    }).addTo(map);
+
+    aircraftMarker.bindTooltip(labelHtml, {
+      permanent: true,
+      direction: "top",
+      offset: [0, -12],
+      className: "aircraft-label-tooltip",
+      opacity: 1
+    });
+  } else {
+    aircraftMarker.setLatLng(newLatLng);
+    aircraftMarker.setIcon(icon);
+
+    if (aircraftMarker.getTooltip()) {
+      aircraftMarker.setTooltipContent(labelHtml);
+    } else {
+      aircraftMarker.bindTooltip(labelHtml, {
+        permanent: true,
+        direction: "top",
+        offset: [0, -12],
+        className: "aircraft-label-tooltip",
+        opacity: 1
+      });
+    }
+  }
 }
 
-function redrawLiveTrail() {
-  if (!liveTrail.length) return;
+function updateLiveTrail(ac) {
+  const lat = Number(ac.lat);
+  const lon = Number(ac.lon);
+  if (isNaN(lat) || isNaN(lon)) return;
+
+  const point = [lat, lon];
+
+  if (liveTrail.length > 0) {
+    const prev = liveTrail[liveTrail.length - 1];
+    const dNm = getDistanceNm(prev[0], prev[1], point[0], point[1]);
+
+    if (dNm < 0.01) return;
+    if (dNm > POINT_RADIUS_NM) {
+      liveTrail.push(point);
+    } else {
+      liveTrail.push(point);
+    }
+  } else {
+    liveTrail.push(point);
+  }
+
+  if (liveTrail.length > MAX_LIVE_TRAIL_POINTS) {
+    liveTrail.shift();
+  }
 
   if (!liveTrailLine) {
     liveTrailLine = L.polyline(liveTrail, {
-      color: "#ff4d00",
-      weight: 4,
-      opacity: 0.95,
-      dashArray: "6 6",
+      color: "#111",
+      weight: 3,
+      opacity: 0.65,
       smoothFactor: 1
     }).addTo(map);
   } else {
@@ -667,382 +414,417 @@ function redrawLiveTrail() {
   }
 }
 
-function addLiveTrailPoint(lat, lon) {
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+function updateAircraft(ac) {
+  if (!ac) return;
+  lastAircraft = ac;
 
-  const newPoint = [lat, lon];
-  const last = liveTrail[liveTrail.length - 1];
+  ensureAircraftMarker(ac);
+  updateLiveTrail(ac);
 
-  if (last && isSamePoint(last, newPoint)) return;
+  const reg = ac.r || ac.reg || "-";
+  const flight = ac.flight || ac.callsign || "-";
+  const type = ac.t || ac.type || "-";
+  const alt = formatAltitudeText(ac) || "-";
+  const mach = formatMachText(ac) || "-";
+  const ias = formatIasText(ac) || "-";
 
-  liveTrail.push(newPoint);
-
-  if (liveTrail.length > MAX_LIVE_TRAIL_POINTS) {
-    liveTrail.shift();
-  }
-
-  redrawLiveTrail();
+  setStatus(`
+    <div><b>${escapeHtml(flight)}</b> ${reg ? `(${escapeHtml(reg)})` : ""}</div>
+    <div>${escapeHtml(type)}</div>
+    <div>${escapeHtml(alt)}</div>
+    <div>${escapeHtml(mach)} / ${escapeHtml(ias)}</div>
+  `);
 }
 
-/* ------------------ FETCH / FALLBACK ------------------ */
+/* ------------------ AIRCRAFT ANIMATION ------------------ */
 
-async function fetchJsonFromFallbacks(path) {
-  const bases = [...ADSB_API_BASES];
-
-  if (lastGoodApiBase) {
-    const idx = bases.indexOf(lastGoodApiBase);
-    if (idx > 0) {
-      bases.splice(idx, 1);
-      bases.unshift(lastGoodApiBase);
-    }
-  }
-
-  let lastError = null;
-
-  for (const base of bases) {
-    const url = `${base}${path}`;
-
-    try {
-      console.log("Trying API:", url);
-
-      const res = await fetch(url, { cache: "no-store" });
-      const text = await res.text();
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(`Non-JSON response from ${base}: ${text.slice(0, 200)}`);
-      }
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status} from ${base}: ${text.slice(0, 200)}`);
-      }
-
-      lastGoodApiBase = base;
-      return { data, base };
-    } catch (err) {
-      console.warn("API failed:", base, err);
-      lastError = err;
-    }
-  }
-
-  throw lastError || new Error("All ADS-B APIs failed");
-}
-
-/* ------------------ NORMALIZE ------------------ */
-
-function normalizeAircraft(raw) {
-  if (!raw || typeof raw !== "object") return null;
-
-  const lat = raw.lat ?? raw.latitude ?? raw.lat_deg;
-  const lon = raw.lon ?? raw.lng ?? raw.longitude ?? raw.lon_deg;
-
-  return {
-    hex: String(raw.hex || raw.icao24 || "").toLowerCase(),
-    icao24: String(raw.hex || raw.icao24 || "").toLowerCase(),
-
-    callsign: String(raw.flight || raw.callsign || "").trim(),
-    flight: String(raw.flight || raw.callsign || "").trim(),
-
-    r: String(raw.r || raw.reg || "").trim(),
-    reg: String(raw.r || raw.reg || "").trim(),
-
-    type: String(raw.t || raw.type || "").trim(),
-
-    latitude: Number(lat),
-    longitude: Number(lon),
-
-    true_track: Number(raw.track ?? raw.true_track ?? raw.heading ?? 0),
-    gs: Number(raw.gs ?? raw.groundspeed ?? raw.speed ?? 0),
-    ias: Number(raw.ias),
-    mach: Number(raw.mach),
-
-    alt_baro: raw.alt_baro,
-    alt_geom: raw.alt_geom,
-    geo_altitude: raw.geo_altitude,
-    baro_altitude: raw.baro_altitude,
-
-    baro_rate: raw.baro_rate,
-    geom_rate: raw.geom_rate,
-    vertical_rate: raw.vertical_rate,
-
-    seen: raw.seen,
-    seen_pos: raw.seen_pos,
-
-    sourceBase: ""
-  };
-}
-
-function pickAircraftFromResponse(data) {
-  if (Array.isArray(data?.ac) && data.ac.length) {
-    return data.ac.map(normalizeAircraft).filter(Boolean);
-  }
-
-  if (Array.isArray(data?.aircraft) && data.aircraft.length) {
-    return data.aircraft.map(normalizeAircraft).filter(Boolean);
-  }
-
-  if (data?.hex || data?.lat || data?.lon || data?.latitude || data?.longitude) {
-    const one = normalizeAircraft(data);
-    return one ? [one] : [];
-  }
-
-  return [];
-}
-
-function isTargetAircraft(ac) {
-  if (!ac) return false;
-
-  const hex = (ac.hex || ac.icao24 || "").toLowerCase();
-  const reg = (ac.r || ac.reg || "").toUpperCase().trim();
-  const callsign = (ac.flight || ac.callsign || "").toUpperCase().trim();
-
-  if (targetHex && hex === targetHex) return true;
-  if (targetReg && reg && reg === targetReg) return true;
-  if (targetReg && callsign && callsign === targetReg) return true;
-
-  return false;
-}
-
-/* ------------------ SEARCH METHODS ------------------ */
-
-async function fetchAircraftByHex() {
-  if (!targetHex) return null;
-
-  const { data, base } = await fetchJsonFromFallbacks(
-    `/v2/hex/${encodeURIComponent(targetHex)}`
-  );
-
-  const list = pickAircraftFromResponse(data);
-  console.log("HEX lookup result:", base, data, list);
-
-  const ac = list.find(isTargetAircraft) || list[0] || null;
-
-  if (ac) ac.sourceBase = base;
-  return ac;
-}
-
-async function fetchAircraftByReg() {
-  if (!targetReg) return null;
-
-  const { data, base } = await fetchJsonFromFallbacks(
-    `/v2/reg/${encodeURIComponent(targetReg)}`
-  );
-
-  const list = pickAircraftFromResponse(data);
-  console.log("REG lookup result:", base, data, list);
-
-  const ac = list.find(isTargetAircraft) || list[0] || null;
-
-  if (ac) ac.sourceBase = base;
-  return ac;
-}
-
-async function fetchAircraftFromPoint(lat, lon, radiusNm = POINT_RADIUS_NM) {
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-
-  const { data, base } = await fetchJsonFromFallbacks(
-    `/v2/point/${encodeURIComponent(lat)}/${encodeURIComponent(lon)}/${encodeURIComponent(radiusNm)}`
-  );
-
-  const list = pickAircraftFromResponse(data);
-  console.log("POINT lookup result:", base, data, list);
-
-  const ac = list.find(isTargetAircraft) || null;
-
-  if (ac) ac.sourceBase = base;
-  return ac;
-}
-
-/* ------------------ ANIMATION ------------------ */
-
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
-function animateMarkerTo(lat, lon, track, ac) {
-  if (!aircraftMarker) {
-    aircraftMarker = L.marker([lat, lon], {
-      icon: makeAircraftIcon(track),
-      zIndexOffset: 2000
-    }).addTo(map);
-
-    aircraftMarker.bindTooltip(formatLabel(ac), {
-      permanent: true,
-      direction: "top",
-      offset: [0, -18],
-      className: "aircraft-label",
-      opacity: 1
-    });
-
+function animateAircraftIfNeeded(prevAc, nextAc) {
+  if (!aircraftMarker || !prevAc || !nextAc) {
+    updateAircraft(nextAc);
     return;
   }
 
-  const startLatLng = aircraftMarker.getLatLng();
-  const startLat = startLatLng.lat;
-  const startLon = startLatLng.lng;
+  const fromLat = Number(prevAc.lat);
+  const fromLon = Number(prevAc.lon);
+  const toLat = Number(nextAc.lat);
+  const toLon = Number(nextAc.lon);
 
-  const startTrack = Number(lastAircraft?.true_track ?? track ?? 0);
-  const endTrack = Number(track ?? 0);
-
-  aircraftMarker.unbindTooltip();
-  aircraftMarker.bindTooltip(formatLabel(ac), {
-    permanent: true,
-    direction: "top",
-    offset: [0, -18],
-    className: "aircraft-label",
-    opacity: 1
-  });
+  if ([fromLat, fromLon, toLat, toLon].some(v => isNaN(v))) {
+    updateAircraft(nextAc);
+    return;
+  }
 
   if (animationFrameId) {
     cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
   }
 
-  const myToken = ++animationToken;
-  const startTime = performance.now();
-  const angleDelta = shortestAngleDelta(startTrack, endTrack);
+  const track = Number(nextAc.track || nextAc.true_heading || nextAc.mag_heading || 0);
+  const labelHtml = formatLabelHtml(nextAc);
+  const icon = buildAircraftIcon(track);
 
-  function frame(now) {
-    if (myToken !== animationToken) return;
+  const start = performance.now();
+  const token = ++animationToken;
 
-    const elapsed = now - startTime;
-    const t = Math.min(1, elapsed / ANIMATION_DURATION_MS);
+  function step(now) {
+    if (token !== animationToken) return;
 
-    const eased = t < 0.5
-      ? 2 * t * t
-      : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const t = Math.min(1, (now - start) / ANIMATION_DURATION_MS);
+    const lat = fromLat + (toLat - fromLat) * t;
+    const lon = fromLon + (toLon - fromLon) * t;
 
-    const curLat = lerp(startLat, lat, eased);
-    const curLon = lerp(startLon, lon, eased);
-    const curTrack = normalizeAngle(startTrack + angleDelta * eased);
+    lastAircraftLatLng = [lat, lon];
 
-    aircraftMarker.setLatLng([curLat, curLon]);
-    aircraftMarker.setIcon(makeAircraftIcon(curTrack));
+    if (!aircraftMarker) {
+      aircraftMarker = L.marker([lat, lon], {
+        icon,
+        zIndexOffset: 1000
+      }).addTo(map);
 
-    if (t < 1) {
-      animationFrameId = requestAnimationFrame(frame);
+      aircraftMarker.bindTooltip(labelHtml, {
+        permanent: true,
+        direction: "top",
+        offset: [0, -12],
+        opacity: 1
+      });
     } else {
-      animationFrameId = null;
       aircraftMarker.setLatLng([lat, lon]);
-      aircraftMarker.setIcon(makeAircraftIcon(endTrack));
-    }
-  }
+      aircraftMarker.setIcon(icon);
 
-  animationFrameId = requestAnimationFrame(frame);
-}
-
-/* ------------------ UPDATE AIRCRAFT ------------------ */
-
-async function updateAircraft() {
-  if (!targetHex && !targetReg) {
-    showStatus("No HEX or REG parameter.", "#444");
-    return;
-  }
-
-  try {
-    let ac = null;
-
-    if (!trackingStarted && followMode === "aircraft") {
-      showStatus("Checking aircraft...", "#444");
-    }
-
-    if (
-      lastAircraft &&
-      Number.isFinite(lastAircraft.latitude) &&
-      Number.isFinite(lastAircraft.longitude)
-    ) {
-      try {
-        ac = await fetchAircraftFromPoint(
-          lastAircraft.latitude,
-          lastAircraft.longitude,
-          POINT_RADIUS_NM
-        );
-      } catch (e) {
-        console.warn("Point search failed, fallback to exact lookup:", e);
+      if (aircraftMarker.getTooltip()) {
+        aircraftMarker.setTooltipContent(labelHtml);
       }
     }
 
-    if (!ac && targetHex) {
-      ac = await fetchAircraftByHex();
+    if (t < 1) {
+      animationFrameId = requestAnimationFrame(step);
+    } else {
+      animationFrameId = null;
+      updateAircraft(nextAc);
+    }
+  }
+
+  animationFrameId = requestAnimationFrame(step);
+}
+
+/* ------------------ ADS-B FETCH ------------------ */
+
+async function fetchJson(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+
+function pickAircraftFromResponse(data) {
+  if (!data) return null;
+
+  if (Array.isArray(data.ac) && data.ac.length > 0) {
+    if (targetHex) {
+      const foundByHex = data.ac.find(x => String(x.hex || "").toLowerCase() === targetHex);
+      if (foundByHex) return foundByHex;
     }
 
-    if (!ac && targetReg) {
-      ac = await fetchAircraftByReg();
-    }
-
-    console.log("Final aircraft:", ac);
-
-    if (!ac) {
-      showStatus(
-        `Aircraft not found` +
-        `${targetHex ? `: ${targetHex}` : ""}` +
-        `${targetReg ? ` / ${targetReg}` : ""}`,
-        "#444"
+    if (targetReg) {
+      const foundByReg = data.ac.find(x =>
+        String(x.r || x.reg || "").toUpperCase() === targetReg
       );
-      return;
+      if (foundByReg) return foundByReg;
     }
 
-    const lon = Number(ac.longitude);
-    const lat = Number(ac.latitude);
-    const track = Number(ac.true_track ?? 0);
+    return data.ac[0];
+  }
 
-    console.log("Final position:", lat, lon, track);
+  if (data.hex || data.lat || data.lon) return data;
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      showStatus("Aircraft found but no valid position yet.", "#a60");
-      return;
+  return null;
+}
+
+async function fetchAircraftData() {
+  const bases = lastGoodApiBase
+    ? [lastGoodApiBase, ...ADSB_API_BASES.filter(x => x !== lastGoodApiBase)]
+    : [...ADSB_API_BASES];
+
+  const pathCandidates = [];
+  if (targetHex) {
+    pathCandidates.push(`/v2/hex/${encodeURIComponent(targetHex)}`);
+    pathCandidates.push(`/v2/icao/${encodeURIComponent(targetHex)}`);
+    pathCandidates.push(`/v2/aircraft/${encodeURIComponent(targetHex)}`);
+  }
+  if (targetReg) {
+    pathCandidates.push(`/v2/reg/${encodeURIComponent(targetReg)}`);
+    pathCandidates.push(`/v2/registration/${encodeURIComponent(targetReg)}`);
+  }
+
+  let lastError = null;
+
+  for (const base of bases) {
+    for (const path of pathCandidates) {
+      try {
+        const data = await fetchJson(base + path);
+        const ac = pickAircraftFromResponse(data);
+        if (ac) {
+          lastGoodApiBase = base;
+          return ac;
+        }
+      } catch (err) {
+        lastError = err;
+      }
     }
+  }
 
-    hideStatus();
+  throw lastError || new Error("Aircraft not found");
+}
 
-    addLiveTrailPoint(lat, lon);
-    animateMarkerTo(lat, lon, track, ac);
+async function pollAircraft() {
+  try {
+    const ac = await fetchAircraftData();
 
     if (!trackingStarted) {
+      updateAircraft(ac);
       trackingStarted = true;
-      hideStatus();
+    } else {
+      animateAircraftIfNeeded(lastAircraft, ac);
     }
-
-    if (followMode === "aircraft") {
-      try {
-        const currentZoom = map.getZoom?.();
-        map.setView(
-          [lat, lon],
-          Number.isFinite(currentZoom) ? currentZoom : AIRCRAFT_FOLLOW_CLICK_ZOOM,
-          { animate: true }
-        );
-      } catch {}
-    }
-
-    lastAircraft = {
-      ...ac,
-      latitude: lat,
-      longitude: lon,
-      true_track: track
-    };
-
-    console.log("Tracking source:", ac.sourceBase || lastGoodApiBase, ac);
-
-  } catch (e) {
-    console.error("Aircraft update failed:", e);
-    showStatus("Aircraft update failed: " + e.message, "red");
+  } catch (err) {
+    console.error("pollAircraft error:", err);
+    setStatus(`Aircraft not found / API error`);
   }
 }
 
-/* ------------------ START ------------------ */
+/* ------------------ GPS / COMPASS ------------------ */
 
-async function startAircraftTracking() {
-  if (!targetHex && !targetReg) return;
-
-  showStatus("Starting aircraft tracking...", "#444");
-  await updateAircraft();
-  setInterval(updateAircraft, POLL_INTERVAL_MS);
+function createHeadingArrowIcon(headingDeg) {
+  return L.divIcon({
+    className: "user-heading-arrow",
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    html: `
+      <div style="
+        width:28px;
+        height:28px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        transform: rotate(${normalizeDeg(headingDeg)}deg);
+        transform-origin:center center;
+      ">
+        <div style="
+          width:0;
+          height:0;
+          border-left:7px solid transparent;
+          border-right:7px solid transparent;
+          border-bottom:18px solid red;
+          filter: drop-shadow(0 0 1px rgba(0,0,0,0.6));
+        "></div>
+      </div>
+    `
+  });
 }
 
-/* ------------------ BOOT ------------------ */
+function handleDeviceOrientation(event) {
+  let heading = null;
 
-createFollowToggleButton();
-startUserLocation();
-startAircraftTracking();
+  if (typeof event.webkitCompassHeading === "number") {
+    heading = event.webkitCompassHeading;
+  } else if (event.absolute === true && typeof event.alpha === "number") {
+    heading = 360 - event.alpha;
+  } else if (typeof event.alpha === "number") {
+    heading = 360 - event.alpha;
+  }
+
+  if (heading != null && !isNaN(heading)) {
+    deviceCompassHeading = normalizeDeg(heading);
+
+    if (
+      lastUserLatLng &&
+      userHeadingMarker &&
+      lastUserHeadingDeg != null &&
+      (lastKnownSpeedKt == null || lastKnownSpeedKt < USER_HEADING_MIN_SPEED_KT)
+    ) {
+      const diff = Math.abs(shortestAngleDiff(lastUserHeadingDeg, deviceCompassHeading));
+      let nextHeading = lastUserHeadingDeg;
+
+      if (diff >= USER_HEADING_CHANGE_MIN_DEG) {
+        nextHeading = smoothHeading(
+          lastUserHeadingDeg,
+          deviceCompassHeading,
+          COMPASS_HEADING_SMOOTHING
+        );
+      }
+
+      lastUserHeadingDeg = nextHeading;
+      userHeadingMarker.setLatLng(lastUserLatLng);
+      userHeadingMarker.setIcon(createHeadingArrowIcon(nextHeading));
+    }
+  }
+}
+
+let compassStarted = false;
+async function startDeviceCompass() {
+  if (compassStarted) return;
+
+  try {
+    if (
+      typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function"
+    ) {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== "granted") {
+        console.warn("Device orientation permission denied");
+        return;
+      }
+    }
+
+    window.addEventListener("deviceorientationabsolute", handleDeviceOrientation, true);
+    window.addEventListener("deviceorientation", handleDeviceOrientation, true);
+    compassStarted = true;
+  } catch (err) {
+    console.error("Compass start failed:", err);
+  }
+}
+
+let lastKnownSpeedKt = null;
+
+function updateUserLocation(position) {
+  const lat = position.coords.latitude;
+  const lon = position.coords.longitude;
+  const accuracy = position.coords.accuracy || 0;
+  const gpsHeading = position.coords.heading;
+  const speedKt = metersPerSecondToKnots(position.coords.speed);
+
+  lastKnownSpeedKt = speedKt;
+  lastUserLatLng = [lat, lon];
+
+  /* 파란 점 */
+  if (!userMarker) {
+    userMarker = L.circleMarker(lastUserLatLng, {
+      radius: 4,
+      color: "#ffffff",
+      weight: 2,
+      fillColor: "#2b8cff",
+      fillOpacity: 1,
+      opacity: 1
+    }).addTo(map);
+  } else {
+    userMarker.setLatLng(lastUserLatLng);
+  }
+
+  /* 정확도 원 - 작게 */
+  const clampedAccuracy = Math.max(5, Math.min(accuracy, 18));
+
+  if (!userAccuracyCircle) {
+    userAccuracyCircle = L.circle(lastUserLatLng, {
+      radius: clampedAccuracy,
+      color: "#2b8cff",
+      weight: 1,
+      opacity: 0.25,
+      fillColor: "#2b8cff",
+      fillOpacity: 0.05
+    }).addTo(map);
+  } else {
+    userAccuracyCircle.setLatLng(lastUserLatLng);
+    userAccuracyCircle.setRadius(clampedAccuracy);
+  }
+
+  /* 이동 궤적 */
+  userTrail.push(lastUserLatLng);
+  if (userTrail.length > MAX_USER_TRAIL_POINTS) {
+    userTrail.shift();
+  }
+
+  if (!userTrailLine) {
+    userTrailLine = L.polyline(userTrail, {
+      weight: 3,
+      opacity: 0.7,
+      color: "#2b8cff"
+    }).addTo(map);
+  } else {
+    userTrailLine.setLatLngs(userTrail);
+  }
+
+  /* 방향 결정
+     - 이동 중: GPS heading + smoothing 0.35
+     - 정지/저속: compass heading + smoothing 0.18
+  */
+  let rawHeading = null;
+  let smoothing = GPS_HEADING_SMOOTHING;
+
+  const gpsHeadingValid =
+    gpsHeading != null &&
+    !isNaN(gpsHeading) &&
+    speedKt >= USER_HEADING_MIN_SPEED_KT;
+
+  if (gpsHeadingValid) {
+    rawHeading = normalizeDeg(gpsHeading);
+    smoothing = GPS_HEADING_SMOOTHING;
+  } else if (deviceCompassHeading != null && !isNaN(deviceCompassHeading)) {
+    rawHeading = normalizeDeg(deviceCompassHeading);
+    smoothing = COMPASS_HEADING_SMOOTHING;
+  }
+
+  if (rawHeading != null) {
+    let nextHeading = rawHeading;
+
+    if (lastUserHeadingDeg != null) {
+      const diff = Math.abs(shortestAngleDiff(lastUserHeadingDeg, rawHeading));
+
+      if (diff < USER_HEADING_CHANGE_MIN_DEG) {
+        nextHeading = lastUserHeadingDeg;
+      } else {
+        nextHeading = smoothHeading(lastUserHeadingDeg, rawHeading, smoothing);
+      }
+    }
+
+    lastUserHeadingDeg = nextHeading;
+
+    const headingIcon = createHeadingArrowIcon(nextHeading);
+
+    if (!userHeadingMarker) {
+      userHeadingMarker = L.marker(lastUserLatLng, {
+        icon: headingIcon,
+        zIndexOffset: 1100,
+        interactive: false
+      }).addTo(map);
+    } else {
+      userHeadingMarker.setLatLng(lastUserLatLng);
+      userHeadingMarker.setIcon(headingIcon);
+    }
+  }
+}
+
+function startGpsTracking() {
+  if (!navigator.geolocation) {
+    console.warn("Geolocation not supported");
+    return;
+  }
+
+  if (gpsWatchId != null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+  }
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    updateUserLocation,
+    (err) => {
+      console.error("GPS error:", err);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 10000
+    }
+  );
+}
+
+/* ------------------ INIT ------------------ */
+
+function initAircraftTracking() {
+  createControlButtons();
+  startGpsTracking();
+
+  pollAircraft();
+  setInterval(pollAircraft, POLL_INTERVAL_MS);
+}
+
+initAircraftTracking();
