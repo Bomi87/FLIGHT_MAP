@@ -23,6 +23,15 @@ const RUNNING_SPEED_MAX_KT = 8.0;
 const COMPASS_HEADING_SMOOTHING = 0.18;
 const USER_HEADING_CHANGE_MIN_DEG = 2;
 
+/* --- GPS TRAIL FILTER SETTINGS --- */
+const USER_TRAIL_MAX_ACCURACY_M = 40;          // 이보다 accuracy 나쁘면 불안정으로 간주
+const USER_TRAIL_JUMP_MAX_DIST_M = 60;         // 짧은 시간 내 이 이상 점프면 버림
+const USER_TRAIL_JUMP_MAX_TIME_S = 5;
+const USER_TRAIL_MAX_SPEED_MPS = 8;            // 도보/가벼운 러닝 이상 비정상 점프 제거
+const USER_TRAIL_DASH_MAX_DIST_M = 150;        // 끊김 후 재연결 점선 허용 최대 거리
+const USER_TRAIL_DASH_MAX_TIME_S = 20;         // 끊김 후 재연결 점선 허용 최대 시간
+const USER_TRAIL_MIN_MOVE_M = 3;               // 너무 미세한 흔들림은 trail에 추가 안 함
+
 /* ------------------ STATE ------------------ */
 
 let aircraftMarker = null;
@@ -45,14 +54,22 @@ let lastUserLatLng = null;
 let userMarker = null;
 let userAccuracyCircle = null;
 let userHeadingMarker = null;
-let userTrail = [];
-let userTrailLine = null;
 
+/* 기존 단일 trail 제거 -> 세그먼트 방식 */
 let gpsWatchId = null;
 let deviceCompassHeading = null;
 let lastUserHeadingDeg = null;
 let lastKnownSpeedKt = null;
 let compassStarted = false;
+
+let userTrailSolidSegments = [];
+let userTrailDashedSegments = [];
+let currentUserSolidSegment = [];
+let userTrailSolidLines = [];
+let userTrailDashedLines = [];
+
+let lastAcceptedUserPoint = null;
+let pendingGapStartPoint = null;
 
 /* ------------------ BUTTONS ------------------ */
 
@@ -77,7 +94,7 @@ function createToggleButton() {
   wrap = document.createElement("div");
   wrap.id = "custom-follow-controls";
   wrap.style.position = "fixed";
-  wrap.style.top = "108px";   // 더 아래로 내리려면 이 값 증가
+  wrap.style.top = "108px";
   wrap.style.right = "10px";
   wrap.style.zIndex = "99999";
   wrap.style.display = "flex";
@@ -157,6 +174,21 @@ function smoothHeading(prevDeg, nextDeg, smoothing) {
 
 function metersPerSecondToKnots(ms) {
   return (Number(ms) || 0) * 1.943844;
+}
+
+function metersBetweenLatLng(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 /* ------------------ AIRCRAFT FORMAT ------------------ */
@@ -280,6 +312,7 @@ function buildAircraftIcon(trackDeg = 0) {
     iconAnchor: [18, 18]
   });
 }
+
 /* ------------------ AIRCRAFT DRAW ------------------ */
 
 function ensureAircraftMarker(ac) {
@@ -655,6 +688,170 @@ async function startDeviceCompass() {
   }
 }
 
+/* ------------------ USER TRAIL HELPERS ------------------ */
+
+function redrawUserTrail() {
+  userTrailSolidLines.forEach(line => {
+    if (map.hasLayer(line)) map.removeLayer(line);
+  });
+  userTrailDashedLines.forEach(line => {
+    if (map.hasLayer(line)) map.removeLayer(line);
+  });
+
+  userTrailSolidLines = [];
+  userTrailDashedLines = [];
+
+  for (const seg of userTrailSolidSegments) {
+    if (seg.length >= 2) {
+      const line = L.polyline(seg.map(p => [p.lat, p.lng]), {
+        weight: 2.5,
+        opacity: 0.5,
+        color: "#2b8cff"
+      }).addTo(map);
+      userTrailSolidLines.push(line);
+    }
+  }
+
+  for (const seg of userTrailDashedSegments) {
+    if (seg.length >= 2) {
+      const line = L.polyline(seg.map(p => [p.lat, p.lng]), {
+        weight: 2.5,
+        opacity: 0.45,
+        color: "#2b8cff",
+        dashArray: "6,6"
+      }).addTo(map);
+      userTrailDashedLines.push(line);
+    }
+  }
+}
+
+function trimUserTrailSegments() {
+  let totalPoints = userTrailSolidSegments.reduce((sum, seg) => sum + seg.length, 0);
+
+  while (totalPoints > MAX_USER_TRAIL_POINTS && userTrailSolidSegments.length > 0) {
+    if (userTrailSolidSegments[0].length <= 1) {
+      totalPoints -= userTrailSolidSegments[0].length;
+      userTrailSolidSegments.shift();
+    } else {
+      userTrailSolidSegments[0].shift();
+      totalPoints -= 1;
+    }
+  }
+
+  while (userTrailDashedSegments.length > MAX_USER_TRAIL_POINTS) {
+    userTrailDashedSegments.shift();
+  }
+}
+
+function isReliableUserTrailPoint(prevPoint, nextPoint) {
+  if (!nextPoint) return false;
+
+  if (
+    typeof nextPoint.accuracy === "number" &&
+    nextPoint.accuracy > USER_TRAIL_MAX_ACCURACY_M
+  ) {
+    return false;
+  }
+
+  if (!prevPoint) return true;
+
+  const dist = metersBetweenLatLng(
+    prevPoint.lat, prevPoint.lng,
+    nextPoint.lat, nextPoint.lng
+  );
+
+  const dt = (nextPoint.time - prevPoint.time) / 1000;
+  if (dt <= 0) return false;
+
+  const speedMps = dist / dt;
+
+  if (dist < USER_TRAIL_MIN_MOVE_M) {
+    return null; // 너무 미세한 흔들림 -> 무시
+  }
+
+  if (dt <= USER_TRAIL_JUMP_MAX_TIME_S && dist > USER_TRAIL_JUMP_MAX_DIST_M) {
+    return false;
+  }
+
+  if (speedMps > USER_TRAIL_MAX_SPEED_MPS) {
+    return false;
+  }
+
+  return true;
+}
+
+function canReconnectWithDashed(prevPoint, nextPoint) {
+  if (!prevPoint || !nextPoint) return false;
+
+  const dist = metersBetweenLatLng(
+    prevPoint.lat, prevPoint.lng,
+    nextPoint.lat, nextPoint.lng
+  );
+
+  const dt = (nextPoint.time - prevPoint.time) / 1000;
+  if (dt <= 0) return false;
+
+  return (
+    dist <= USER_TRAIL_DASH_MAX_DIST_M &&
+    dt <= USER_TRAIL_DASH_MAX_TIME_S
+  );
+}
+
+function appendUserTrailPoint(lat, lng, accuracy) {
+  const point = {
+    lat,
+    lng,
+    accuracy: typeof accuracy === "number" ? accuracy : null,
+    time: Date.now()
+  };
+
+  if (!lastAcceptedUserPoint) {
+    currentUserSolidSegment = [point];
+    userTrailSolidSegments.push(currentUserSolidSegment);
+    lastAcceptedUserPoint = point;
+    redrawUserTrail();
+    return;
+  }
+
+  const reliability = isReliableUserTrailPoint(lastAcceptedUserPoint, point);
+
+  if (reliability === null) {
+    return; // 너무 미세한 흔들림
+  }
+
+  if (reliability === false) {
+    if (!pendingGapStartPoint) {
+      pendingGapStartPoint = lastAcceptedUserPoint;
+    }
+    return;
+  }
+
+  if (pendingGapStartPoint) {
+    if (canReconnectWithDashed(pendingGapStartPoint, point)) {
+      userTrailDashedSegments.push([
+        pendingGapStartPoint,
+        point
+      ]);
+    }
+
+    currentUserSolidSegment = [point];
+    userTrailSolidSegments.push(currentUserSolidSegment);
+
+    pendingGapStartPoint = null;
+    lastAcceptedUserPoint = point;
+
+    trimUserTrailSegments();
+    redrawUserTrail();
+    return;
+  }
+
+  currentUserSolidSegment.push(point);
+  lastAcceptedUserPoint = point;
+
+  trimUserTrailSegments();
+  redrawUserTrail();
+}
+
 function updateUserLocation(position) {
   const lat = position.coords.latitude;
   const lon = position.coords.longitude;
@@ -693,20 +890,7 @@ function updateUserLocation(position) {
     userAccuracyCircle.setRadius(clampedAccuracy);
   }
 
-  userTrail.push(lastUserLatLng);
-  if (userTrail.length > MAX_USER_TRAIL_POINTS) {
-    userTrail.shift();
-  }
-
-  if (!userTrailLine) {
-    userTrailLine = L.polyline(userTrail, {
-      weight: 2.5,
-      opacity: 0.5,
-      color: "#2b8cff"
-    }).addTo(map);
-  } else {
-    userTrailLine.setLatLngs(userTrail);
-  }
+  appendUserTrailPoint(lat, lon, accuracy);
 
   if (speedKt > RUNNING_SPEED_MAX_KT) {
     if (userHeadingMarker) {
