@@ -1,1321 +1,1326 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
 
-<title>Flight Route Viewer</title>
+  <title>Flight Route Viewer</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<style>
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  width: 100%;
-}
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+    }
 
-#map {
-  height: 100vh;
-  width: 100%;
-}
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
 
-.popup-body {
-  font-size: 11px;
-  line-height: 1.4;
-  max-width: 220px;
-  word-break: break-word;
-}
-.popup-title {
-  font-weight: 700;
-  margin-bottom: 6px;
-  font-size: 13px;
-}
+    .popup-body {
+      font-size: 11px;
+      line-height: 1.4;
+      max-width: 220px;
+      word-break: break-word;
+    }
 
-.popup-section {
-  margin-top: 6px;
-}
+    .popup-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
 
-.popup-section table {
-  border-collapse: collapse;
-  width: 100%;
-}
+    .popup-section {
+      margin-top: 6px;
+    }
 
-.popup-section td {
-  border-bottom: 1px solid #eee;
-  padding: 3px 4px;
-  vertical-align: top;
-}
+    .popup-section table {
+      border-collapse: collapse;
+      width: 100%;
+    }
 
-.popup-section td:first-child {
-  font-weight: 600;
-  white-space: nowrap;
-  width: 1%;
-}
+    .popup-section td {
+      border-bottom: 1px solid #eee;
+      padding: 3px 4px;
+      vertical-align: top;
+    }
 
-.leaflet-popup-content {
-  margin: 10px 12px;
-}
+    .popup-section td:first-child {
+      font-weight: 600;
+      white-space: nowrap;
+      width: 1%;
+    }
 
-.kml-label {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-}
+    .leaflet-popup-content {
+      margin: 10px 12px;
+    }
 
-.kml-label:before {
-  display: none !important;
-}
+    .kml-label {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
 
-.kml-label-text {
-  display: inline-block;
-  white-space: nowrap;
-  font-weight: 700;
-  text-align: left;
-  transform-origin: left bottom;
-  transform: translate(40px, -2px) rotate(-90deg);
-  text-shadow:
-    -1px -1px 0 #000,
-     1px -1px 0 #000,
-    -1px  1px 0 #000,
-     1px  1px 0 #000,
-     0 0 4px rgba(0,0,0,0.65);
-}
+    .kml-label:before {
+      display: none !important;
+    }
 
-.waypoint-label {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-}
+    .kml-label-text {
+      display: inline-block;
+      white-space: nowrap;
+      font-weight: 700;
+      text-align: left;
+      transform-origin: left bottom;
+      transform: translate(40px, -2px) rotate(-90deg);
+      text-shadow:
+        -1px -1px 0 #000,
+         1px -1px 0 #000,
+        -1px  1px 0 #000,
+         1px  1px 0 #000,
+         0 0 4px rgba(0, 0, 0, 0.65);
+    }
 
-.waypoint-label:before {
-  display: none !important;
-}
+    .waypoint-label {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
 
-.waypoint-label-text {
-  display: inline-block;
-  white-space: nowrap;
-  font-weight: 700;
-  color: #ffffff;
-  font-size: 10px;
-  transform: rotate(-90deg);
-  transform-origin: top right;
-  text-align: left;
-  text-shadow:
-    -1px -1px 0 #000,
-     1px -1px 0 #000,
-    -1px  1px 0 #000,
-     1px  1px 0 #000;
-}
+    .waypoint-label:before {
+      display: none !important;
+    }
 
-/* 삼각형 아이콘 전용: 항상 보이는 가로 레이블 */
-.triangle-label {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-}
+    .waypoint-label-text {
+      display: inline-block;
+      white-space: nowrap;
+      font-weight: 700;
+      color: #ffffff;
+      font-size: 10px;
+      transform: rotate(-90deg);
+      transform-origin: top right;
+      text-align: left;
+      text-shadow:
+        -1px -1px 0 #000,
+         1px -1px 0 #000,
+        -1px  1px 0 #000,
+         1px  1px 0 #000;
+    }
 
-.triangle-label:before {
-  display: none !important;
-}
+    /* 삼각형 아이콘 전용: 항상 보이는 가로 레이블 */
+    .triangle-label {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
 
-.triangle-label-text {
-  display: inline-block;
-  white-space: nowrap;
-  font-weight: 700;
-  color: #ffffff;
-  font-size: 10px;
-  text-align: left;
-  text-shadow:
-    -1px -1px 0 #000,
-     1px -1px 0 #000,
-    -1px  1px 0 #000,
-     1px  1px 0 #000,
-     0 0 4px rgba(0,0,0,0.65);
-}
+    .triangle-label:before {
+      display: none !important;
+    }
 
-.leaflet-control-layers {
-  font-size: 12px;
-}
-</style>
+    .triangle-label-text {
+      display: inline-block;
+      white-space: nowrap;
+      font-weight: 700;
+      color: #ffffff;
+      font-size: 10px;
+      text-align: left;
+      text-shadow:
+        -1px -1px 0 #000,
+         1px -1px 0 #000,
+        -1px  1px 0 #000,
+         1px  1px 0 #000,
+         0 0 4px rgba(0, 0, 0, 0.65);
+    }
+
+    .leaflet-control-layers {
+      font-size: 12px;
+    }
+  </style>
 </head>
 <body>
-
-<div id="map"></div>
-
-<script>
-const map = L.map('map', {
-  worldCopyJump: false,
-  preferCanvas: true,
-  maxBoundsViscosity: 1.0
-}).setView([48, 180], 3);
-
-/* -----------------------------
-   Base Maps
------------------------------ */
-
-const streetMap = L.tileLayer(
-  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-  {
-    maxZoom: 18,
-    attribution: '&copy; OpenStreetMap &copy; CARTO'
-  }
-);
-
-const satelliteMap = L.tileLayer(
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  {
-    maxZoom: 18,
-    attribution: 'Tiles &copy; Esri'
-  }
-);
-
-const satelliteWithLabels = L.layerGroup([
-  L.tileLayer(
-    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    {
-      maxZoom: 18,
-      attribution: 'Tiles &copy; Esri'
-    }
-  ),
-  L.tileLayer(
-    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-    {
-      maxZoom: 18,
-      attribution: 'Labels &copy; Esri'
-    }
-  )
-]);
-
-satelliteMap.addTo(map);
-
-const baseMaps = {
-  "Street Map": streetMap,
-  "Satellite": satelliteMap,
-  "Satellite + Labels": satelliteWithLabels
-};
-
-L.control.layers(baseMaps, null, {
-  position: "topright",
-  collapsed: false
-}).addTo(map);
-
-const drawn = L.featureGroup().addTo(map);
-
-const POPUP_OPTIONS = {
-  maxWidth: 260,
-  autoPan: false
-};
-
-/* -----------------------------
-   영공 국가 리스트
------------------------------ */
-const AIRSPACE_COUNTRIES = new Set([
-  "솔로몬 제도","나우루","파푸아 뉴기니","그린란드","아이슬란드","캐나다",
-  "알제리","가나","아이보리 해안","나이지리아","니제르","튀니지",
-  "벨기에","독일","에스토니아","핀란드","영국","네덜란드","아일랜드",
-  "덴마크","노르웨이","폴란드","스웨덴","라트비아","리투아니아",
-  "보츠와나","콩고 공화국","모리셔스","카메룬","잠비아","코모로",
-  "마다가스카르","앙골라","가봉","모잠비크","세이셸","차드","짐바브웨",
-  "말라위","콩고민주공화국","카나리아 제도","세네갈","모로코","카보베르데",
-  "에티오피아","부룬디","소말리아","이집트","에리트레아","케냐","리비아",
-  "르완다","수단","탄자니아","우간다",
-  "미국","알바니아","불가리아","키프로스","크로아티아","스페인","프랑스",
-  "그리스","헝가리","이탈리아","슬로베니아","체코 공화국","이스라엘","몰타",
-  "오스트리아","포르투갈","아조레스 제도","보스니아 헤르체고비나","루마니아",
-  "스위스","터키","몰도바","북 마케도니아","세르비아","슬로바키아",
-  "도미니카 공화국","온두라스","자메이카","멕시코","파나마","아이티","쿠바",
-  "바하마","피지","프랑스령 폴리네시아","뉴칼레도니아","뉴질랜드",
-  "아프가니스탄","바레인","사우디 아라비아","이란","요르단","쿠웨이트",
-  "레바논","아랍 에미리트","오만","파키스탄","이라크","시리아","예멘",
-  "대만","일본","대한민국","필리핀",
-  "아르헨티나","브라질","칠레","에콰도르","파라과이","콜롬비아","볼리비아",
-  "수리남","프랑스령 기아나","페루","우루과이","베네수엘라","가이아나",
-  "푸에르토리코","퀴라소","트리니다드토바고",
-  "타지키스탄","키르기스스탄","아르메니아","러시아","조지아","우크라이나",
-  "벨라루스","남수단","우즈베키스탄","스리랑카","아제르바이잔","방글라데시",
-  "홍콩","라오스","네팔","몰디브","태국","미얀마","인도네시아","브루나이",
-  "말레이시아","싱가포르","호주","중국","중국(산야)","북한","몽골","캄보디아",
-  "베트남","인도","카자흐스탄","투르크메니스탄","나미비아","남아프리카",
-  "앤티가 바부다","카타르"
-]);
-
-function getRequestedFile() {
-  const params = new URLSearchParams(location.search);
-  const file = params.get("file");
-  return file ? file.trim() : "";
-}
-
-function getVersionParam() {
-  const params = new URLSearchParams(location.search);
-  return params.get("v") || Date.now().toString();
-}
-
-function getExtension(filename) {
-  const f = filename.toLowerCase();
-  if (f.endsWith(".gpx")) return "gpx";
-  if (f.endsWith(".kml")) return "kml";
-  return "";
-}
-
-function normalizePacificLon(lon) {
-  let x = Number(lon);
-  while (x < 0) x += 360;
-  while (x >= 360) x -= 360;
-  return x;
-}
-
-function isBadCoord(lat, lon) {
-  if (!isFinite(lat) || !isFinite(lon)) return true;
-  if (Math.abs(lat) > 90) return true;
-  if (Math.abs(lon) > 360) return true;
-  if (Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001) return true;
-  return false;
-}
-
-function parseXml(text) {
-  return new DOMParser().parseFromString(text, "text/xml");
-}
-
-function fitDrawnBounds() {
-  try {
-    const bounds = drawn.getBounds();
-    if (bounds && bounds.isValid && bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [20, 20] });
-    }
-  } catch (e) {
-    console.warn(e);
-  }
-}
-
-async function fetchTextFile(filename) {
-  const version = getVersionParam();
-  const url = filename + (filename.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(version);
-
-  const res = await fetch(url, {
-    cache: "no-store"
-  });
-
-  if (!res.ok) {
-    throw new Error(filename + " not found");
-  }
-
-  return await res.text();
-}
-
-/* -----------------------------
-   공통
------------------------------ */
-
-function escapeHtml(str) {
-  return String(str || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function cleanLabelText(str) {
-  let s = String(str || "");
-
-  s = s.replace(/&amp;#x2F;\d+/gi, "");
-  s = s.replace(/&#x2F;\d+/gi, "");
-  s = s.replace(/&[#A-Za-z0-9]+;/g, "");
-
-  return s.trim();
-}
-
-function buildPopupHtml(title, descriptionHtml, extraRows = []) {
-  let html = `<div class="popup-body">`;
-
-  if (title) {
-    html += `<div class="popup-title">${escapeHtml(title)}</div>`;
-  }
-
-  if (descriptionHtml) {
-    html += `<div class="popup-section">${descriptionHtml}</div>`;
-  }
-
-  if (extraRows && extraRows.length) {
-    html += `<div class="popup-section"><table>`;
-    extraRows.forEach(row => {
-      html += `<tr><td>${escapeHtml(row.key)}</td><td>${row.value}</td></tr>`;
-    });
-    html += `</table></div>`;
-  }
-
-  html += `</div>`;
-  return html;
-}
-
-function textOfFirst(parent, tagName) {
-  const node = parent.getElementsByTagName(tagName)[0];
-  return node ? node.textContent.trim() : "";
-}
-
-function getDirectChild(parent, tagName) {
-  for (const node of parent.children || []) {
-    if (node.tagName === tagName) return node;
-  }
-  return null;
-}
-
-/* -----------------------------
-   KML color = aabbggrr
------------------------------ */
-
-function kmlColorToCss(kmlColor, fallbackColor, fallbackOpacity) {
-  if (!kmlColor || typeof kmlColor !== "string") {
-    return { color: fallbackColor, opacity: fallbackOpacity };
-  }
-
-  const s = kmlColor.trim().replace("#", "");
-  if (s.length !== 8) {
-    return { color: fallbackColor, opacity: fallbackOpacity };
-  }
-
-  const aa = s.substring(0, 2);
-  const bb = s.substring(2, 4);
-  const gg = s.substring(4, 6);
-  const rr = s.substring(6, 8);
-
-  const opacity = parseInt(aa, 16) / 255;
-  const color = "#" + rr + gg + bb;
-
-  return {
-    color,
-    opacity: isNaN(opacity) ? fallbackOpacity : opacity
-  };
-}
-
-function getLabelStyle(featureStyle) {
-  const base = kmlColorToCss(featureStyle?.labelColor, "#00ff00", 1);
-  const scale = Number(featureStyle?.labelScale || 1);
-
-  return {
-    color: base.color || "#00ff00",
-    opacity: isFinite(base.opacity) ? base.opacity : 1,
-    scale: isFinite(scale) && scale > 0 ? scale : 1
-  };
-}
-
-function getIconStyle(featureStyle) {
-  const rawColor =
-    featureStyle?.iconColor ||
-    featureStyle?.lineColor ||
-    featureStyle?.labelColor ||
-    "#ffff00";
-
-  const base = kmlColorToCss(rawColor, "#ffff00", 1);
-  const scale = Number(featureStyle?.iconScale || 1);
-
-  return {
-    color: base.color || "#ffff00",
-    opacity: isFinite(base.opacity) ? base.opacity : 1,
-    scale: isFinite(scale) && scale > 0 ? scale : 1,
-    href: featureStyle?.iconHref || ""
-  };
-}
-
-/* -----------------------------
-   영공 라벨 판별
------------------------------ */
-
-function normalizeCountryName(name) {
-  return String(name || "")
-    .replace(/\u00A0/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractCountryFromPlacemarkName(name) {
-  const cleaned = normalizeCountryName(name);
-  if (!cleaned) return "";
-
-  const match = cleaned.match(/^(.+?)\s*\(/);
-  if (match) return normalizeCountryName(match[1]);
-
-  return cleaned;
-}
-
-function hasParenthesesName(name) {
-  return /\(.*\)/.test(String(name || ""));
-}
-
-function isAirspaceLabelFeature(feature) {
-  const rawName = String(feature?.name || "").trim();
-  if (!rawName) return false;
-  if (!hasParenthesesName(rawName)) return false;
-
-  const country = extractCountryFromPlacemarkName(rawName);
-  if (!country) return false;
-
-  return AIRSPACE_COUNTRIES.has(country);
-}
-
-function getPermitStatus(feature) {
-  const desc = String(feature?.description || "").toLowerCase();
-  const extra = (feature?.extraRows || [])
-    .map(r => `${r.key || ""} ${r.value || ""}`.toLowerCase())
-    .join(" ");
-
-  const all = `${desc} ${extra}`;
-
-  if (all.includes("not required")) return "not_required";
-  if (all.includes("required")) return "required";
-  return "unknown";
-}
-
-function getAirspaceLabelColor(feature, fallbackColor) {
-  const permit = getPermitStatus(feature);
-
-  if (permit === "not_required") return "#00ff00";
-  if (permit === "required") return "#ff0000";
-
-  return fallbackColor || "#00ff00";
-}
-
-/* -----------------------------
-   antimeridian split
------------------------------ */
-
-function splitPacificSegments(latlngs) {
-  if (!latlngs || latlngs.length < 2) return [latlngs];
-
-  const segments = [];
-  let current = [latlngs[0]];
-
-  for (let i = 1; i < latlngs.length; i++) {
-    const p1 = latlngs[i - 1];
-    const p2 = latlngs[i];
-
-    const lat1 = p1[0], lon1 = p1[1];
-    const lat2 = p2[0], lon2 = p2[1];
-
-    const diff = lon2 - lon1;
-
-    if (Math.abs(diff) > 180) {
-      const targetLon1 = diff > 0 ? 0 : 360;
-      const adjustedLon2 = diff > 0 ? lon2 - 360 : lon2 + 360;
-      const t = (targetLon1 - lon1) / (adjustedLon2 - lon1);
-      const crossingLat = lat1 + (lat2 - lat1) * t;
-
-      current.push([crossingLat, targetLon1]);
-      segments.push(current);
-
-      const targetLon2 = targetLon1 === 0 ? 360 : 0;
-      current = [[crossingLat, targetLon2], [lat2, lon2]];
-    } else {
-      current.push([lat2, lon2]);
-    }
-  }
-
-  if (current.length > 0) segments.push(current);
-  return segments;
-}
-
-/* -----------------------------
-   endpoint helpers
------------------------------ */
-
-function compressConsecutiveByName(features) {
-  const result = [];
-  for (const f of features) {
-    if (!result.length || result[result.length - 1].name !== f.name) {
-      result.push(f);
-    }
-  }
-  return result;
-}
-
-function getRouteEndpoints(pointFeatures) {
-  const endpointCandidates = compressConsecutiveByName(
-    pointFeatures.filter(f => !isAirspaceLabelFeature(f))
-  );
-
-  if (endpointCandidates.length >= 2) {
-    const depFeature = endpointCandidates[0];
-    const destFeature = endpointCandidates[endpointCandidates.length - 1];
-
-    return {
-      departureFeature: depFeature,
-      destinationFeature: destFeature,
-      departureCoord: depFeature.coords,
-      destinationCoord: destFeature.coords
-    };
-  }
-
-  return {
-    departureFeature: null,
-    destinationFeature: null,
-    departureCoord: null,
-    destinationCoord: null
-  };
-}
-
-function isEndpointPointFeature(feature, routeEndpoints) {
-  return (
-    feature === routeEndpoints?.departureFeature ||
-    feature === routeEndpoints?.destinationFeature
-  );
-}
-
-function isWaypointLabelFeature(feature) {
-  if (!feature || feature.type !== "Point") return false;
-  if (isAirspaceLabelFeature(feature)) return false;
-  if (!feature.name || !String(feature.name).trim()) return false;
-  return true;
-}
-
-/* -----------------------------
-   icon52.png / triangle
------------------------------ */
-
-function isIcon52ShapePoint(feature) {
-  if (!feature || feature.type !== "Point") return false;
-  if (isAirspaceLabelFeature(feature)) return false;
-
-  const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
-  const name = String(feature?.name || "").trim();
-
-  if (!name) return false;
-
-  return iconHref.includes("icon52.png");
-}
-
-function isTriangleShapePoint(feature) {
-  if (!feature || feature.type !== "Point") return false;
-  if (isAirspaceLabelFeature(feature)) return false;
-
-  const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
-  const name = String(feature?.name || "").trim();
-
-  if (!name) return false;
-
-  const triangleIcon =
-    iconHref.includes("icon52.png") ||
-    iconHref.includes("triangle") ||
-    iconHref.includes("trk") ||
-    iconHref.includes("track") ||
-    iconHref.includes("placemark_triangle") ||
-    iconHref.includes("shape_triangle");
-
-  return triangleIcon;
-}
-
-function isAlwaysVisibleShapePointLabel(feature) {
-  return isIcon52ShapePoint(feature) || isTriangleShapePoint(feature);
-}
-
-function bindPermanentPointLabel(layer, feature) {
-  if (!layer || !feature || !feature.name) return;
-
-  const cleanedName = cleanLabelText(feature.name);
-  if (!cleanedName) return;
-
-  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
-
-  layer.bindTooltip(labelHtml, {
-    permanent: true,
-    direction: "right",
-    offset: [8, 0],
-    className: "waypoint-label",
-    opacity: 1
-  });
-
-  if (layer.openTooltip) {
-    layer.openTooltip();
-  }
-}
-
-function bindPermanentHorizontalTriangleLabel(layer, feature) {
-  if (!layer || !feature || !feature.name) return;
-
-  const cleanedName = cleanLabelText(feature.name);
-  if (!cleanedName) return;
-
-  const labelHtml = `<span class="triangle-label-text">${escapeHtml(cleanedName)}</span>`;
-
-  layer.bindTooltip(labelHtml, {
-    permanent: true,
-    direction: "right",
-    offset: [8, 0],
-    className: "triangle-label",
-    opacity: 1
-  });
-
-  if (layer.openTooltip) {
-    layer.openTooltip();
-  }
-}
-
-function bindWaypointZoomLabel(layer, feature) {
-  if (!layer || !feature || !feature.name) return;
-  if (!isWaypointLabelFeature(feature)) return;
-
-  const cleanedName = cleanLabelText(feature.name);
-  if (!cleanedName) return;
-
-  const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
-  let labelBound = false;
-
-  function updateLabel() {
-    const zoom = map.getZoom();
-
-    if (zoom >= 5) {
-      if (!labelBound) {
-        layer.bindTooltip(labelHtml, {
-          permanent: true,
-          direction: "bottom",
-          offset: [-20, 10],
-          className: "waypoint-label",
-          opacity: 1
-        });
-
-        labelBound = true;
+  <div id="map"></div>
+
+  <script>
+    const map = L.map("map", {
+      worldCopyJump: false,
+      preferCanvas: true,
+      maxBoundsViscosity: 1.0
+    }).setView([48, 180], 3);
+
+    /* -----------------------------
+       Base Maps
+    ----------------------------- */
+
+    const streetMap = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+      {
+        maxZoom: 18,
+        attribution: "&copy; OpenStreetMap &copy; CARTO"
       }
+    );
+
+    const satelliteMap = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {
+        maxZoom: 18,
+        attribution: "Tiles &copy; Esri"
+      }
+    );
+
+    const satelliteWithLabels = L.layerGroup([
+      L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          maxZoom: 18,
+          attribution: "Tiles &copy; Esri"
+        }
+      ),
+      L.tileLayer(
+        "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        {
+          maxZoom: 18,
+          attribution: "Labels &copy; Esri"
+        }
+      )
+    ]);
+
+    satelliteMap.addTo(map);
+
+    const baseMaps = {
+      "Street Map": streetMap,
+      "Satellite": satelliteMap,
+      "Satellite + Labels": satelliteWithLabels
+    };
+
+    L.control.layers(baseMaps, null, {
+      position: "topright",
+      collapsed: false
+    }).addTo(map);
+
+    const drawn = L.featureGroup().addTo(map);
+
+    const POPUP_OPTIONS = {
+      maxWidth: 260,
+      autoPan: false
+    };
+
+    /* -----------------------------
+       영공 국가 리스트
+    ----------------------------- */
+
+    const AIRSPACE_COUNTRIES = new Set([
+      "솔로몬 제도","나우루","파푸아 뉴기니","그린란드","아이슬란드","캐나다",
+      "알제리","가나","아이보리 해안","나이지리아","니제르","튀니지",
+      "벨기에","독일","에스토니아","핀란드","영국","네덜란드","아일랜드",
+      "덴마크","노르웨이","폴란드","스웨덴","라트비아","리투아니아",
+      "보츠와나","콩고 공화국","모리셔스","카메룬","잠비아","코모로",
+      "마다가스카르","앙골라","가봉","모잠비크","세이셸","차드","짐바브웨",
+      "말라위","콩고민주공화국","카나리아 제도","세네갈","모로코","카보베르데",
+      "에티오피아","부룬디","소말리아","이집트","에리트레아","케냐","리비아",
+      "르완다","수단","탄자니아","우간다",
+      "미국","알바니아","불가리아","키프로스","크로아티아","스페인","프랑스",
+      "그리스","헝가리","이탈리아","슬로베니아","체코 공화국","이스라엘","몰타",
+      "오스트리아","포르투갈","아조레스 제도","보스니아 헤르체고비나","루마니아",
+      "스위스","터키","몰도바","북 마케도니아","세르비아","슬로바키아",
+      "도미니카 공화국","온두라스","자메이카","멕시코","파나마","아이티","쿠바",
+      "바하마","피지","프랑스령 폴리네시아","뉴칼레도니아","뉴질랜드",
+      "아프가니스탄","바레인","사우디 아라비아","이란","요르단","쿠웨이트",
+      "레바논","아랍 에미리트","오만","파키스탄","이라크","시리아","예멘",
+      "대만","일본","대한민국","필리핀",
+      "아르헨티나","브라질","칠레","에콰도르","파라과이","콜롬비아","볼리비아",
+      "수리남","프랑스령 기아나","페루","우루과이","베네수엘라","가이아나",
+      "푸에르토리코","퀴라소","트리니다드토바고",
+      "타지키스탄","키르기스스탄","아르메니아","러시아","조지아","우크라이나",
+      "벨라루스","남수단","우즈베키스탄","스리랑카","아제르바이잔","방글라데시",
+      "홍콩","라오스","네팔","몰디브","태국","미얀마","인도네시아","브루나이",
+      "말레이시아","싱가포르","호주","중국","중국(산야)","북한","몽골","캄보디아",
+      "베트남","인도","카자흐스탄","투르크메니스탄","나미비아","남아프리카",
+      "앤티가 바부다","카타르"
+    ]);
+
+    function getRequestedFile() {
+      const params = new URLSearchParams(location.search);
+      const file = params.get("file");
+      return file ? file.trim() : "";
+    }
+
+    function getVersionParam() {
+      const params = new URLSearchParams(location.search);
+      return params.get("v") || Date.now().toString();
+    }
+
+    function getExtension(filename) {
+      const f = filename.toLowerCase();
+      if (f.endsWith(".gpx")) return "gpx";
+      if (f.endsWith(".kml")) return "kml";
+      return "";
+    }
+
+    function normalizePacificLon(lon) {
+      let x = Number(lon);
+      while (x < 0) x += 360;
+      while (x >= 360) x -= 360;
+      return x;
+    }
+
+    function isBadCoord(lat, lon) {
+      if (!isFinite(lat) || !isFinite(lon)) return true;
+      if (Math.abs(lat) > 90) return true;
+      if (Math.abs(lon) > 360) return true;
+      if (Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001) return true;
+      return false;
+    }
+
+    function parseXml(text) {
+      return new DOMParser().parseFromString(text, "text/xml");
+    }
+
+    function fitDrawnBounds() {
+      try {
+        const bounds = drawn.getBounds();
+        if (bounds && bounds.isValid && bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [20, 20] });
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    async function fetchTextFile(filename) {
+      const version = getVersionParam();
+      const url = filename + (filename.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(version);
+
+      const res = await fetch(url, {
+        cache: "no-store"
+      });
+
+      if (!res.ok) {
+        throw new Error(filename + " not found");
+      }
+
+      return await res.text();
+    }
+
+    /* -----------------------------
+       공통
+    ----------------------------- */
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function cleanLabelText(str) {
+      let s = String(str || "");
+
+      s = s.replace(/&amp;#x2F;\d+/gi, "");
+      s = s.replace(/&#x2F;\d+/gi, "");
+      s = s.replace(/&[#A-Za-z0-9]+;/g, "");
+
+      return s.trim();
+    }
+
+    function buildPopupHtml(title, descriptionHtml, extraRows = []) {
+      let html = `<div class="popup-body">`;
+
+      if (title) {
+        html += `<div class="popup-title">${escapeHtml(title)}</div>`;
+      }
+
+      if (descriptionHtml) {
+        html += `<div class="popup-section">${descriptionHtml}</div>`;
+      }
+
+      if (extraRows && extraRows.length) {
+        html += `<div class="popup-section"><table>`;
+        extraRows.forEach(row => {
+          html += `<tr><td>${escapeHtml(row.key)}</td><td>${row.value}</td></tr>`;
+        });
+        html += `</table></div>`;
+      }
+
+      html += `</div>`;
+      return html;
+    }
+
+    function textOfFirst(parent, tagName) {
+      const node = parent.getElementsByTagName(tagName)[0];
+      return node ? node.textContent.trim() : "";
+    }
+
+    function getDirectChild(parent, tagName) {
+      for (const node of parent.children || []) {
+        if (node.tagName === tagName) return node;
+      }
+      return null;
+    }
+
+    /* -----------------------------
+       KML color = aabbggrr
+    ----------------------------- */
+
+    function kmlColorToCss(kmlColor, fallbackColor, fallbackOpacity) {
+      if (!kmlColor || typeof kmlColor !== "string") {
+        return { color: fallbackColor, opacity: fallbackOpacity };
+      }
+
+      const s = kmlColor.trim().replace("#", "");
+      if (s.length !== 8) {
+        return { color: fallbackColor, opacity: fallbackOpacity };
+      }
+
+      const aa = s.substring(0, 2);
+      const bb = s.substring(2, 4);
+      const gg = s.substring(4, 6);
+      const rr = s.substring(6, 8);
+
+      const opacity = parseInt(aa, 16) / 255;
+      const color = "#" + rr + gg + bb;
+
+      return {
+        color,
+        opacity: isNaN(opacity) ? fallbackOpacity : opacity
+      };
+    }
+
+    function getLabelStyle(featureStyle) {
+      const base = kmlColorToCss(featureStyle?.labelColor, "#00ff00", 1);
+      const scale = Number(featureStyle?.labelScale || 1);
+
+      return {
+        color: base.color || "#00ff00",
+        opacity: isFinite(base.opacity) ? base.opacity : 1,
+        scale: isFinite(scale) && scale > 0 ? scale : 1
+      };
+    }
+
+    function getIconStyle(featureStyle) {
+      const rawColor =
+        featureStyle?.iconColor ||
+        featureStyle?.lineColor ||
+        featureStyle?.labelColor ||
+        "#ffff00";
+
+      const base = kmlColorToCss(rawColor, "#ffff00", 1);
+      const scale = Number(featureStyle?.iconScale || 1);
+
+      return {
+        color: base.color || "#ffff00",
+        opacity: isFinite(base.opacity) ? base.opacity : 1,
+        scale: isFinite(scale) && scale > 0 ? scale : 1,
+        href: featureStyle?.iconHref || ""
+      };
+    }
+
+    /* -----------------------------
+       영공 라벨 판별
+    ----------------------------- */
+
+    function normalizeCountryName(name) {
+      return String(name || "")
+        .replace(/\u00A0/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function extractCountryFromPlacemarkName(name) {
+      const cleaned = normalizeCountryName(name);
+      if (!cleaned) return "";
+
+      const match = cleaned.match(/^(.+?)\s*\(/);
+      if (match) return normalizeCountryName(match[1]);
+
+      return cleaned;
+    }
+
+    function hasParenthesesName(name) {
+      return /\(.*\)/.test(String(name || ""));
+    }
+
+    function isAirspaceLabelFeature(feature) {
+      const rawName = String(feature?.name || "").trim();
+      if (!rawName) return false;
+      if (!hasParenthesesName(rawName)) return false;
+
+      const country = extractCountryFromPlacemarkName(rawName);
+      if (!country) return false;
+
+      return AIRSPACE_COUNTRIES.has(country);
+    }
+
+    function getPermitStatus(feature) {
+      const desc = String(feature?.description || "").toLowerCase();
+      const extra = (feature?.extraRows || [])
+        .map(r => `${r.key || ""} ${r.value || ""}`.toLowerCase())
+        .join(" ");
+
+      const all = `${desc} ${extra}`;
+
+      if (all.includes("not required")) return "not_required";
+      if (all.includes("required")) return "required";
+      return "unknown";
+    }
+
+    function getAirspaceLabelColor(feature, fallbackColor) {
+      const permit = getPermitStatus(feature);
+
+      if (permit === "not_required") return "#00ff00";
+      if (permit === "required") return "#ff0000";
+
+      return fallbackColor || "#00ff00";
+    }
+
+    /* -----------------------------
+       antimeridian split
+    ----------------------------- */
+
+    function splitPacificSegments(latlngs) {
+      if (!latlngs || latlngs.length < 2) return [latlngs];
+
+      const segments = [];
+      let current = [latlngs[0]];
+
+      for (let i = 1; i < latlngs.length; i++) {
+        const p1 = latlngs[i - 1];
+        const p2 = latlngs[i];
+
+        const lat1 = p1[0], lon1 = p1[1];
+        const lat2 = p2[0], lon2 = p2[1];
+
+        const diff = lon2 - lon1;
+
+        if (Math.abs(diff) > 180) {
+          const targetLon1 = diff > 0 ? 0 : 360;
+          const adjustedLon2 = diff > 0 ? lon2 - 360 : lon2 + 360;
+          const t = (targetLon1 - lon1) / (adjustedLon2 - lon1);
+          const crossingLat = lat1 + (lat2 - lat1) * t;
+
+          current.push([crossingLat, targetLon1]);
+          segments.push(current);
+
+          const targetLon2 = targetLon1 === 0 ? 360 : 0;
+          current = [[crossingLat, targetLon2], [lat2, lon2]];
+        } else {
+          current.push([lat2, lon2]);
+        }
+      }
+
+      if (current.length > 0) segments.push(current);
+      return segments;
+    }
+
+    /* -----------------------------
+       endpoint helpers
+    ----------------------------- */
+
+    function compressConsecutiveByName(features) {
+      const result = [];
+      for (const f of features) {
+        if (!result.length || result[result.length - 1].name !== f.name) {
+          result.push(f);
+        }
+      }
+      return result;
+    }
+
+    function getRouteEndpoints(pointFeatures) {
+      const endpointCandidates = compressConsecutiveByName(
+        pointFeatures.filter(f => !isAirspaceLabelFeature(f))
+      );
+
+      if (endpointCandidates.length >= 2) {
+        const depFeature = endpointCandidates[0];
+        const destFeature = endpointCandidates[endpointCandidates.length - 1];
+
+        return {
+          departureFeature: depFeature,
+          destinationFeature: destFeature,
+          departureCoord: depFeature.coords,
+          destinationCoord: destFeature.coords
+        };
+      }
+
+      return {
+        departureFeature: null,
+        destinationFeature: null,
+        departureCoord: null,
+        destinationCoord: null
+      };
+    }
+
+    function isEndpointPointFeature(feature, routeEndpoints) {
+      return (
+        feature === routeEndpoints?.departureFeature ||
+        feature === routeEndpoints?.destinationFeature
+      );
+    }
+
+    function isWaypointLabelFeature(feature) {
+      if (!feature || feature.type !== "Point") return false;
+      if (isAirspaceLabelFeature(feature)) return false;
+      if (!feature.name || !String(feature.name).trim()) return false;
+      return true;
+    }
+
+    /* -----------------------------
+       icon52.png / triangle
+    ----------------------------- */
+
+    function isIcon52ShapePoint(feature) {
+      if (!feature || feature.type !== "Point") return false;
+      if (isAirspaceLabelFeature(feature)) return false;
+
+      const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
+      const name = String(feature?.name || "").trim();
+
+      if (!name) return false;
+
+      return iconHref.includes("icon52.png");
+    }
+
+    function isTriangleShapePoint(feature) {
+      if (!feature || feature.type !== "Point") return false;
+      if (isAirspaceLabelFeature(feature)) return false;
+
+      const iconHref = String(feature?.style?.iconHref || "").toLowerCase();
+      const name = String(feature?.name || "").trim();
+
+      if (!name) return false;
+
+      const triangleIcon =
+        iconHref.includes("icon52.png") ||
+        iconHref.includes("triangle") ||
+        iconHref.includes("trk") ||
+        iconHref.includes("track") ||
+        iconHref.includes("placemark_triangle") ||
+        iconHref.includes("shape_triangle");
+
+      return triangleIcon;
+    }
+
+    function isAlwaysVisibleShapePointLabel(feature) {
+      return isIcon52ShapePoint(feature) || isTriangleShapePoint(feature);
+    }
+
+    function bindPermanentPointLabel(layer, feature) {
+      if (!layer || !feature || !feature.name) return;
+
+      const cleanedName = cleanLabelText(feature.name);
+      if (!cleanedName) return;
+
+      const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
+
+      layer.bindTooltip(labelHtml, {
+        permanent: true,
+        direction: "right",
+        offset: [8, 0],
+        className: "waypoint-label",
+        opacity: 1
+      });
 
       if (layer.openTooltip) {
         layer.openTooltip();
       }
-    } else {
-      if (labelBound && layer.unbindTooltip) {
-        layer.unbindTooltip();
-        labelBound = false;
+    }
+
+    function bindPermanentHorizontalTriangleLabel(layer, feature) {
+      if (!layer || !feature || !feature.name) return;
+
+      const cleanedName = cleanLabelText(feature.name);
+      if (!cleanedName) return;
+
+      const labelHtml = `<span class="triangle-label-text">${escapeHtml(cleanedName)}</span>`;
+
+      layer.bindTooltip(labelHtml, {
+        permanent: true,
+        direction: "right",
+        offset: [8, 0],
+        className: "triangle-label",
+        opacity: 1
+      });
+
+      if (layer.openTooltip) {
+        layer.openTooltip();
       }
     }
-  }
 
-  map.on("zoomend", updateLabel);
-  updateLabel();
-}
+    function bindWaypointZoomLabel(layer, feature) {
+      if (!layer || !feature || !feature.name) return;
+      if (!isWaypointLabelFeature(feature)) return;
 
-/* -----------------------------
-   GPX
------------------------------ */
+      const cleanedName = cleanLabelText(feature.name);
+      if (!cleanedName) return;
 
-function parseGPX(text) {
-  const xml = parseXml(text);
-  const pts = [...xml.getElementsByTagName("rtept")];
+      const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
+      let labelBound = false;
 
-  return pts.map(p => {
-    const lat = parseFloat(p.getAttribute("lat"));
-    const lon = parseFloat(p.getAttribute("lon"));
-    const nameNode = p.getElementsByTagName("name")[0];
-    const descNode = p.getElementsByTagName("desc")[0];
-    const cmtNode = p.getElementsByTagName("cmt")[0];
+      function updateLabel() {
+        const zoom = map.getZoom();
 
-    return {
-      lat,
-      lon,
-      name: nameNode ? nameNode.textContent.trim() : "",
-      description: descNode ? escapeHtml(descNode.textContent.trim()) : "",
-      comment: cmtNode ? escapeHtml(cmtNode.textContent.trim()) : ""
-    };
-  }).filter(p => !isBadCoord(p.lat, p.lon));
-}
+        if (zoom >= 5) {
+          if (!labelBound) {
+            layer.bindTooltip(labelHtml, {
+              permanent: true,
+              direction: "bottom",
+              offset: [-20, 10],
+              className: "waypoint-label",
+              opacity: 1
+            });
 
-function drawWaypointMarker(lat, lon, popupHtml, index, total) {
-  const latlng = [lat, normalizePacificLon(lon)];
+            labelBound = true;
+          }
 
-  let iconColor = "#ffff00";
-  if (index === 0) iconColor = "#00aa00";
-  if (index === total - 1) iconColor = "#0000ff";
-
-  const marker = L.circleMarker(latlng, {
-    radius: 5,
-    color: "#222",
-    weight: 1,
-    fillColor: iconColor,
-    fillOpacity: 1
-  }).addTo(map);
-
-  marker.bindPopup(popupHtml, POPUP_OPTIONS);
-
-  if (popupHtml) {
-    bindWaypointZoomLabel(marker, {
-      type: "Point",
-      name: "",
-      description: ""
-    });
-  }
-
-  drawn.addLayer(marker);
-}
-
-function drawGPXRoute(points, sourceName) {
-  if (!points || points.length < 2) {
-    throw new Error("No valid route points in GPX");
-  }
-
-  const latlngs = points.map(p => [p.lat, normalizePacificLon(p.lon)]);
-  const segments = splitPacificSegments(latlngs);
-
-  segments.forEach(seg => {
-    const line = L.polyline(seg, {
-      color: "#FFD400",
-      weight: 5
-    }).addTo(map);
-    drawn.addLayer(line);
-  });
-
-  points.forEach((p, i) => {
-    const extraRows = [];
-    if (p.comment) extraRows.push({ key: "Comment", value: p.comment });
-
-    const popupHtml = buildPopupHtml(
-      p.name || "Waypoint",
-      p.description || "",
-      extraRows
-    );
-
-    const latlng = [p.lat, normalizePacificLon(p.lon)];
-
-    let iconColor = "#ffff00";
-    if (i === 0) iconColor = "#00aa00";
-    if (i === points.length - 1) iconColor = "#0000ff";
-
-    const marker = L.circleMarker(latlng, {
-      radius: 3,
-      color: "#222",
-      weight: 1,
-      fillColor: iconColor,
-      fillOpacity: 1
-    }).addTo(map);
-
-    marker.bindPopup(popupHtml, POPUP_OPTIONS);
-
-    bindWaypointZoomLabel(marker, {
-      type: "Point",
-      name: p.name || "",
-      description: p.description || ""
-    });
-
-    drawn.addLayer(marker);
-  });
-
-  fitDrawnBounds();
-  console.log("Flight Route Loaded:", sourceName, "GPX", points.length);
-}
-
-/* -----------------------------
-   KML helpers
------------------------------ */
-
-function parseCoordinates(coordText) {
-  if (!coordText) return [];
-
-  return coordText
-    .trim()
-    .split(/\s+/)
-    .map(row => {
-      const parts = row.split(",");
-      const lon = parseFloat(parts[0]);
-      const lat = parseFloat(parts[1]);
-      const alt = parts.length > 2 ? parseFloat(parts[2]) : null;
-
-      return { lat, lon, alt };
-    })
-    .filter(p => !isBadCoord(p.lat, p.lon));
-}
-
-function parseStyleNode(styleNode) {
-  if (!styleNode) return {};
-
-  const lineStyleNode = styleNode.getElementsByTagName("LineStyle")[0];
-  const polyStyleNode = styleNode.getElementsByTagName("PolyStyle")[0];
-  const labelStyleNode = styleNode.getElementsByTagName("LabelStyle")[0];
-  const iconStyleNode = styleNode.getElementsByTagName("IconStyle")[0];
-
-  const style = {};
-
-  if (lineStyleNode) {
-    style.lineColor = textOfFirst(lineStyleNode, "color");
-    style.lineWidth = parseFloat(textOfFirst(lineStyleNode, "width")) || 3;
-  }
-
-  if (polyStyleNode) {
-    style.polyColor = textOfFirst(polyStyleNode, "color");
-    const fillText = textOfFirst(polyStyleNode, "fill");
-    const outlineText = textOfFirst(polyStyleNode, "outline");
-    style.fill = fillText === "" ? true : fillText !== "0";
-    style.outline = outlineText === "" ? true : outlineText !== "0";
-  }
-
-  if (labelStyleNode) {
-    style.labelColor = textOfFirst(labelStyleNode, "color");
-    style.labelScale = parseFloat(textOfFirst(labelStyleNode, "scale")) || 1;
-  }
-
-  if (iconStyleNode) {
-    style.iconColor = textOfFirst(iconStyleNode, "color");
-    style.iconScale = parseFloat(textOfFirst(iconStyleNode, "scale")) || 1;
-    const iconNode = iconStyleNode.getElementsByTagName("Icon")[0];
-    if (iconNode) {
-      style.iconHref = textOfFirst(iconNode, "href");
-    }
-  }
-
-  return style;
-}
-
-function mergeStyles(baseStyle, overrideStyle) {
-  return {
-    ...(baseStyle || {}),
-    ...(overrideStyle || {})
-  };
-}
-
-function buildStyleIndex(xml) {
-  const styleMap = {};
-  const styleNodes = [...xml.getElementsByTagName("Style")];
-
-  styleNodes.forEach(styleNode => {
-    const id = styleNode.getAttribute("id");
-    if (!id) return;
-    styleMap["#" + id] = parseStyleNode(styleNode);
-  });
-
-  return styleMap;
-}
-
-function buildStyleMapIndex(xml) {
-  const styleMapIndex = {};
-  const styleMapNodes = [...xml.getElementsByTagName("StyleMap")];
-
-  styleMapNodes.forEach(node => {
-    const id = node.getAttribute("id");
-    if (!id) return;
-
-    const pairs = [...node.getElementsByTagName("Pair")];
-    let normalUrl = "";
-
-    pairs.forEach(pair => {
-      const key = textOfFirst(pair, "key");
-      const styleUrl = textOfFirst(pair, "styleUrl");
-      if (key === "normal" && styleUrl) {
-        normalUrl = styleUrl;
+          if (layer.openTooltip) {
+            layer.openTooltip();
+          }
+        } else {
+          if (labelBound && layer.unbindTooltip) {
+            layer.unbindTooltip();
+            labelBound = false;
+          }
+        }
       }
-    });
 
-    if (normalUrl) {
-      styleMapIndex["#" + id] = normalUrl;
-    }
-  });
-
-  return styleMapIndex;
-}
-
-function buildExtendedDataRows(placemark) {
-  const rows = [];
-
-  const simpleDatas = placemark.getElementsByTagName("SimpleData");
-  [...simpleDatas].forEach(node => {
-    const key = node.getAttribute("name") || "Data";
-    const value = escapeHtml(node.textContent || "");
-    if (value) rows.push({ key, value });
-  });
-
-  const datas = placemark.getElementsByTagName("Data");
-  [...datas].forEach(node => {
-    const key = node.getAttribute("name") || "Data";
-    const valueNode = node.getElementsByTagName("value")[0];
-    const value = valueNode ? escapeHtml(node.getElementsByTagName("value")[0].textContent || "") : "";
-    if (value) rows.push({ key, value });
-  });
-
-  return rows;
-}
-
-function extractKMLFeatures(text) {
-  const xml = parseXml(text);
-  const styleIndex = buildStyleIndex(xml);
-  const styleMapIndex = buildStyleMapIndex(xml);
-  const placemarks = [...xml.getElementsByTagName("Placemark")];
-
-  const features = [];
-
-  placemarks.forEach(pm => {
-    const name = textOfFirst(pm, "name");
-    const description = textOfFirst(pm, "description");
-
-    let styleUrl = textOfFirst(pm, "styleUrl");
-    if (styleMapIndex[styleUrl]) {
-      styleUrl = styleMapIndex[styleUrl];
+      map.on("zoomend", updateLabel);
+      updateLabel();
     }
 
-    const sharedStyle = styleIndex[styleUrl] || {};
-    const inlineStyleNode = getDirectChild(pm, "Style");
-    const inlineStyle = parseStyleNode(inlineStyleNode);
-    const style = mergeStyles(sharedStyle, inlineStyle);
+    /* -----------------------------
+       GPX
+    ----------------------------- */
 
-    const extraRows = buildExtendedDataRows(pm);
+    function parseGPX(text) {
+      const xml = parseXml(text);
+      const pts = [...xml.getElementsByTagName("rtept")];
 
-    const pointNodes = pm.getElementsByTagName("Point");
-    const lineNodes = pm.getElementsByTagName("LineString");
-    const polyNodes = pm.getElementsByTagName("Polygon");
+      return pts.map(p => {
+        const lat = parseFloat(p.getAttribute("lat"));
+        const lon = parseFloat(p.getAttribute("lon"));
+        const nameNode = p.getElementsByTagName("name")[0];
+        const descNode = p.getElementsByTagName("desc")[0];
+        const cmtNode = p.getElementsByTagName("cmt")[0];
 
-    [...pointNodes].forEach(node => {
-      const coords = parseCoordinates(textOfFirst(node, "coordinates"));
-      if (coords.length) {
-        features.push({
+        return {
+          lat,
+          lon,
+          name: nameNode ? nameNode.textContent.trim() : "",
+          description: descNode ? escapeHtml(descNode.textContent.trim()) : "",
+          comment: cmtNode ? escapeHtml(cmtNode.textContent.trim()) : ""
+        };
+      }).filter(p => !isBadCoord(p.lat, p.lon));
+    }
+
+    function drawWaypointMarker(lat, lon, popupHtml, index, total) {
+      const latlng = [lat, normalizePacificLon(lon)];
+
+      let iconColor = "#ffff00";
+      if (index === 0) iconColor = "#00aa00";
+      if (index === total - 1) iconColor = "#0000ff";
+
+      const marker = L.circleMarker(latlng, {
+        radius: 5,
+        color: "#222",
+        weight: 1,
+        fillColor: iconColor,
+        fillOpacity: 1
+      }).addTo(map);
+
+      marker.bindPopup(popupHtml, POPUP_OPTIONS);
+
+      if (popupHtml) {
+        bindWaypointZoomLabel(marker, {
           type: "Point",
-          name,
-          description,
-          extraRows,
-          style,
-          coords: coords[0]
+          name: "",
+          description: ""
         });
       }
-    });
 
-    [...lineNodes].forEach(node => {
-      const coords = parseCoordinates(textOfFirst(node, "coordinates"));
-      if (coords.length >= 2) {
-        features.push({
-          type: "LineString",
-          name,
-          description,
-          extraRows,
-          style,
-          coords
-        });
-      }
-    });
-
-    [...polyNodes].forEach(node => {
-      const rings = [];
-
-      const outerNodes = [...node.getElementsByTagName("outerBoundaryIs")];
-      outerNodes.forEach(outer => {
-        const outerCoords = parseCoordinates(textOfFirst(outer, "coordinates"));
-        if (outerCoords.length >= 3) rings.push(outerCoords);
-      });
-
-      const innerNodes = [...node.getElementsByTagName("innerBoundaryIs")];
-      innerNodes.forEach(inner => {
-        const innerCoords = parseCoordinates(textOfFirst(inner, "coordinates"));
-        if (innerCoords.length >= 3) rings.push(innerCoords);
-      });
-
-      if (rings.length) {
-        features.push({
-          type: "Polygon",
-          name,
-          description,
-          extraRows,
-          style,
-          rings
-        });
-      }
-    });
-  });
-
-  return features;
-}
-
-/* -----------------------------
-   KML draw
------------------------------ */
-
-function drawKMLPoint(feature) {
-  const popupHtml = buildPopupHtml(
-    feature.name || "Waypoint",
-    feature.description || "",
-    feature.extraRows || []
-  );
-
-  const latlng = [feature.coords.lat, normalizePacificLon(feature.coords.lon)];
-  const labelStyle = getLabelStyle(feature.style);
-  const iconStyle = getIconStyle(feature.style);
-  const isAirspaceLabel = isAirspaceLabelFeature(feature);
-
-  if (isAirspaceLabel) {
-    const cleanedName = cleanLabelText(feature.name);
-    if (!cleanedName) return;
-
-    const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
-    const fontSize = Math.max(7, Math.round(9 * labelStyle.scale));
-
-    const labelHtml =
-      `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
-
-    const labelOnlyMarker = L.marker(latlng, {
-      opacity: 0,
-      keyboard: false
-    }).addTo(map);
-
-    labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
-
-    labelOnlyMarker.bindTooltip(labelHtml, {
-      permanent: true,
-      direction: "top",
-      offset: [0, 0],
-      className: "kml-label",
-      opacity: 1
-    });
-
-    drawn.addLayer(labelOnlyMarker);
-    return;
-  }
-
-  if (iconStyle.href) {
-    const iconSize = Math.max(8, Math.round(9 * iconStyle.scale));
-    const customIcon = L.icon({
-      iconUrl: iconStyle.href,
-      iconSize: [iconSize, iconSize],
-      iconAnchor: [iconSize / 2, iconSize / 2],
-      popupAnchor: [0, -12]
-    });
-
-    const marker = L.marker(latlng, {
-      icon: customIcon,
-      zIndexOffset: 2000
-    }).addTo(map);
-
-    marker.bindPopup(popupHtml, POPUP_OPTIONS);
-
-    if (isTriangleShapePoint(feature)) {
-      bindPermanentHorizontalTriangleLabel(marker, feature);
-    } else if (isIcon52ShapePoint(feature)) {
-      bindPermanentHorizontalTriangleLabel(marker, feature);
-    } else {
-      bindWaypointZoomLabel(marker, feature);
+      drawn.addLayer(marker);
     }
 
-    drawn.addLayer(marker);
-    return;
-  }
+    function drawGPXRoute(points, sourceName) {
+      if (!points || points.length < 2) {
+        throw new Error("No valid route points in GPX");
+      }
 
-  const markerColor = iconStyle.color || "#ffff00";
-  const markerOpacity = iconStyle.opacity || 1;
-  const markerRadius = Math.max(4, 4 * iconStyle.scale);
+      const latlngs = points.map(p => [p.lat, normalizePacificLon(p.lon)]);
+      const segments = splitPacificSegments(latlngs);
 
-  const marker = L.circleMarker(latlng, {
-    radius: markerRadius,
-    color: "#222",
-    weight: 1,
-    fillColor: markerColor,
-    fillOpacity: markerOpacity
-  }).addTo(map);
+      segments.forEach(seg => {
+        const line = L.polyline(seg, {
+          color: "#FFD400",
+          weight: 5
+        }).addTo(map);
+        drawn.addLayer(line);
+      });
 
-  marker.bindPopup(popupHtml, POPUP_OPTIONS);
+      points.forEach((p, i) => {
+        const extraRows = [];
+        if (p.comment) extraRows.push({ key: "Comment", value: p.comment });
 
-  if (isAlwaysVisibleShapePointLabel(feature)) {
-    bindPermanentHorizontalTriangleLabel(marker, feature);
-  } else {
-    bindWaypointZoomLabel(marker, feature);
-  }
+        const popupHtml = buildPopupHtml(
+          p.name || "Waypoint",
+          p.description || "",
+          extraRows
+        );
 
-  drawn.addLayer(marker);
-}
+        const latlng = [p.lat, normalizePacificLon(p.lon)];
 
-function drawKMLLine(feature) {
-  const lineStyle = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
-  const weight = feature.style.lineWidth || 4;
+        let iconColor = "#ffff00";
+        if (i === 0) iconColor = "#00aa00";
+        if (i === points.length - 1) iconColor = "#0000ff";
 
-  const latlngs = feature.coords.map(c => [c.lat, normalizePacificLon(c.lon)]);
-  const segments = splitPacificSegments(latlngs);
+        const marker = L.circleMarker(latlng, {
+          radius: 3,
+          color: "#222",
+          weight: 1,
+          fillColor: iconColor,
+          fillOpacity: 1
+        }).addTo(map);
 
-  segments.forEach(seg => {
-    const line = L.polyline(seg, {
-      color: lineStyle.color,
-      weight: weight,
-      opacity: lineStyle.opacity
-    }).addTo(map);
+        marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
-    if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
+        bindWaypointZoomLabel(marker, {
+          type: "Point",
+          name: p.name || "",
+          description: p.description || ""
+        });
+
+        drawn.addLayer(marker);
+      });
+
+      fitDrawnBounds();
+      console.log("Flight Route Loaded:", sourceName, "GPX", points.length);
+    }
+
+    /* -----------------------------
+       KML helpers
+    ----------------------------- */
+
+    function parseCoordinates(coordText) {
+      if (!coordText) return [];
+
+      return coordText
+        .trim()
+        .split(/\s+/)
+        .map(row => {
+          const parts = row.split(",");
+          const lon = parseFloat(parts[0]);
+          const lat = parseFloat(parts[1]);
+          const alt = parts.length > 2 ? parseFloat(parts[2]) : null;
+
+          return { lat, lon, alt };
+        })
+        .filter(p => !isBadCoord(p.lat, p.lon));
+    }
+
+    function parseStyleNode(styleNode) {
+      if (!styleNode) return {};
+
+      const lineStyleNode = styleNode.getElementsByTagName("LineStyle")[0];
+      const polyStyleNode = styleNode.getElementsByTagName("PolyStyle")[0];
+      const labelStyleNode = styleNode.getElementsByTagName("LabelStyle")[0];
+      const iconStyleNode = styleNode.getElementsByTagName("IconStyle")[0];
+
+      const style = {};
+
+      if (lineStyleNode) {
+        style.lineColor = textOfFirst(lineStyleNode, "color");
+        style.lineWidth = parseFloat(textOfFirst(lineStyleNode, "width")) || 3;
+      }
+
+      if (polyStyleNode) {
+        style.polyColor = textOfFirst(polyStyleNode, "color");
+        const fillText = textOfFirst(polyStyleNode, "fill");
+        const outlineText = textOfFirst(polyStyleNode, "outline");
+        style.fill = fillText === "" ? true : fillText !== "0";
+        style.outline = outlineText === "" ? true : outlineText !== "0";
+      }
+
+      if (labelStyleNode) {
+        style.labelColor = textOfFirst(labelStyleNode, "color");
+        style.labelScale = parseFloat(textOfFirst(labelStyleNode, "scale")) || 1;
+      }
+
+      if (iconStyleNode) {
+        style.iconColor = textOfFirst(iconStyleNode, "color");
+        style.iconScale = parseFloat(textOfFirst(iconStyleNode, "scale")) || 1;
+        const iconNode = iconStyleNode.getElementsByTagName("Icon")[0];
+        if (iconNode) {
+          style.iconHref = textOfFirst(iconNode, "href");
+        }
+      }
+
+      return style;
+    }
+
+    function mergeStyles(baseStyle, overrideStyle) {
+      return {
+        ...(baseStyle || {}),
+        ...(overrideStyle || {})
+      };
+    }
+
+    function buildStyleIndex(xml) {
+      const styleMap = {};
+      const styleNodes = [...xml.getElementsByTagName("Style")];
+
+      styleNodes.forEach(styleNode => {
+        const id = styleNode.getAttribute("id");
+        if (!id) return;
+        styleMap["#" + id] = parseStyleNode(styleNode);
+      });
+
+      return styleMap;
+    }
+
+    function buildStyleMapIndex(xml) {
+      const styleMapIndex = {};
+      const styleMapNodes = [...xml.getElementsByTagName("StyleMap")];
+
+      styleMapNodes.forEach(node => {
+        const id = node.getAttribute("id");
+        if (!id) return;
+
+        const pairs = [...node.getElementsByTagName("Pair")];
+        let normalUrl = "";
+
+        pairs.forEach(pair => {
+          const key = textOfFirst(pair, "key");
+          const styleUrl = textOfFirst(pair, "styleUrl");
+          if (key === "normal" && styleUrl) {
+            normalUrl = styleUrl;
+          }
+        });
+
+        if (normalUrl) {
+          styleMapIndex["#" + id] = normalUrl;
+        }
+      });
+
+      return styleMapIndex;
+    }
+
+    function buildExtendedDataRows(placemark) {
+      const rows = [];
+
+      const simpleDatas = placemark.getElementsByTagName("SimpleData");
+      [...simpleDatas].forEach(node => {
+        const key = node.getAttribute("name") || "Data";
+        const value = escapeHtml(node.textContent || "");
+        if (value) rows.push({ key, value });
+      });
+
+      const datas = placemark.getElementsByTagName("Data");
+      [...datas].forEach(node => {
+        const key = node.getAttribute("name") || "Data";
+        const valueNode = node.getElementsByTagName("value")[0];
+        const value = valueNode ? escapeHtml(valueNode.textContent || "") : "";
+        if (value) rows.push({ key, value });
+      });
+
+      return rows;
+    }
+
+    function extractKMLFeatures(text) {
+      const xml = parseXml(text);
+      const styleIndex = buildStyleIndex(xml);
+      const styleMapIndex = buildStyleMapIndex(xml);
+      const placemarks = [...xml.getElementsByTagName("Placemark")];
+
+      const features = [];
+
+      placemarks.forEach(pm => {
+        const name = textOfFirst(pm, "name");
+        const description = textOfFirst(pm, "description");
+
+        let styleUrl = textOfFirst(pm, "styleUrl");
+        if (styleMapIndex[styleUrl]) {
+          styleUrl = styleMapIndex[styleUrl];
+        }
+
+        const sharedStyle = styleIndex[styleUrl] || {};
+        const inlineStyleNode = getDirectChild(pm, "Style");
+        const inlineStyle = parseStyleNode(inlineStyleNode);
+        const style = mergeStyles(sharedStyle, inlineStyle);
+
+        const extraRows = buildExtendedDataRows(pm);
+
+        const pointNodes = pm.getElementsByTagName("Point");
+        const lineNodes = pm.getElementsByTagName("LineString");
+        const polyNodes = pm.getElementsByTagName("Polygon");
+
+        [...pointNodes].forEach(node => {
+          const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+          if (coords.length) {
+            features.push({
+              type: "Point",
+              name,
+              description,
+              extraRows,
+              style,
+              coords: coords[0]
+            });
+          }
+        });
+
+        [...lineNodes].forEach(node => {
+          const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+          if (coords.length >= 2) {
+            features.push({
+              type: "LineString",
+              name,
+              description,
+              extraRows,
+              style,
+              coords
+            });
+          }
+        });
+
+        [...polyNodes].forEach(node => {
+          const rings = [];
+
+          const outerNodes = [...node.getElementsByTagName("outerBoundaryIs")];
+          outerNodes.forEach(outer => {
+            const outerCoords = parseCoordinates(textOfFirst(outer, "coordinates"));
+            if (outerCoords.length >= 3) rings.push(outerCoords);
+          });
+
+          const innerNodes = [...node.getElementsByTagName("innerBoundaryIs")];
+          innerNodes.forEach(inner => {
+            const innerCoords = parseCoordinates(textOfFirst(inner, "coordinates"));
+            if (innerCoords.length >= 3) rings.push(innerCoords);
+          });
+
+          if (rings.length) {
+            features.push({
+              type: "Polygon",
+              name,
+              description,
+              extraRows,
+              style,
+              rings
+            });
+          }
+        });
+      });
+
+      return features;
+    }
+
+    /* -----------------------------
+       KML draw
+    ----------------------------- */
+
+    function drawKMLPoint(feature) {
       const popupHtml = buildPopupHtml(
-        feature.name || "LineString",
+        feature.name || "Waypoint",
         feature.description || "",
         feature.extraRows || []
       );
-      line.bindPopup(popupHtml, POPUP_OPTIONS);
-    }
 
-    drawn.addLayer(line);
-  });
-}
+      const latlng = [feature.coords.lat, normalizePacificLon(feature.coords.lon)];
+      const labelStyle = getLabelStyle(feature.style);
+      const iconStyle = getIconStyle(feature.style);
+      const isAirspaceLabel = isAirspaceLabelFeature(feature);
 
-function drawKMLPolygon(feature) {
-  const lineStyle = kmlColorToCss(feature.style.lineColor, "#00aa55", 0.9);
-  const fillStyle = kmlColorToCss(feature.style.polyColor, "#00CC66", 0.3);
+      if (isAirspaceLabel) {
+        const cleanedName = cleanLabelText(feature.name);
+        if (!cleanedName) return;
 
-  const rings = feature.rings.map(ring =>
-    ring.map(c => [c.lat, normalizePacificLon(c.lon)])
-  );
+        const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
+        const fontSize = Math.max(7, Math.round(9 * labelStyle.scale));
 
-  const polygon = L.polygon(rings, {
-    color: lineStyle.color,
-    opacity: feature.style.outline === false ? 0 : lineStyle.opacity,
-    weight: feature.style.outline === false ? 0 : (feature.style.lineWidth || 2),
-    fillColor: fillStyle.color,
-    fillOpacity: feature.style.fill === false ? 0 : fillStyle.opacity
-  }).addTo(map);
+        const labelHtml =
+          `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
 
-  if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
-    const popupHtml = buildPopupHtml(
-      feature.name || "Polygon",
-      feature.description || "",
-      feature.extraRows || []
-    );
-    polygon.bindPopup(popupHtml, POPUP_OPTIONS);
-  }
+        const labelOnlyMarker = L.marker(latlng, {
+          opacity: 0,
+          keyboard: false
+        }).addTo(map);
 
-  drawn.addLayer(polygon);
-}
+        labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
 
-function drawRouteEndpointMarkers(routeEndpoints) {
-  if (!routeEndpoints) return;
+        labelOnlyMarker.bindTooltip(labelHtml, {
+          permanent: true,
+          direction: "top",
+          offset: [0, 0],
+          className: "kml-label",
+          opacity: 1
+        });
 
-  const depFeature = routeEndpoints.departureFeature;
-  const destFeature = routeEndpoints.destinationFeature;
-
-  if (destFeature?.coords) {
-    const destLatLng = [destFeature.coords.lat, normalizePacificLon(destFeature.coords.lon)];
-
-    const destinationIcon = L.icon({
-      iconUrl: "https://maps.google.com/mapfiles/kml/paddle/blu-circle.png",
-      iconSize: [22, 22],
-      iconAnchor: [11, 11],
-      popupAnchor: [0, -10]
-    });
-
-    const destMarker = L.marker(destLatLng, {
-      icon: destinationIcon,
-      zIndexOffset: 1000
-    }).addTo(map);
-
-    destMarker.bindPopup(
-      buildPopupHtml(destFeature.name || "", destFeature.description || "", destFeature.extraRows || []),
-      POPUP_OPTIONS
-    );
-
-    drawn.addLayer(destMarker);
-  }
-}
-
-function drawKMLFeatures(features, sourceName) {
-  if (!features.length) {
-    throw new Error("No valid features in KML");
-  }
-
-  const pointFeatures = features.filter(f => f.type === "Point");
-  const lineFeatures = features.filter(f => f.type === "LineString");
-  const polygonFeatures = features.filter(f => f.type === "Polygon");
-  const routeEndpoints = getRouteEndpoints(pointFeatures);
-
-  lineFeatures.forEach(drawKMLLine);
-  polygonFeatures.forEach(drawKMLPolygon);
-
-  let lastAirspaceLabelName = "";
-
-  pointFeatures.forEach(f => {
-    if (isEndpointPointFeature(f, routeEndpoints)) {
-      return;
-    }
-
-    if (isAirspaceLabelFeature(f)) {
-      const currentName = String(f.name || "").trim();
-
-      if (currentName && currentName === lastAirspaceLabelName) {
+        drawn.addLayer(labelOnlyMarker);
         return;
       }
 
-      lastAirspaceLabelName = currentName;
-      drawKMLPoint(f);
-      return;
+      if (iconStyle.href) {
+        const iconSize = Math.max(8, Math.round(9 * iconStyle.scale));
+        const customIcon = L.icon({
+          iconUrl: iconStyle.href,
+          iconSize: [iconSize, iconSize],
+          iconAnchor: [iconSize / 2, iconSize / 2],
+          popupAnchor: [0, -12]
+        });
+
+        const marker = L.marker(latlng, {
+          icon: customIcon,
+          zIndexOffset: 2000
+        }).addTo(map);
+
+        marker.bindPopup(popupHtml, POPUP_OPTIONS);
+
+        if (isTriangleShapePoint(feature)) {
+          bindPermanentHorizontalTriangleLabel(marker, feature);
+        } else if (isIcon52ShapePoint(feature)) {
+          bindPermanentHorizontalTriangleLabel(marker, feature);
+        } else {
+          bindWaypointZoomLabel(marker, feature);
+        }
+
+        drawn.addLayer(marker);
+        return;
+      }
+
+      const markerColor = iconStyle.color || "#ffff00";
+      const markerOpacity = iconStyle.opacity || 1;
+      const markerRadius = Math.max(4, 4 * iconStyle.scale);
+
+      const marker = L.circleMarker(latlng, {
+        radius: markerRadius,
+        color: "#222",
+        weight: 1,
+        fillColor: markerColor,
+        fillOpacity: markerOpacity
+      }).addTo(map);
+
+      marker.bindPopup(popupHtml, POPUP_OPTIONS);
+
+      if (isAlwaysVisibleShapePointLabel(feature)) {
+        bindPermanentHorizontalTriangleLabel(marker, feature);
+      } else {
+        bindWaypointZoomLabel(marker, feature);
+      }
+
+      drawn.addLayer(marker);
     }
 
-    lastAirspaceLabelName = "";
-    drawKMLPoint(f);
-  });
+    function drawKMLLine(feature) {
+      const lineStyle = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
+      const weight = feature.style.lineWidth || 4;
 
-  drawRouteEndpointMarkers(routeEndpoints);
+      const latlngs = feature.coords.map(c => [c.lat, normalizePacificLon(c.lon)]);
+      const segments = splitPacificSegments(latlngs);
 
-  fitDrawnBounds();
+      segments.forEach(seg => {
+        const line = L.polyline(seg, {
+          color: lineStyle.color,
+          weight: weight,
+          opacity: lineStyle.opacity
+        }).addTo(map);
 
-  console.log("Flight Route Loaded:", sourceName, "KML", {
-    points: pointFeatures.length,
-    lines: lineFeatures.length,
-    polygons: polygonFeatures.length,
-    departureName: routeEndpoints.departureFeature?.name || "",
-    destinationName: routeEndpoints.destinationFeature?.name || "",
-    departureCoord: routeEndpoints.departureCoord,
-    destinationCoord: routeEndpoints.destinationCoord
-  });
-}
+        if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
+          const popupHtml = buildPopupHtml(
+            feature.name || "LineString",
+            feature.description || "",
+            feature.extraRows || []
+          );
+          line.bindPopup(popupHtml, POPUP_OPTIONS);
+        }
 
-/* -----------------------------
-   load
------------------------------ */
-
-async function loadByFilename(filename) {
-  const ext = getExtension(filename);
-  if (!ext) {
-    throw new Error("Only .gpx or .kml supported");
-  }
-
-  const text = await fetchTextFile(filename);
-
-  if (ext === "gpx") {
-    const points = parseGPX(text);
-    drawGPXRoute(points, filename);
-    return;
-  }
-
-  if (ext === "kml") {
-    const features = extractKMLFeatures(text);
-    drawKMLFeatures(features, filename);
-    return;
-  }
-}
-
-async function autoLoadDefault() {
-  try {
-    await loadByFilename("route.gpx");
-    return;
-  } catch (e1) {
-    try {
-      await loadByFilename("route.kml");
-      return;
-    } catch (e2) {
-      throw new Error("No default route.gpx or route.kml found");
+        drawn.addLayer(line);
+      });
     }
-  }
-}
 
-async function init() {
-  try {
-    const requested = getRequestedFile();
+    function drawKMLPolygon(feature) {
+      const lineStyle = kmlColorToCss(feature.style.lineColor, "#00aa55", 0.9);
+      const fillStyle = kmlColorToCss(feature.style.polyColor, "#00CC66", 0.3);
 
-    if (requested) {
-      await loadByFilename(requested);
-    } else {
-      await autoLoadDefault();
+      const rings = feature.rings.map(ring =>
+        ring.map(c => [c.lat, normalizePacificLon(c.lon)])
+      );
+
+      const polygon = L.polygon(rings, {
+        color: lineStyle.color,
+        opacity: feature.style.outline === false ? 0 : lineStyle.opacity,
+        weight: feature.style.outline === false ? 0 : (feature.style.lineWidth || 2),
+        fillColor: fillStyle.color,
+        fillOpacity: feature.style.fill === false ? 0 : fillStyle.opacity
+      }).addTo(map);
+
+      if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
+        const popupHtml = buildPopupHtml(
+          feature.name || "Polygon",
+          feature.description || "",
+          feature.extraRows || []
+        );
+        polygon.bindPopup(popupHtml, POPUP_OPTIONS);
+      }
+
+      drawn.addLayer(polygon);
     }
-  } catch (err) {
-    console.error(err);
-    alert("Error: " + (err.message || err));
-  }
-}
 
-init();
-</script>
-  <script src="aircraft.js?v=20260314_09"></script>
+    function drawRouteEndpointMarkers(routeEndpoints) {
+      if (!routeEndpoints) return;
 
+      const depFeature = routeEndpoints.departureFeature;
+      const destFeature = routeEndpoints.destinationFeature;
+
+      if (destFeature?.coords) {
+        const destLatLng = [destFeature.coords.lat, normalizePacificLon(destFeature.coords.lon)];
+
+        const destinationIcon = L.icon({
+          iconUrl: "https://maps.google.com/mapfiles/kml/paddle/blu-circle.png",
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+          popupAnchor: [0, -10]
+        });
+
+        const destMarker = L.marker(destLatLng, {
+          icon: destinationIcon,
+          zIndexOffset: 1000
+        }).addTo(map);
+
+        destMarker.bindPopup(
+          buildPopupHtml(
+            destFeature.name || "",
+            destFeature.description || "",
+            destFeature.extraRows || []
+          ),
+          POPUP_OPTIONS
+        );
+
+        drawn.addLayer(destMarker);
+      }
+    }
+
+    function drawKMLFeatures(features, sourceName) {
+      if (!features.length) {
+        throw new Error("No valid features in KML");
+      }
+
+      const pointFeatures = features.filter(f => f.type === "Point");
+      const lineFeatures = features.filter(f => f.type === "LineString");
+      const polygonFeatures = features.filter(f => f.type === "Polygon");
+      const routeEndpoints = getRouteEndpoints(pointFeatures);
+
+      lineFeatures.forEach(drawKMLLine);
+      polygonFeatures.forEach(drawKMLPolygon);
+
+      let lastAirspaceLabelName = "";
+
+      pointFeatures.forEach(f => {
+        if (isEndpointPointFeature(f, routeEndpoints)) {
+          return;
+        }
+
+        if (isAirspaceLabelFeature(f)) {
+          const currentName = String(f.name || "").trim();
+
+          if (currentName && currentName === lastAirspaceLabelName) {
+            return;
+          }
+
+          lastAirspaceLabelName = currentName;
+          drawKMLPoint(f);
+          return;
+        }
+
+        lastAirspaceLabelName = "";
+        drawKMLPoint(f);
+      });
+
+      drawRouteEndpointMarkers(routeEndpoints);
+
+      fitDrawnBounds();
+
+      console.log("Flight Route Loaded:", sourceName, "KML", {
+        points: pointFeatures.length,
+        lines: lineFeatures.length,
+        polygons: polygonFeatures.length,
+        departureName: routeEndpoints.departureFeature?.name || "",
+        destinationName: routeEndpoints.destinationFeature?.name || "",
+        departureCoord: routeEndpoints.departureCoord,
+        destinationCoord: routeEndpoints.destinationCoord
+      });
+    }
+
+    /* -----------------------------
+       load
+    ----------------------------- */
+
+    async function loadByFilename(filename) {
+      const ext = getExtension(filename);
+      if (!ext) {
+        throw new Error("Only .gpx or .kml supported");
+      }
+
+      const text = await fetchTextFile(filename);
+
+      if (ext === "gpx") {
+        const points = parseGPX(text);
+        drawGPXRoute(points, filename);
+        return;
+      }
+
+      if (ext === "kml") {
+        const features = extractKMLFeatures(text);
+        drawKMLFeatures(features, filename);
+        return;
+      }
+    }
+
+    async function autoLoadDefault() {
+      try {
+        await loadByFilename("route.gpx");
+        return;
+      } catch (e1) {
+        try {
+          await loadByFilename("route.kml");
+          return;
+        } catch (e2) {
+          throw new Error("No default route.gpx or route.kml found");
+        }
+      }
+    }
+
+    async function init() {
+      try {
+        const requested = getRequestedFile();
+
+        if (requested) {
+          await loadByFilename(requested);
+        } else {
+          await autoLoadDefault();
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error: " + (err.message || err));
+      }
+    }
+
+    init();
+  </script>
+
+  <script src="aircraft.js?v=20260314_10"></script>
 </body>
 </html>
