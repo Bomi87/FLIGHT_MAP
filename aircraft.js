@@ -24,13 +24,11 @@ const COMPASS_HEADING_SMOOTHING = 0.18;
 const USER_HEADING_CHANGE_MIN_DEG = 2;
 
 /* --- GPS TRAIL FILTER SETTINGS --- */
-const USER_TRAIL_MAX_ACCURACY_M = 40;          // 이보다 accuracy 나쁘면 불안정으로 간주
-const USER_TRAIL_JUMP_MAX_DIST_M = 60;         // 짧은 시간 내 이 이상 점프면 버림
+const USER_TRAIL_MAX_ACCURACY_M = 45;          // 기존 40 -> 45로 완화
+const USER_TRAIL_JUMP_MAX_DIST_M = 60;
 const USER_TRAIL_JUMP_MAX_TIME_S = 5;
-const USER_TRAIL_MAX_SPEED_MPS = 8;            // 도보/가벼운 러닝 이상 비정상 점프 제거
-const USER_TRAIL_DASH_MAX_DIST_M = 150;        // 끊김 후 재연결 점선 허용 최대 거리
-const USER_TRAIL_DASH_MAX_TIME_S = 20;         // 끊김 후 재연결 점선 허용 최대 시간
-const USER_TRAIL_MIN_MOVE_M = 3;               // 너무 미세한 흔들림은 trail에 추가 안 함
+const USER_TRAIL_MAX_SPEED_MPS = 8;
+const USER_TRAIL_MIN_MOVE_M = 3;
 
 /* ------------------ STATE ------------------ */
 
@@ -55,7 +53,6 @@ let userMarker = null;
 let userAccuracyCircle = null;
 let userHeadingMarker = null;
 
-/* 기존 단일 trail 제거 -> 세그먼트 방식 */
 let gpsWatchId = null;
 let deviceCompassHeading = null;
 let lastUserHeadingDeg = null;
@@ -726,19 +723,20 @@ function redrawUserTrail() {
 }
 
 function trimUserTrailSegments() {
-  let totalPoints = userTrailSolidSegments.reduce((sum, seg) => sum + seg.length, 0);
+  let totalSolidPoints = userTrailSolidSegments.reduce((sum, seg) => sum + seg.length, 0);
 
-  while (totalPoints > MAX_USER_TRAIL_POINTS && userTrailSolidSegments.length > 0) {
+  while (totalSolidPoints > MAX_USER_TRAIL_POINTS && userTrailSolidSegments.length > 0) {
     if (userTrailSolidSegments[0].length <= 1) {
-      totalPoints -= userTrailSolidSegments[0].length;
+      totalSolidPoints -= userTrailSolidSegments[0].length;
       userTrailSolidSegments.shift();
     } else {
       userTrailSolidSegments[0].shift();
-      totalPoints -= 1;
+      totalSolidPoints -= 1;
     }
   }
 
-  while (userTrailDashedSegments.length > MAX_USER_TRAIL_POINTS) {
+  const maxDashedSegments = Math.max(20, Math.floor(MAX_USER_TRAIL_POINTS / 10));
+  while (userTrailDashedSegments.length > maxDashedSegments) {
     userTrailDashedSegments.shift();
   }
 }
@@ -766,7 +764,7 @@ function isReliableUserTrailPoint(prevPoint, nextPoint) {
   const speedMps = dist / dt;
 
   if (dist < USER_TRAIL_MIN_MOVE_M) {
-    return null; // 너무 미세한 흔들림 -> 무시
+    return null;
   }
 
   if (dt <= USER_TRAIL_JUMP_MAX_TIME_S && dist > USER_TRAIL_JUMP_MAX_DIST_M) {
@@ -778,23 +776,6 @@ function isReliableUserTrailPoint(prevPoint, nextPoint) {
   }
 
   return true;
-}
-
-function canReconnectWithDashed(prevPoint, nextPoint) {
-  if (!prevPoint || !nextPoint) return false;
-
-  const dist = metersBetweenLatLng(
-    prevPoint.lat, prevPoint.lng,
-    nextPoint.lat, nextPoint.lng
-  );
-
-  const dt = (nextPoint.time - prevPoint.time) / 1000;
-  if (dt <= 0) return false;
-
-  return (
-    dist <= USER_TRAIL_DASH_MAX_DIST_M &&
-    dt <= USER_TRAIL_DASH_MAX_TIME_S
-  );
 }
 
 function appendUserTrailPoint(lat, lng, accuracy) {
@@ -816,7 +797,7 @@ function appendUserTrailPoint(lat, lng, accuracy) {
   const reliability = isReliableUserTrailPoint(lastAcceptedUserPoint, point);
 
   if (reliability === null) {
-    return; // 너무 미세한 흔들림
+    return;
   }
 
   if (reliability === false) {
@@ -827,12 +808,10 @@ function appendUserTrailPoint(lat, lng, accuracy) {
   }
 
   if (pendingGapStartPoint) {
-    if (canReconnectWithDashed(pendingGapStartPoint, point)) {
-      userTrailDashedSegments.push([
-        pendingGapStartPoint,
-        point
-      ]);
-    }
+    userTrailDashedSegments.push([
+      pendingGapStartPoint,
+      point
+    ]);
 
     currentUserSolidSegment = [point];
     userTrailSolidSegments.push(currentUserSolidSegment);
