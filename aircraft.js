@@ -15,9 +15,16 @@ const POINT_RADIUS_NM = 80;
 const MAX_LIVE_TRAIL_POINTS = 500;
 const VERTICAL_RATE_THRESHOLD = 300;
 
-/* GPS */
+/* GPS / FOLLOW */
 const USER_GPS_ZOOM_MIN = 10;
 const MAX_USER_TRAIL_POINTS = 1000;
+const USER_HEADING_MIN_SPEED_KT = 3;     // 이 속도 미만이면 heading 신뢰 안함
+const USER_HEADING_SMOOTHING = 0.35;     // 0~1, 클수록 더 빨리 따라감
+const USER_HEADING_CHANGE_MIN_DEG = 3;   // 너무 작은 흔들림은 무시
+
+/* 버튼 눌렀을 때만 적용할 zoom */
+const AIRCRAFT_FOLLOW_CLICK_ZOOM = 8;
+const USER_FOLLOW_CLICK_ZOOM = 13;
 
 /* ------------------ STATE ------------------ */
 
@@ -40,6 +47,7 @@ let userWatchId = null;
 let lastUserPosition = null;
 let userTrail = [];
 let userTrailLine = null;
+let lastUserHeading = null;
 
 /* ------------------ STATUS BOX ------------------ */
 
@@ -84,6 +92,34 @@ function hideStatus() {
   }
 }
 
+/* ------------------ ANGLE / HEADING UTILS ------------------ */
+
+function normalizeAngle(angle) {
+  let a = angle % 360;
+  if (a < 0) a += 360;
+  return a;
+}
+
+function shortestAngleDelta(from, to) {
+  let delta = normalizeAngle(to) - normalizeAngle(from);
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return delta;
+}
+
+function smoothHeading(previous, next, factor = USER_HEADING_SMOOTHING) {
+  if (!Number.isFinite(next)) return previous;
+  if (!Number.isFinite(previous)) return normalizeAngle(next);
+
+  const delta = shortestAngleDelta(previous, next);
+
+  if (Math.abs(delta) < USER_HEADING_CHANGE_MIN_DEG) {
+    return normalizeAngle(previous);
+  }
+
+  return normalizeAngle(previous + delta * factor);
+}
+
 /* ------------------ FOLLOW BUTTON ------------------ */
 
 function updateFollowButtonUi() {
@@ -96,7 +132,7 @@ function updateFollowButtonUi() {
     btn.style.color = "#004a99";
     btn.title = "GPS follow ON";
   } else {
-    btn.textContent = "AC";
+    btn.textContent = "A/C";
     btn.style.background = "#fff";
     btn.style.color = "#333";
     btn.title = "Aircraft follow ON";
@@ -112,7 +148,7 @@ function focusAircraftNow() {
     try {
       map.setView(
         [lastAircraft.latitude, lastAircraft.longitude],
-        Math.max(map.getZoom?.() || 8, 8),
+        AIRCRAFT_FOLLOW_CLICK_ZOOM,
         { animate: true }
       );
     } catch {}
@@ -128,7 +164,7 @@ function focusUserNow() {
     try {
       map.setView(
         [lastUserPosition.lat, lastUserPosition.lon],
-        Math.max(map.getZoom?.() || USER_GPS_ZOOM_MIN, USER_GPS_ZOOM_MIN),
+        USER_FOLLOW_CLICK_ZOOM,
         { animate: true }
       );
     } catch {}
@@ -145,7 +181,7 @@ function createFollowToggleButton() {
   btn.id = "follow-toggle-btn";
   btn.style.position = "fixed";
   btn.style.right = "10px";
-  btn.style.top = "120px";
+  btn.style.top = "95px";
   btn.style.zIndex = "99999";
   btn.style.minWidth = "54px";
   btn.style.height = "38px";
@@ -207,7 +243,7 @@ function makeUserLocationIcon(heading = null) {
             height:0;
             border-left:7px solid transparent;
             border-right:7px solid transparent;
-            border-bottom:14px solid #1e78ff;
+            border-bottom:14px solid #ff3b30;
             top:1px;
             left:7px;
             transform:rotate(${heading}deg);
@@ -269,11 +305,23 @@ function addUserTrailPoint(lat, lon) {
 }
 
 function getBestUserHeading(pos) {
-  const h1 = Number(pos.coords.heading);
-  if (Number.isFinite(h1) && h1 >= 0) return h1;
+  const speedMps = Number(pos.coords.speed);
+  const speedKt = Number.isFinite(speedMps) ? speedMps * 1.94384 : null;
 
-  const h2 = Number(pos.coords.webkitCompassHeading);
-  if (Number.isFinite(h2)) return h2;
+  const rawHeading = Number(pos.coords.heading);
+  if (
+    Number.isFinite(rawHeading) &&
+    rawHeading >= 0 &&
+    Number.isFinite(speedKt) &&
+    speedKt >= USER_HEADING_MIN_SPEED_KT
+  ) {
+    return normalizeAngle(rawHeading);
+  }
+
+  const webkitHeading = Number(pos.coords.webkitCompassHeading);
+  if (Number.isFinite(webkitHeading)) {
+    return normalizeAngle(webkitHeading);
+  }
 
   return null;
 }
@@ -289,17 +337,27 @@ function startUserLocation() {
       const lat = Number(pos.coords.latitude);
       const lon = Number(pos.coords.longitude);
       const accuracy = Number(pos.coords.accuracy);
-      const heading = getBestUserHeading(pos);
+      const rawHeading = getBestUserHeading(pos);
+      const smoothedHeading = smoothHeading(lastUserHeading, rawHeading);
 
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
-      lastUserPosition = { lat, lon, accuracy, heading };
+      if (Number.isFinite(smoothedHeading)) {
+        lastUserHeading = smoothedHeading;
+      }
+
+      lastUserPosition = {
+        lat,
+        lon,
+        accuracy,
+        heading: Number.isFinite(lastUserHeading) ? lastUserHeading : null
+      };
 
       addUserTrailPoint(lat, lon);
 
       if (!userMarker) {
         userMarker = L.marker([lat, lon], {
-          icon: makeUserLocationIcon(heading),
+          icon: makeUserLocationIcon(lastUserHeading),
           zIndexOffset: 1500
         }).addTo(map);
 
@@ -310,7 +368,7 @@ function startUserLocation() {
         });
       } else {
         userMarker.setLatLng([lat, lon]);
-        userMarker.setIcon(makeUserLocationIcon(heading));
+        userMarker.setIcon(makeUserLocationIcon(lastUserHeading));
       }
 
       if (Number.isFinite(accuracy) && accuracy > 0) {
@@ -332,15 +390,26 @@ function startUserLocation() {
       if (followMode === "user") {
         hideStatus();
         try {
+          const currentZoom = map.getZoom?.();
           map.setView(
             [lat, lon],
-            Math.max(map.getZoom?.() || USER_GPS_ZOOM_MIN, USER_GPS_ZOOM_MIN),
+            Number.isFinite(currentZoom) ? currentZoom : USER_FOLLOW_CLICK_ZOOM,
             { animate: true }
           );
         } catch {}
       }
 
-      console.log("User GPS:", lat, lon, "accuracy:", accuracy, "heading:", heading);
+      console.log(
+        "User GPS:",
+        lat,
+        lon,
+        "accuracy:",
+        accuracy,
+        "raw heading:",
+        rawHeading,
+        "smoothed heading:",
+        lastUserHeading
+      );
     },
     (err) => {
       console.warn("GPS error:", err);
@@ -792,19 +861,6 @@ function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
-function normalizeAngle(angle) {
-  let a = angle % 360;
-  if (a < 0) a += 360;
-  return a;
-}
-
-function shortestAngleDelta(from, to) {
-  let delta = normalizeAngle(to) - normalizeAngle(from);
-  if (delta > 180) delta -= 360;
-  if (delta < -180) delta += 360;
-  return delta;
-}
-
 function animateMarkerTo(lat, lon, track, ac) {
   if (!aircraftMarker) {
     aircraftMarker = L.marker([lat, lon], {
@@ -951,9 +1007,12 @@ async function updateAircraft() {
 
     if (followMode === "aircraft") {
       try {
-        map.setView([lat, lon], Math.max(map.getZoom?.() || 8, 8), {
-          animate: true
-        });
+        const currentZoom = map.getZoom?.();
+        map.setView(
+          [lat, lon],
+          Number.isFinite(currentZoom) ? currentZoom : AIRCRAFT_FOLLOW_CLICK_ZOOM,
+          { animate: true }
+        );
       } catch {}
     }
 
