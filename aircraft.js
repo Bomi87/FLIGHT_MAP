@@ -13,7 +13,10 @@ const singleReg = (params.get("reg") || "").toUpperCase().trim();
 const singleHex = (params.get("hex") || "").toLowerCase().trim();
 
 const multiRegs = parseCsvParam("regs").map(x => x.toUpperCase());
-const multiHexes = parseCsvParam("hexes").map(x => x.toLowerCase());
+const multiHexes = [
+  ...parseCsvParam("hexes"),
+  ...parseCsvParam("hexs")
+].map(x => x.toLowerCase());
 
 let TARGETS = [];
 
