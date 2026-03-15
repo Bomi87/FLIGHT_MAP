@@ -338,28 +338,29 @@ function formatAircraftLabelHtml(ac, color) {
 
   return `
     <div style="
-      font-size:10px;
+      font-size:9px;
       color:#000000;
       font-weight:800;
       white-space:nowrap;
       text-align:center;
-      line-height:1.1;
+      line-height:1.0;
       text-shadow:
         -1px -1px 0 #ffffff,
          1px -1px 0 #ffffff,
         -1px  1px 0 #ffffff,
          1px  1px 0 #ffffff;
       border-top:2px solid ${escapeHtml(color)};
-      padding-top:2px;
-      min-width:42px;
+      padding:1px 4px 2px 4px;
+      min-width:34px;
       user-select:none;
       -webkit-user-select:none;
     ">
       <div style="
-        font-size:11px;
+        font-size:10px;
         font-weight:900;
         color:${vertical.color};
-        margin-bottom:1px;
+        margin-bottom:0;
+        line-height:1;
       ">${vertical.arrow}</div>
       <div>${escapeHtml(smallLine1)}</div>
       ${smallLine2 ? `<div>${escapeHtml(smallLine2)}</div>` : ""}
