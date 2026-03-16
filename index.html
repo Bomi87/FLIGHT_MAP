@@ -228,11 +228,11 @@
   <div id="map"></div>
 
   <script>
-    const map = L.map("map", {
-      worldCopyJump: true,
-      preferCanvas: true,
-      zoomControl: true
-    }).setView([30, 0], 3);
+   const map = L.map("map", {
+  worldCopyJump: false,
+  preferCanvas: true,
+  zoomControl: true
+}).setView([30, 0], 3);
 
     function refreshMapSize() {
       setTimeout(() => {
