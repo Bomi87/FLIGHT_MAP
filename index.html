@@ -231,7 +231,7 @@
     const map = L.map("map", {
       worldCopyJump: false,
       preferCanvas: true
-    }).setView([48, 180], 3);
+    }).setView([48, 0], 3);
 
     function refreshMapSize() {
       setTimeout(() => {
@@ -374,17 +374,10 @@
       return isAlwaysKmlFile(filename) ? acjNdbLayer : drawn;
     }
 
-    function normalizePacificLon(lon) {
-      let x = Number(lon);
-      while (x < 0) x += 360;
-      while (x >= 360) x -= 360;
-      return x;
-    }
-
     function isBadCoord(lat, lon) {
       if (!isFinite(lat) || !isFinite(lon)) return true;
       if (Math.abs(lat) > 90) return true;
-      if (Math.abs(lon) > 360) return true;
+      if (Math.abs(lon) > 180) return true;
       if (Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001) return true;
       return false;
     }
@@ -600,7 +593,7 @@
     }
 
     /* -----------------------------
-       antimeridian split
+       antimeridian split (-180 / 180)
     ----------------------------- */
 
     function splitPacificSegments(latlngs) {
@@ -613,28 +606,33 @@
         const p1 = latlngs[i - 1];
         const p2 = latlngs[i];
 
-        const lat1 = p1[0], lon1 = p1[1];
-        const lat2 = p2[0], lon2 = p2[1];
+        const lat1 = p1[0];
+        const lon1 = p1[1];
+        const lat2 = p2[0];
+        const lon2 = p2[1];
 
         const diff = lon2 - lon1;
 
         if (Math.abs(diff) > 180) {
-          const targetLon1 = diff > 0 ? 0 : 360;
+          const crossingLon = diff > 0 ? 180 : -180;
           const adjustedLon2 = diff > 0 ? lon2 - 360 : lon2 + 360;
-          const t = (targetLon1 - lon1) / (adjustedLon2 - lon1);
+          const t = (crossingLon - lon1) / (adjustedLon2 - lon1);
           const crossingLat = lat1 + (lat2 - lat1) * t;
 
-          current.push([crossingLat, targetLon1]);
+          current.push([crossingLat, crossingLon]);
           segments.push(current);
 
-          const targetLon2 = targetLon1 === 0 ? 360 : 0;
-          current = [[crossingLat, targetLon2], [lat2, lon2]];
+          const oppositeLon = crossingLon === 180 ? -180 : 180;
+          current = [[crossingLat, oppositeLon], [lat2, lon2]];
         } else {
           current.push([lat2, lon2]);
         }
       }
 
-      if (current.length > 0) segments.push(current);
+      if (current.length > 0) {
+        segments.push(current);
+      }
+
       return segments;
     }
 
@@ -716,15 +714,14 @@
 
       if (!name) return false;
 
-      const triangleIcon =
+      return (
         iconHref.includes("icon52.png") ||
         iconHref.includes("triangle") ||
         iconHref.includes("trk") ||
         iconHref.includes("track") ||
         iconHref.includes("placemark_triangle") ||
-        iconHref.includes("shape_triangle");
-
-      return triangleIcon;
+        iconHref.includes("shape_triangle")
+      );
     }
 
     function isAlwaysVisibleShapePointLabel(feature) {
@@ -854,7 +851,7 @@
         throw new Error("No valid route points in GPX");
       }
 
-      const latlngs = points.map(p => [p.lat, normalizePacificLon(p.lon)]);
+      const latlngs = points.map(p => [p.lat, p.lon]);
       const segments = splitPacificSegments(latlngs);
 
       segments.forEach(seg => {
@@ -876,7 +873,7 @@
           extraRows
         );
 
-        const latlng = [p.lat, normalizePacificLon(p.lon)];
+        const latlng = [p.lat, p.lon];
 
         let iconColor = "#ffff00";
         if (i === 0) iconColor = "#00aa00";
@@ -1135,7 +1132,7 @@
         feature.extraRows || []
       );
 
-      const latlng = [feature.coords.lat, normalizePacificLon(feature.coords.lon)];
+      const latlng = [feature.coords.lat, feature.coords.lon];
       const labelStyle = getLabelStyle(feature.style);
       const iconStyle = getIconStyle(feature.style);
       const isAirspaceLabel = isAirspaceLabelFeature(feature);
@@ -1243,7 +1240,7 @@
       const lineStyle = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
       const weight = feature.style.lineWidth || 4;
 
-      const latlngs = feature.coords.map(c => [c.lat, normalizePacificLon(c.lon)]);
+      const latlngs = feature.coords.map(c => [c.lat, c.lon]);
       const segments = splitPacificSegments(latlngs);
 
       segments.forEach(seg => {
@@ -1271,7 +1268,7 @@
       const fillStyle = kmlColorToCss(feature.style.polyColor, "#00CC66", 0.3);
 
       const rings = feature.rings.map(ring =>
-        ring.map(c => [c.lat, normalizePacificLon(c.lon)])
+        ring.map(c => [c.lat, c.lon])
       );
 
       const polygon = L.polygon(rings, {
@@ -1301,7 +1298,7 @@
       const destFeature = routeEndpoints.destinationFeature;
 
       if (depFeature?.coords) {
-        const depLatLng = [depFeature.coords.lat, normalizePacificLon(depFeature.coords.lon)];
+        const depLatLng = [depFeature.coords.lat, depFeature.coords.lon];
 
         const departureIcon = L.icon({
           iconUrl: "https://maps.google.com/mapfiles/kml/paddle/grn-circle.png",
@@ -1328,7 +1325,7 @@
       }
 
       if (destFeature?.coords) {
-        const destLatLng = [destFeature.coords.lat, normalizePacificLon(destFeature.coords.lon)];
+        const destLatLng = [destFeature.coords.lat, destFeature.coords.lon];
 
         const destinationIcon = L.icon({
           iconUrl: "https://maps.google.com/mapfiles/kml/paddle/blu-circle.png",
