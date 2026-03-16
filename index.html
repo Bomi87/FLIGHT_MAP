@@ -146,40 +146,68 @@
          0 0 4px rgba(0, 0, 0, 0.65);
     }
 
+    .ndb-label {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .ndb-label:before {
+      display: none !important;
+    }
+
+    .ndb-label-text {
+      display: inline-block;
+      white-space: nowrap;
+      font-weight: 700;
+      color: #ffffff;
+      font-size: 10px;
+      text-align: left;
+      transform: none;
+      text-shadow:
+        -1px -1px 0 #000,
+         1px -1px 0 #000,
+        -1px  1px 0 #000,
+         1px  1px 0 #000,
+         0 0 4px rgba(0, 0, 0, 0.65);
+    }
+
     .leaflet-control-layers {
       font-size: 12px;
     }
 
     .leaflet-control-ndb-toggle {
-  background: #7c3aed;
-  border-radius: 4px;
-  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-  overflow: hidden;
-}
+      background: #7c3aed;
+      border-radius: 4px;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+      overflow: hidden;
+    }
 
- .leaflet-control-ndb-toggle button {
-  display: block;
-  width: 100%;
-  min-width: 92px;
-  height: 32px;
-  border: none;
-  background: #7c3aed;
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0 12px;
-  text-align: center;
-}
+    .leaflet-control-ndb-toggle button {
+      display: block;
+      width: 100%;
+      min-width: 92px;
+      height: 32px;
+      border: none;
+      background: #7c3aed;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 0 12px;
+      text-align: center;
+    }
 
-  .leaflet-control-ndb-toggle button:hover {
-  background: #6d28d9;
-}
+    .leaflet-control-ndb-toggle button:hover {
+      background: #6d28d9;
+    }
 
-.leaflet-control-ndb-toggle button.ndb-on {
-  background: #5b21b6;
-  color: #ffffff;
-}
+    .leaflet-control-ndb-toggle button.ndb-on {
+      background: #5b21b6;
+      color: #ffffff;
+    }
 
     @media (min-width: 768px) {
       .waypoint-label-text {
@@ -187,6 +215,10 @@
       }
 
       .triangle-label-text {
+        font-size: 13px;
+      }
+
+      .ndb-label-text {
         font-size: 13px;
       }
     }
@@ -331,6 +363,10 @@
 
     function isAlwaysKmlFile(filename) {
       return ALWAYS_KML_FILES.some(x => x.toLowerCase() === String(filename || "").toLowerCase());
+    }
+
+    function isNdbFile(filename) {
+      return String(filename || "").toLowerCase() === "acj_ndb.kml";
     }
 
     function getTargetLayer(filename) {
@@ -771,6 +807,27 @@
       updateLabel();
     }
 
+    function bindNdbHorizontalLabel(layer, feature) {
+      if (!layer || !feature || !feature.name) return;
+
+      const cleanedName = cleanLabelText(feature.name);
+      if (!cleanedName) return;
+
+      const labelHtml = `<span class="ndb-label-text">${escapeHtml(cleanedName)}</span>`;
+
+      layer.bindTooltip(labelHtml, {
+        permanent: true,
+        direction: "right",
+        offset: [10, 0],
+        className: "ndb-label",
+        opacity: 1
+      });
+
+      if (layer.openTooltip) {
+        layer.openTooltip();
+      }
+    }
+
     /* -----------------------------
        GPX
     ----------------------------- */
@@ -1090,7 +1147,7 @@
        KML draw
     ----------------------------- */
 
-    function drawKMLPoint(feature, targetLayer) {
+    function drawKMLPoint(feature, targetLayer, sourceName) {
       const popupHtml = buildPopupHtml(
         feature.name || "Waypoint",
         feature.description || "",
@@ -1156,6 +1213,8 @@
           bindPermanentHorizontalTriangleLabel(marker, feature);
         } else if (isIcon52ShapePoint(feature)) {
           bindPermanentHorizontalTriangleLabel(marker, feature);
+        } else if (isNdbFile(sourceName)) {
+          bindNdbHorizontalLabel(marker, feature);
         } else {
           bindWaypointZoomLabel(marker, feature);
         }
@@ -1180,6 +1239,8 @@
 
       if (isAlwaysVisibleShapePointLabel(feature)) {
         bindPermanentHorizontalTriangleLabel(marker, feature);
+      } else if (isNdbFile(sourceName)) {
+        bindNdbHorizontalLabel(marker, feature);
       } else {
         bindWaypointZoomLabel(marker, feature);
       }
@@ -1303,12 +1364,12 @@
           }
 
           lastAirspaceLabelName = currentName;
-          drawKMLPoint(f, targetLayer);
+          drawKMLPoint(f, targetLayer, sourceName);
           return;
         }
 
         lastAirspaceLabelName = "";
-        drawKMLPoint(f, targetLayer);
+        drawKMLPoint(f, targetLayer, sourceName);
       });
 
       drawRouteEndpointMarkers(routeEndpoints, targetLayer);
