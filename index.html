@@ -247,13 +247,19 @@
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
     const waypointZoomLabelRegistry = [];
+
     let ndbRawData = [];
     let ndbVisible = false;
+    let ndbRedrawTimer = null;
 
     const POPUP_OPTIONS = {
       maxWidth: 260,
       autoPan: false
     };
+
+    const NDB_LABEL_MIN_ZOOM = 5;
+    const NDB_BOUNDS_PAD_RATIO = 0.20;
+    const NDB_REDRAW_DELAY_MS = 80;
 
     /* -----------------------------
        영공 국가 리스트
@@ -798,6 +804,7 @@
 
     function bindNdbHorizontalLabel(layer, feature) {
       if (!layer || !feature || !feature.name) return;
+      if (map.getZoom() < NDB_LABEL_MIN_ZOOM) return;
 
       const cleanedName = cleanLabelText(feature.name);
       if (!cleanedName) return;
@@ -818,6 +825,28 @@
     }
 
     map.on("zoomend", updateWaypointZoomLabels);
+
+    /* -----------------------------
+       NDB 성능 helpers
+    ----------------------------- */
+
+    function isLatLngInExpandedBounds(lat, lon, padRatio = 0.15) {
+      const bounds = map.getBounds();
+      const south = bounds.getSouth();
+      const north = bounds.getNorth();
+      const west = bounds.getWest();
+      const east = bounds.getEast();
+
+      const latPad = (north - south) * padRatio;
+      const lonPad = (east - west) * padRatio;
+
+      return (
+        lat >= (south - latPad) &&
+        lat <= (north + latPad) &&
+        lon >= (west - lonPad) &&
+        lon <= (east + lonPad)
+      );
+    }
 
     /* -----------------------------
        GPX
@@ -1139,6 +1168,7 @@
       const iconStyle = getIconStyle(feature.style);
       const isAirspaceLabel = isAirspaceLabelFeature(feature);
       const skipRouteBounds = !!options.skipRouteBounds;
+      const skipNdbLabel = !!options.skipNdbLabel;
 
       if (isAirspaceLabel) {
         const cleanedName = cleanLabelText(feature.name);
@@ -1199,7 +1229,9 @@
         } else if (isIcon52ShapePoint(feature)) {
           bindPermanentHorizontalTriangleLabel(marker, feature);
         } else if (isNdbFile(sourceName)) {
-          bindNdbHorizontalLabel(marker, feature);
+          if (!skipNdbLabel) {
+            bindNdbHorizontalLabel(marker, feature);
+          }
         } else {
           registerWaypointZoomLabel(marker, feature, {
             minZoom: 5,
@@ -1232,7 +1264,9 @@
       if (isAlwaysVisibleShapePointLabel(feature)) {
         bindPermanentHorizontalTriangleLabel(marker, feature);
       } else if (isNdbFile(sourceName)) {
-        bindNdbHorizontalLabel(marker, feature);
+        if (!skipNdbLabel) {
+          bindNdbHorizontalLabel(marker, feature);
+        }
       } else {
         registerWaypointZoomLabel(marker, feature, {
           minZoom: 5,
@@ -1268,15 +1302,21 @@
 
       if (!ndbVisible || !ndbRawData.length) return;
 
+      const zoom = map.getZoom();
+
       ndbRawData.forEach(feature => {
+        const bestLon = getNearestWorldCopyLon(feature.coords.lon);
+        const latlng = [feature.coords.lat, bestLon];
+
+        if (!isLatLngInExpandedBounds(latlng[0], latlng[1], NDB_BOUNDS_PAD_RATIO)) {
+          return;
+        }
+
         const popupHtml = buildPopupHtml(
           feature.name || "NDB",
           feature.description || "",
           feature.extraRows || []
         );
-
-        const bestLon = getNearestWorldCopyLon(feature.coords.lon);
-        const latlng = [feature.coords.lat, bestLon];
 
         addPointMarkerInstance(
           latlng,
@@ -1284,9 +1324,21 @@
           acjNdbLayer,
           "ACJ_NDB.kml",
           popupHtml,
-          { skipRouteBounds: true }
+          {
+            skipRouteBounds: true,
+            skipNdbLabel: zoom < NDB_LABEL_MIN_ZOOM
+          }
         );
       });
+    }
+
+    function scheduleRedrawNDB() {
+      if (!ndbVisible) return;
+
+      clearTimeout(ndbRedrawTimer);
+      ndbRedrawTimer = setTimeout(() => {
+        redrawNDB();
+      }, NDB_REDRAW_DELAY_MS);
     }
 
     function drawKMLPoint(feature, targetLayer, sourceName, renderContext) {
@@ -1409,7 +1461,7 @@
           buildPopupHtml(
             destFeature.name || "",
             destFeature.description || "",
-            depFeature?.extraRows || []
+            destFeature.extraRows || []
           ),
           POPUP_OPTIONS
         );
@@ -1425,9 +1477,7 @@
 
       if (isNdbFile(sourceName)) {
         ndbRawData = features.filter(f => f.type === "Point");
-        if (ndbVisible) {
-          redrawNDB();
-        }
+        scheduleRedrawNDB();
         return;
       }
 
@@ -1508,8 +1558,9 @@
             if (!map.hasLayer(acjNdbLayer)) {
               map.addLayer(acjNdbLayer);
             }
-            redrawNDB();
+            scheduleRedrawNDB();
           } else {
+            clearTimeout(ndbRedrawTimer);
             acjNdbLayer.clearLayers();
             if (map.hasLayer(acjNdbLayer)) {
               map.removeLayer(acjNdbLayer);
@@ -1576,8 +1627,12 @@
           ...requestedFiles
         ];
 
-        for (const file of [...new Set(filesToLoad)]) {
-          await loadByFilename(file);
+        if (filesToLoad.length > 0) {
+          for (const file of [...new Set(filesToLoad)]) {
+            await loadByFilename(file);
+          }
+        } else {
+          await autoLoadDefault();
         }
 
         updateWaypointZoomLabels();
@@ -1593,14 +1648,14 @@
     window.addEventListener("resize", () => {
       refreshMapSize();
       updateWaypointZoomLabels();
+      scheduleRedrawNDB();
     });
+
     window.addEventListener("load", refreshMapSize);
     window.addEventListener("pageshow", refreshMapSize);
 
     map.on("moveend zoomend", function () {
-      if (ndbVisible) {
-        redrawNDB();
-      }
+      scheduleRedrawNDB();
     });
 
     init();
