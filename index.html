@@ -150,6 +150,37 @@
       font-size: 12px;
     }
 
+    .leaflet-control-ndb-toggle {
+  background: #7c3aed;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+
+ .leaflet-control-ndb-toggle button {
+  display: block;
+  width: 100%;
+  min-width: 92px;
+  height: 32px;
+  border: none;
+  background: #7c3aed;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 12px;
+  text-align: center;
+}
+
+  .leaflet-control-ndb-toggle button:hover {
+  background: #6d28d9;
+}
+
+.leaflet-control-ndb-toggle button.ndb-on {
+  background: #5b21b6;
+  color: #ffffff;
+}
+
     @media (min-width: 768px) {
       .waypoint-label-text {
         font-size: 13px;
@@ -232,6 +263,8 @@
     }).addTo(map);
 
     const drawn = L.featureGroup().addTo(map);
+    const acjNdbLayer = L.featureGroup();   // 기본 OFF
+    const allLoadedBoundsGroup = L.featureGroup();
 
     const POPUP_OPTIONS = {
       maxWidth: 260,
@@ -271,17 +304,18 @@
       "베트남","인도","카자흐스탄","투르크메니스탄","나미비아","남아프리카",
       "앤티가 바부다","카타르"
     ]);
-const ALWAYS_KML_FILES = ["ACJ_NDB.kml"];
-    
-function getRequestedFiles() {
-  const params = new URLSearchParams(location.search);
-  const file = params.get("file") || "";
 
-  return file
-    .split(",")
-    .map(x => x.trim())
-    .filter(Boolean);
-}
+    const ALWAYS_KML_FILES = ["ACJ_NDB.kml"];
+
+    function getRequestedFiles() {
+      const params = new URLSearchParams(location.search);
+      const file = params.get("file") || "";
+
+      return file
+        .split(",")
+        .map(x => x.trim())
+        .filter(Boolean);
+    }
 
     function getVersionParam() {
       const params = new URLSearchParams(location.search);
@@ -293,6 +327,14 @@ function getRequestedFiles() {
       if (f.endsWith(".gpx")) return "gpx";
       if (f.endsWith(".kml")) return "kml";
       return "";
+    }
+
+    function isAlwaysKmlFile(filename) {
+      return ALWAYS_KML_FILES.some(x => x.toLowerCase() === String(filename || "").toLowerCase());
+    }
+
+    function getTargetLayer(filename) {
+      return isAlwaysKmlFile(filename) ? acjNdbLayer : drawn;
     }
 
     function normalizePacificLon(lon) {
@@ -314,9 +356,9 @@ function getRequestedFiles() {
       return new DOMParser().parseFromString(text, "text/xml");
     }
 
-    function fitDrawnBounds() {
+    function fitAllLoadedBounds() {
       try {
-        const bounds = drawn.getBounds();
+        const bounds = allLoadedBoundsGroup.getBounds();
         if (bounds && bounds.isValid && bounds.isValid()) {
           map.fitBounds(bounds, { padding: [20, 20] });
           refreshMapSize();
@@ -754,7 +796,7 @@ function getRequestedFiles() {
       }).filter(p => !isBadCoord(p.lat, p.lon));
     }
 
-    function drawWaypointMarker(lat, lon, popupHtml, index, total) {
+    function drawWaypointMarker(lat, lon, popupHtml, index, total, targetLayer) {
       const latlng = [lat, normalizePacificLon(lon)];
 
       let iconColor = "#ffff00";
@@ -767,22 +809,13 @@ function getRequestedFiles() {
         weight: 1,
         fillColor: iconColor,
         fillOpacity: 1
-      }).addTo(map);
+      }).addTo(targetLayer);
 
       marker.bindPopup(popupHtml, POPUP_OPTIONS);
-
-      if (popupHtml) {
-        bindWaypointZoomLabel(marker, {
-          type: "Point",
-          name: "",
-          description: ""
-        });
-      }
-
-      drawn.addLayer(marker);
+      allLoadedBoundsGroup.addLayer(marker);
     }
 
-    function drawGPXRoute(points, sourceName) {
+    function drawGPXRoute(points, sourceName, targetLayer) {
       if (!points || points.length < 2) {
         throw new Error("No valid route points in GPX");
       }
@@ -794,8 +827,9 @@ function getRequestedFiles() {
         const line = L.polyline(seg, {
           color: "#FFD400",
           weight: 5
-        }).addTo(map);
-        drawn.addLayer(line);
+        }).addTo(targetLayer);
+
+        allLoadedBoundsGroup.addLayer(line);
       });
 
       points.forEach((p, i) => {
@@ -820,7 +854,7 @@ function getRequestedFiles() {
           weight: 1,
           fillColor: iconColor,
           fillOpacity: 1
-        }).addTo(map);
+        }).addTo(targetLayer);
 
         marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
@@ -830,10 +864,9 @@ function getRequestedFiles() {
           description: p.description || ""
         });
 
-        drawn.addLayer(marker);
+        allLoadedBoundsGroup.addLayer(marker);
       });
 
-      fitDrawnBounds();
       console.log("Flight Route Loaded:", sourceName, "GPX", points.length);
     }
 
@@ -1057,7 +1090,7 @@ function getRequestedFiles() {
        KML draw
     ----------------------------- */
 
-    function drawKMLPoint(feature) {
+    function drawKMLPoint(feature, targetLayer) {
       const popupHtml = buildPopupHtml(
         feature.name || "Waypoint",
         feature.description || "",
@@ -1084,7 +1117,7 @@ function getRequestedFiles() {
         const labelOnlyMarker = L.marker(latlng, {
           opacity: 0,
           keyboard: false
-        }).addTo(map);
+        }).addTo(targetLayer);
 
         labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
 
@@ -1096,7 +1129,7 @@ function getRequestedFiles() {
           opacity: 1
         });
 
-        drawn.addLayer(labelOnlyMarker);
+        allLoadedBoundsGroup.addLayer(labelOnlyMarker);
         return;
       }
 
@@ -1115,7 +1148,7 @@ function getRequestedFiles() {
         const marker = L.marker(latlng, {
           icon: customIcon,
           zIndexOffset: 2000
-        }).addTo(map);
+        }).addTo(targetLayer);
 
         marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
@@ -1127,7 +1160,7 @@ function getRequestedFiles() {
           bindWaypointZoomLabel(marker, feature);
         }
 
-        drawn.addLayer(marker);
+        allLoadedBoundsGroup.addLayer(marker);
         return;
       }
 
@@ -1141,7 +1174,7 @@ function getRequestedFiles() {
         weight: 1,
         fillColor: markerColor,
         fillOpacity: markerOpacity
-      }).addTo(map);
+      }).addTo(targetLayer);
 
       marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
@@ -1151,10 +1184,10 @@ function getRequestedFiles() {
         bindWaypointZoomLabel(marker, feature);
       }
 
-      drawn.addLayer(marker);
+      allLoadedBoundsGroup.addLayer(marker);
     }
 
-    function drawKMLLine(feature) {
+    function drawKMLLine(feature, targetLayer) {
       const lineStyle = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
       const weight = feature.style.lineWidth || 4;
 
@@ -1166,7 +1199,7 @@ function getRequestedFiles() {
           color: lineStyle.color,
           weight: weight,
           opacity: lineStyle.opacity
-        }).addTo(map);
+        }).addTo(targetLayer);
 
         if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
           const popupHtml = buildPopupHtml(
@@ -1177,11 +1210,11 @@ function getRequestedFiles() {
           line.bindPopup(popupHtml, POPUP_OPTIONS);
         }
 
-        drawn.addLayer(line);
+        allLoadedBoundsGroup.addLayer(line);
       });
     }
 
-    function drawKMLPolygon(feature) {
+    function drawKMLPolygon(feature, targetLayer) {
       const lineStyle = kmlColorToCss(feature.style.lineColor, "#00aa55", 0.9);
       const fillStyle = kmlColorToCss(feature.style.polyColor, "#00CC66", 0.3);
 
@@ -1195,7 +1228,7 @@ function getRequestedFiles() {
         weight: feature.style.outline === false ? 0 : (feature.style.lineWidth || 2),
         fillColor: fillStyle.color,
         fillOpacity: feature.style.fill === false ? 0 : fillStyle.opacity
-      }).addTo(map);
+      }).addTo(targetLayer);
 
       if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
         const popupHtml = buildPopupHtml(
@@ -1206,13 +1239,12 @@ function getRequestedFiles() {
         polygon.bindPopup(popupHtml, POPUP_OPTIONS);
       }
 
-      drawn.addLayer(polygon);
+      allLoadedBoundsGroup.addLayer(polygon);
     }
 
-    function drawRouteEndpointMarkers(routeEndpoints) {
+    function drawRouteEndpointMarkers(routeEndpoints, targetLayer) {
       if (!routeEndpoints) return;
 
-      const depFeature = routeEndpoints.departureFeature;
       const destFeature = routeEndpoints.destinationFeature;
 
       if (destFeature?.coords) {
@@ -1228,7 +1260,7 @@ function getRequestedFiles() {
         const destMarker = L.marker(destLatLng, {
           icon: destinationIcon,
           zIndexOffset: 1000
-        }).addTo(map);
+        }).addTo(targetLayer);
 
         destMarker.bindPopup(
           buildPopupHtml(
@@ -1239,11 +1271,11 @@ function getRequestedFiles() {
           POPUP_OPTIONS
         );
 
-        drawn.addLayer(destMarker);
+        allLoadedBoundsGroup.addLayer(destMarker);
       }
     }
 
-    function drawKMLFeatures(features, sourceName) {
+    function drawKMLFeatures(features, sourceName, targetLayer) {
       if (!features.length) {
         throw new Error("No valid features in KML");
       }
@@ -1253,8 +1285,8 @@ function getRequestedFiles() {
       const polygonFeatures = features.filter(f => f.type === "Polygon");
       const routeEndpoints = getRouteEndpoints(pointFeatures);
 
-      lineFeatures.forEach(drawKMLLine);
-      polygonFeatures.forEach(drawKMLPolygon);
+      lineFeatures.forEach(f => drawKMLLine(f, targetLayer));
+      polygonFeatures.forEach(f => drawKMLPolygon(f, targetLayer));
 
       let lastAirspaceLabelName = "";
 
@@ -1271,17 +1303,15 @@ function getRequestedFiles() {
           }
 
           lastAirspaceLabelName = currentName;
-          drawKMLPoint(f);
+          drawKMLPoint(f, targetLayer);
           return;
         }
 
         lastAirspaceLabelName = "";
-        drawKMLPoint(f);
+        drawKMLPoint(f, targetLayer);
       });
 
-      drawRouteEndpointMarkers(routeEndpoints);
-
-      fitDrawnBounds();
+      drawRouteEndpointMarkers(routeEndpoints, targetLayer);
 
       console.log("Flight Route Loaded:", sourceName, "KML", {
         points: pointFeatures.length,
@@ -1295,6 +1325,51 @@ function getRequestedFiles() {
     }
 
     /* -----------------------------
+       NDB Toggle Button
+    ----------------------------- */
+
+    function createNdbToggleControl() {
+      const control = L.control({ position: "topright" });
+
+      control.onAdd = function () {
+        const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-ndb-toggle");
+        const button = L.DomUtil.create("button", "", container);
+
+        function updateButton() {
+          const isOn = map.hasLayer(acjNdbLayer);
+          button.textContent = isOn ? "NDB ON" : "NDB OFF";
+          button.className = isOn ? "ndb-on" : "";
+        }
+
+        button.type = "button";
+        updateButton();
+
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+
+        L.DomEvent.on(button, "click", function (e) {
+          L.DomEvent.stop(e);
+
+          if (map.hasLayer(acjNdbLayer)) {
+            map.removeLayer(acjNdbLayer);
+          } else {
+            map.addLayer(acjNdbLayer);
+          }
+
+          updateButton();
+        });
+
+        map.on("layeradd layerremove", updateButton);
+
+        return container;
+      };
+
+      return control;
+    }
+
+    createNdbToggleControl().addTo(map);
+
+    /* -----------------------------
        load
     ----------------------------- */
 
@@ -1304,17 +1379,18 @@ function getRequestedFiles() {
         throw new Error("Only .gpx or .kml supported");
       }
 
+      const targetLayer = getTargetLayer(filename);
       const text = await fetchTextFile(filename);
 
       if (ext === "gpx") {
         const points = parseGPX(text);
-        drawGPXRoute(points, filename);
+        drawGPXRoute(points, filename, targetLayer);
         return;
       }
 
       if (ext === "kml") {
         const features = extractKMLFeatures(text);
-        drawKMLFeatures(features, filename);
+        drawKMLFeatures(features, filename, targetLayer);
         return;
       }
     }
@@ -1333,29 +1409,31 @@ function getRequestedFiles() {
       }
     }
 
-  async function init() {
-  try {
-    const requestedFiles = getRequestedFiles();
+    async function init() {
+      try {
+        const requestedFiles = getRequestedFiles();
 
-    const filesToLoad = [
-      ...ALWAYS_KML_FILES,
-      ...requestedFiles
-    ];
+        const filesToLoad = [
+          ...ALWAYS_KML_FILES,
+          ...requestedFiles
+        ];
 
-    if (filesToLoad.length > 0) {
-      for (const file of [...new Set(filesToLoad)]) {
-        await loadByFilename(file);
+        if (filesToLoad.length > 0) {
+          for (const file of [...new Set(filesToLoad)]) {
+            await loadByFilename(file);
+          }
+        } else {
+          await autoLoadDefault();
+        }
+
+        fitAllLoadedBounds();
+        refreshMapSize();
+      } catch (err) {
+        console.error(err);
+        alert("Error: " + (err.message || err));
       }
-    } else {
-      await autoLoadDefault();
     }
 
-    refreshMapSize();
-  } catch (err) {
-    console.error(err);
-    alert("Error: " + (err.message || err));
-  }
-}
     window.addEventListener("resize", refreshMapSize);
     window.addEventListener("load", refreshMapSize);
     window.addEventListener("pageshow", refreshMapSize);
