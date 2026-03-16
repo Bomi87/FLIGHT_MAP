@@ -473,10 +473,10 @@ function formatAircraftDetailPanelHtml(ac, color) {
   let iasText = "-";
 
   if (ac.gs != null && !isNaN(ac.gs)) {
-    gsText = `${Math.round(Number(ac.gs))}KT`;
+    gsText = `${Math.round(Number(ac.gs))} KT`;
   }
   if (ac.ias != null && !isNaN(ac.ias)) {
-    iasText = `${Math.round(Number(ac.ias))}KT`;
+    iasText = `${Math.round(Number(ac.ias))} KT`;
   }
 
   const vsDisplay = vertical ? `${vertical.arrow} ${vrText}` : "-";
@@ -489,9 +489,9 @@ function formatAircraftDetailPanelHtml(ac, color) {
     ${reg ? `<div style="margin-bottom:4px;">${escapeHtml(reg)}</div>` : ""}
     ${type ? `<div style="margin-bottom:6px;">${escapeHtml(type)}</div>` : ""}
     ${buildDetailRow("ALT", altitudeText)}
-    ${buildDetailRow("SPD", gsText)}
-    ${buildDetailRow("IAS", iasText)}
     ${buildDetailRow("MACH", machText)}
+    ${buildDetailRow("IAS", iasText)}
+    ${buildDetailRow("SPD", gsText)}
     ${buildDetailRow("V/S", vsDisplay, vsColor)}
     ${hex ? buildDetailRow("HEX", hex) : ""}
   `;
