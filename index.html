@@ -1183,9 +1183,29 @@
        KML draw
     ----------------------------- */
 
-    function createRepeatedLongitudes(lon) {
-      return [lon - 360, lon, lon + 360];
+ function createRepeatedLongitudes(lon) {
+
+  const centerLon = map.getCenter().lng;
+
+  const options = [
+    lon - 360,
+    lon,
+    lon + 360
+  ];
+
+  let best = options[0];
+  let minDiff = Math.abs(centerLon - best);
+
+  for (let i = 1; i < options.length; i++) {
+    const diff = Math.abs(centerLon - options[i]);
+    if (diff < minDiff) {
+      minDiff = diff;
+      best = options[i];
     }
+  }
+
+  return [best];
+}
 
     function addPointMarkerInstance(latlng, feature, targetLayer, sourceName, popupHtml, options = {}) {
       const labelStyle = getLabelStyle(feature.style);
