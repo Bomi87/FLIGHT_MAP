@@ -491,7 +491,7 @@ function formatAircraftDetailPanelHtml(ac, color) {
     ${buildDetailRow("ALT", altitudeText)}
     ${buildDetailRow("MACH", machText)}
     ${buildDetailRow("IAS", iasText)}
-    ${buildDetailRow("SPD", gsText)}
+    ${buildDetailRow("G/S", gsText)}
     ${buildDetailRow("V/S", vsDisplay, vsColor)}
     ${hex ? buildDetailRow("HEX", hex) : ""}
   `;
