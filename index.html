@@ -230,8 +230,10 @@
   <script>
     const map = L.map("map", {
       worldCopyJump: false,
-      preferCanvas: true
-    }).setView([48, 0], 3);
+      preferCanvas: true,
+      maxBounds: [[-85, -180], [85, 180]],
+      maxBoundsViscosity: 1.0
+    }).setView([30, 0], 3);
 
     function refreshMapSize() {
       setTimeout(() => {
@@ -251,7 +253,8 @@
       "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
       {
         maxZoom: 18,
-        attribution: "&copy; OpenStreetMap &copy; CARTO"
+        attribution: "&copy; OpenStreetMap &copy; CARTO",
+        noWrap: true
       }
     );
 
@@ -259,7 +262,8 @@
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       {
         maxZoom: 18,
-        attribution: "Tiles &copy; Esri"
+        attribution: "Tiles &copy; Esri",
+        noWrap: true
       }
     );
 
@@ -268,14 +272,16 @@
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
           maxZoom: 18,
-          attribution: "Tiles &copy; Esri"
+          attribution: "Tiles &copy; Esri",
+          noWrap: true
         }
       ),
       L.tileLayer(
         "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
         {
           maxZoom: 18,
-          attribution: "Labels &copy; Esri"
+          attribution: "Labels &copy; Esri",
+          noWrap: true
         }
       )
     ]);
@@ -296,7 +302,6 @@
     const drawn = L.featureGroup().addTo(map);
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
-
     const waypointZoomLabelRegistry = [];
 
     const POPUP_OPTIONS = {
@@ -408,14 +413,8 @@
       const version = getVersionParam();
       const url = filename + (filename.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(version);
 
-      const res = await fetch(url, {
-        cache: "no-store"
-      });
-
-      if (!res.ok) {
-        throw new Error(filename + " not found");
-      }
-
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(filename + " not found");
       return await res.text();
     }
 
@@ -434,11 +433,9 @@
 
     function cleanLabelText(str) {
       let s = String(str || "");
-
       s = s.replace(/&amp;#x2F;\d+/gi, "");
       s = s.replace(/&#x2F;\d+/gi, "");
       s = s.replace(/&[#A-Za-z0-9]+;/g, "");
-
       return s.trim();
     }
 
@@ -535,6 +532,77 @@
     }
 
     /* -----------------------------
+       렌더 모드
+    ----------------------------- */
+
+    function normalizePacificLon(lon) {
+      let x = Number(lon);
+      while (x < 0) x += 360;
+      while (x >= 360) x -= 360;
+      return x;
+    }
+
+    function detectPacificModeFromLonList(lons) {
+      if (!lons || !lons.length) return false;
+
+      let hasFarEast = false;
+      let hasFarWest = false;
+
+      for (const lon of lons) {
+        if (!isFinite(lon)) continue;
+        if (lon >= 120) hasFarEast = true;
+        if (lon <= -120) hasFarWest = true;
+      }
+
+      return hasFarEast && hasFarWest;
+    }
+
+    function collectFeatureLons(features) {
+      const lons = [];
+
+      for (const f of features || []) {
+        if (f.type === "Point" && f.coords) {
+          lons.push(Number(f.coords.lon));
+        } else if (f.type === "LineString" && Array.isArray(f.coords)) {
+          f.coords.forEach(c => lons.push(Number(c.lon)));
+        } else if (f.type === "Polygon" && Array.isArray(f.rings)) {
+          f.rings.forEach(ring => {
+            ring.forEach(c => lons.push(Number(c.lon)));
+          });
+        }
+      }
+
+      return lons.filter(x => isFinite(x));
+    }
+
+    function getRenderContext(features) {
+      const lons = collectFeatureLons(features);
+      const pacificMode = detectPacificModeFromLonList(lons);
+
+      return {
+        pacificMode
+      };
+    }
+
+    function toRenderLon(lon, renderContext) {
+      return renderContext?.pacificMode ? normalizePacificLon(lon) : lon;
+    }
+
+    function toRenderLatLng(lat, lon, renderContext) {
+      return [lat, toRenderLon(lon, renderContext)];
+    }
+
+    function toRenderLatLngsFromCoords(coords, renderContext) {
+      return coords.map(c => [c.lat, toRenderLon(c.lon, renderContext)]);
+    }
+
+    function toRenderRings(rings, renderContext) {
+      return rings.map(ring =>
+        ring.map(c => [c.lat, toRenderLon(c.lon, renderContext)])
+      );
+    }
+
+    /* -----------------------------
        영공 라벨 판별
     ----------------------------- */
 
@@ -591,60 +659,6 @@
 
       return fallbackColor || "#00ff00";
     }
-
-    /* -----------------------------
-       antimeridian split (-180 / 180)
-    ----------------------------- */
-
-function splitPacificSegments(latlngs) {
-  if (!latlngs || latlngs.length < 2) return [latlngs];
-
-  const segments = [];
-  let current = [latlngs[0]];
-
-  for (let i = 1; i < latlngs.length; i++) {
-    const p1 = latlngs[i - 1];
-    const p2 = latlngs[i];
-
-    const lat1 = p1[0];
-    const lon1 = p1[1];
-    const lat2 = p2[0];
-    const lon2 = p2[1];
-
-    const dLon = lon2 - lon1;
-
-    const isPacificCross =
-      Math.abs(lon1) > 150 &&
-      Math.abs(lon2) > 150 &&
-      Math.abs(dLon) > 180;
-
-    if (!isPacificCross) {
-      current.push([lat2, lon2]);
-      continue;
-    }
-
-    let lon2Adjusted = lon2;
-
-    if (dLon > 180) lon2Adjusted = lon2 - 360;
-    if (dLon < -180) lon2Adjusted = lon2 + 360;
-
-    const crossingLon = lon2Adjusted > lon1 ? 180 : -180;
-
-    const t = (crossingLon - lon1) / (lon2Adjusted - lon1);
-    const crossingLat = lat1 + (lat2 - lat1) * t;
-
-    current.push([crossingLat, crossingLon]);
-    segments.push(current);
-
-    const wrappedLon = crossingLon === 180 ? -180 : 180;
-
-    current = [[crossingLat, wrappedLon], [lat2, lon2]];
-  }
-
-  if (current.length) segments.push(current);
-
-  return segments;
-}
 
     /* -----------------------------
        endpoint helpers
@@ -724,14 +738,15 @@ function splitPacificSegments(latlngs) {
 
       if (!name) return false;
 
-      return (
+      const triangleIcon =
         iconHref.includes("icon52.png") ||
         iconHref.includes("triangle") ||
         iconHref.includes("trk") ||
         iconHref.includes("track") ||
         iconHref.includes("placemark_triangle") ||
-        iconHref.includes("shape_triangle")
-      );
+        iconHref.includes("shape_triangle");
+
+      return triangleIcon;
     }
 
     function isAlwaysVisibleShapePointLabel(feature) {
@@ -861,17 +876,17 @@ function splitPacificSegments(latlngs) {
         throw new Error("No valid route points in GPX");
       }
 
-      const latlngs = points.map(p => [p.lat, p.lon]);
-      const segments = splitPacificSegments(latlngs);
+      const pacificMode = detectPacificModeFromLonList(points.map(p => p.lon));
+      const renderContext = { pacificMode };
 
-      segments.forEach(seg => {
-        const line = L.polyline(seg, {
-          color: "#FFD400",
-          weight: 5
-        }).addTo(targetLayer);
+      const latlngs = points.map(p => [p.lat, toRenderLon(p.lon, renderContext)]);
 
-        addToRouteBounds(line, sourceName);
-      });
+      const line = L.polyline(latlngs, {
+        color: "#FFD400",
+        weight: 5
+      }).addTo(targetLayer);
+
+      addToRouteBounds(line, sourceName);
 
       points.forEach((p, i) => {
         const extraRows = [];
@@ -883,7 +898,7 @@ function splitPacificSegments(latlngs) {
           extraRows
         );
 
-        const latlng = [p.lat, p.lon];
+        const latlng = [p.lat, toRenderLon(p.lon, renderContext)];
 
         let iconColor = "#ffff00";
         if (i === 0) iconColor = "#00aa00";
@@ -908,7 +923,10 @@ function splitPacificSegments(latlngs) {
         addToRouteBounds(marker, sourceName);
       });
 
-      console.log("Flight Route Loaded:", sourceName, "GPX", points.length);
+      console.log("Flight Route Loaded:", sourceName, "GPX", {
+        points: points.length,
+        pacificMode
+      });
     }
 
     /* -----------------------------
@@ -1135,14 +1153,14 @@ function splitPacificSegments(latlngs) {
        KML draw
     ----------------------------- */
 
-    function drawKMLPoint(feature, targetLayer, sourceName) {
+    function drawKMLPoint(feature, targetLayer, sourceName, renderContext) {
       const popupHtml = buildPopupHtml(
         feature.name || "Waypoint",
         feature.description || "",
         feature.extraRows || []
       );
 
-      const latlng = [feature.coords.lat, feature.coords.lon];
+      const latlng = toRenderLatLng(feature.coords.lat, feature.coords.lon, renderContext);
       const labelStyle = getLabelStyle(feature.style);
       const iconStyle = getIconStyle(feature.style);
       const isAirspaceLabel = isAirspaceLabelFeature(feature);
@@ -1246,40 +1264,35 @@ function splitPacificSegments(latlngs) {
       addToRouteBounds(marker, sourceName);
     }
 
-    function drawKMLLine(feature, targetLayer, sourceName) {
+    function drawKMLLine(feature, targetLayer, sourceName, renderContext) {
       const lineStyle = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
       const weight = feature.style.lineWidth || 4;
 
-      const latlngs = feature.coords.map(c => [c.lat, c.lon]);
-      const segments = splitPacificSegments(latlngs);
+      const latlngs = toRenderLatLngsFromCoords(feature.coords, renderContext);
 
-      segments.forEach(seg => {
-        const line = L.polyline(seg, {
-          color: lineStyle.color,
-          weight: weight,
-          opacity: lineStyle.opacity
-        }).addTo(targetLayer);
+      const line = L.polyline(latlngs, {
+        color: lineStyle.color,
+        weight: weight,
+        opacity: lineStyle.opacity
+      }).addTo(targetLayer);
 
-        if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
-          const popupHtml = buildPopupHtml(
-            feature.name || "LineString",
-            feature.description || "",
-            feature.extraRows || []
-          );
-          line.bindPopup(popupHtml, POPUP_OPTIONS);
-        }
+      if (feature.name || feature.description || (feature.extraRows && feature.extraRows.length)) {
+        const popupHtml = buildPopupHtml(
+          feature.name || "LineString",
+          feature.description || "",
+          feature.extraRows || []
+        );
+        line.bindPopup(popupHtml, POPUP_OPTIONS);
+      }
 
-        addToRouteBounds(line, sourceName);
-      });
+      addToRouteBounds(line, sourceName);
     }
 
-    function drawKMLPolygon(feature, targetLayer, sourceName) {
+    function drawKMLPolygon(feature, targetLayer, sourceName, renderContext) {
       const lineStyle = kmlColorToCss(feature.style.lineColor, "#00aa55", 0.9);
       const fillStyle = kmlColorToCss(feature.style.polyColor, "#00CC66", 0.3);
 
-      const rings = feature.rings.map(ring =>
-        ring.map(c => [c.lat, c.lon])
-      );
+      const rings = toRenderRings(feature.rings, renderContext);
 
       const polygon = L.polygon(rings, {
         color: lineStyle.color,
@@ -1301,14 +1314,14 @@ function splitPacificSegments(latlngs) {
       addToRouteBounds(polygon, sourceName);
     }
 
-    function drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName) {
+    function drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName, renderContext) {
       if (!routeEndpoints) return;
 
       const depFeature = routeEndpoints.departureFeature;
       const destFeature = routeEndpoints.destinationFeature;
 
       if (depFeature?.coords) {
-        const depLatLng = [depFeature.coords.lat, depFeature.coords.lon];
+        const depLatLng = toRenderLatLng(depFeature.coords.lat, depFeature.coords.lon, renderContext);
 
         const departureIcon = L.icon({
           iconUrl: "https://maps.google.com/mapfiles/kml/paddle/grn-circle.png",
@@ -1335,7 +1348,7 @@ function splitPacificSegments(latlngs) {
       }
 
       if (destFeature?.coords) {
-        const destLatLng = [destFeature.coords.lat, destFeature.coords.lon];
+        const destLatLng = toRenderLatLng(destFeature.coords.lat, destFeature.coords.lon, renderContext);
 
         const destinationIcon = L.icon({
           iconUrl: "https://maps.google.com/mapfiles/kml/paddle/blu-circle.png",
@@ -1367,13 +1380,14 @@ function splitPacificSegments(latlngs) {
         throw new Error("No valid features in KML");
       }
 
+      const renderContext = getRenderContext(features);
       const pointFeatures = features.filter(f => f.type === "Point");
       const lineFeatures = features.filter(f => f.type === "LineString");
       const polygonFeatures = features.filter(f => f.type === "Polygon");
       const routeEndpoints = getRouteEndpoints(pointFeatures);
 
-      lineFeatures.forEach(f => drawKMLLine(f, targetLayer, sourceName));
-      polygonFeatures.forEach(f => drawKMLPolygon(f, targetLayer, sourceName));
+      lineFeatures.forEach(f => drawKMLLine(f, targetLayer, sourceName, renderContext));
+      polygonFeatures.forEach(f => drawKMLPolygon(f, targetLayer, sourceName, renderContext));
 
       let lastAirspaceLabelName = "";
 
@@ -1390,15 +1404,15 @@ function splitPacificSegments(latlngs) {
           }
 
           lastAirspaceLabelName = currentName;
-          drawKMLPoint(f, targetLayer, sourceName);
+          drawKMLPoint(f, targetLayer, sourceName, renderContext);
           return;
         }
 
         lastAirspaceLabelName = "";
-        drawKMLPoint(f, targetLayer, sourceName);
+        drawKMLPoint(f, targetLayer, sourceName, renderContext);
       });
 
-      drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName);
+      drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName, renderContext);
 
       console.log("Flight Route Loaded:", sourceName, "KML", {
         points: pointFeatures.length,
@@ -1407,7 +1421,8 @@ function splitPacificSegments(latlngs) {
         departureName: routeEndpoints.departureFeature?.name || "",
         destinationName: routeEndpoints.destinationFeature?.name || "",
         departureCoord: routeEndpoints.departureCoord,
-        destinationCoord: routeEndpoints.destinationCoord
+        destinationCoord: routeEndpoints.destinationCoord,
+        pacificMode: renderContext.pacificMode
       });
     }
 
