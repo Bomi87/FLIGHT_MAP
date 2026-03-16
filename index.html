@@ -229,10 +229,9 @@
 
   <script>
     const map = L.map("map", {
-      worldCopyJump: false,
+      worldCopyJump: true,
       preferCanvas: true,
-      maxBounds: [[-85, -180], [85, 180]],
-      maxBoundsViscosity: 1.0
+      zoomControl: true
     }).setView([30, 0], 3);
 
     function refreshMapSize() {
@@ -253,8 +252,7 @@
       "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
       {
         maxZoom: 18,
-        attribution: "&copy; OpenStreetMap &copy; CARTO",
-        noWrap: true
+        attribution: "&copy; OpenStreetMap &copy; CARTO"
       }
     );
 
@@ -262,8 +260,7 @@
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       {
         maxZoom: 18,
-        attribution: "Tiles &copy; Esri",
-        noWrap: true
+        attribution: "Tiles &copy; Esri"
       }
     );
 
@@ -272,16 +269,14 @@
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
           maxZoom: 18,
-          attribution: "Tiles &copy; Esri",
-          noWrap: true
+          attribution: "Tiles &copy; Esri"
         }
       ),
       L.tileLayer(
         "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
         {
           maxZoom: 18,
-          attribution: "Labels &copy; Esri",
-          noWrap: true
+          attribution: "Labels &copy; Esri"
         }
       )
     ]);
@@ -532,74 +527,101 @@
     }
 
     /* -----------------------------
-       렌더 모드
+       Anti-Meridian helpers
     ----------------------------- */
 
-    function normalizePacificLon(lon) {
+    function wrapLon180(lon) {
       let x = Number(lon);
-      while (x < 0) x += 360;
-      while (x >= 360) x -= 360;
+      if (!isFinite(x)) return lon;
+
+      while (x <= -180) x += 360;
+      while (x > 180) x -= 360;
+
       return x;
     }
 
-    function detectPacificModeFromLonList(lons) {
-      if (!lons || !lons.length) return false;
+    function shiftLonNearReference(lon, referenceLon) {
+      let x = wrapLon180(lon);
 
-      let hasFarEast = false;
-      let hasFarWest = false;
+      if (!isFinite(referenceLon)) return x;
 
-      for (const lon of lons) {
-        if (!isFinite(lon)) continue;
-        if (lon >= 120) hasFarEast = true;
-        if (lon <= -120) hasFarWest = true;
-      }
+      while (x - referenceLon > 180) x -= 360;
+      while (x - referenceLon < -180) x += 360;
 
-      return hasFarEast && hasFarWest;
+      return x;
     }
 
-    function collectFeatureLons(features) {
-      const lons = [];
+    function unwrapLonNext(prevLon, currentLon) {
+      let x = wrapLon180(currentLon);
 
-      for (const f of features || []) {
-        if (f.type === "Point" && f.coords) {
-          lons.push(Number(f.coords.lon));
-        } else if (f.type === "LineString" && Array.isArray(f.coords)) {
-          f.coords.forEach(c => lons.push(Number(c.lon)));
-        } else if (f.type === "Polygon" && Array.isArray(f.rings)) {
-          f.rings.forEach(ring => {
-            ring.forEach(c => lons.push(Number(c.lon)));
-          });
-        }
+      while (x - prevLon > 180) x -= 360;
+      while (x - prevLon < -180) x += 360;
+
+      return x;
+    }
+
+    function unwrapCoordSequence(coords, referenceLon) {
+      if (!Array.isArray(coords) || !coords.length) return [];
+
+      const firstLon = shiftLonNearReference(coords[0].lon, referenceLon);
+      const result = [[coords[0].lat, firstLon]];
+      let prevLon = firstLon;
+
+      for (let i = 1; i < coords.length; i++) {
+        const nextLon = unwrapLonNext(prevLon, coords[i].lon);
+        result.push([coords[i].lat, nextLon]);
+        prevLon = nextLon;
       }
 
-      return lons.filter(x => isFinite(x));
+      return result;
+    }
+
+    function unwrapRingSequence(ring, referenceLon) {
+      return unwrapCoordSequence(ring, referenceLon);
+    }
+
+    function average(nums) {
+      if (!nums.length) return 0;
+      return nums.reduce((a, b) => a + b, 0) / nums.length;
+    }
+
+    function getReferenceLonFromFeatures(features) {
+      const lineFeatures = features.filter(f => f.type === "LineString" && Array.isArray(f.coords) && f.coords.length);
+      if (lineFeatures.length) {
+        const seq = unwrapCoordSequence(lineFeatures[0].coords, wrapLon180(lineFeatures[0].coords[0].lon));
+        return average(seq.map(x => x[1]));
+      }
+
+      const polygonFeatures = features.filter(f => f.type === "Polygon" && Array.isArray(f.rings) && f.rings.length && f.rings[0].length);
+      if (polygonFeatures.length) {
+        const ring = unwrapRingSequence(polygonFeatures[0].rings[0], wrapLon180(polygonFeatures[0].rings[0][0].lon));
+        return average(ring.map(x => x[1]));
+      }
+
+      const pointFeatures = features.filter(f => f.type === "Point" && f.coords);
+      if (pointFeatures.length) {
+        return wrapLon180(pointFeatures[0].coords.lon);
+      }
+
+      return 0;
     }
 
     function getRenderContext(features) {
-      const lons = collectFeatureLons(features);
-      const pacificMode = detectPacificModeFromLonList(lons);
-
       return {
-        pacificMode
+        referenceLon: getReferenceLonFromFeatures(features)
       };
     }
 
-    function toRenderLon(lon, renderContext) {
-      return renderContext?.pacificMode ? normalizePacificLon(lon) : lon;
-    }
-
     function toRenderLatLng(lat, lon, renderContext) {
-      return [lat, toRenderLon(lon, renderContext)];
+      return [lat, shiftLonNearReference(lon, renderContext?.referenceLon)];
     }
 
     function toRenderLatLngsFromCoords(coords, renderContext) {
-      return coords.map(c => [c.lat, toRenderLon(c.lon, renderContext)]);
+      return unwrapCoordSequence(coords, renderContext?.referenceLon);
     }
 
     function toRenderRings(rings, renderContext) {
-      return rings.map(ring =>
-        ring.map(c => [c.lat, toRenderLon(c.lon, renderContext)])
-      );
+      return rings.map(ring => unwrapRingSequence(ring, renderContext?.referenceLon));
     }
 
     /* -----------------------------
@@ -876,10 +898,18 @@
         throw new Error("No valid route points in GPX");
       }
 
-      const pacificMode = detectPacificModeFromLonList(points.map(p => p.lon));
-      const renderContext = { pacificMode };
+      const referenceLon = wrapLon180(points[0].lon);
+      const renderContext = { referenceLon };
 
-      const latlngs = points.map(p => [p.lat, toRenderLon(p.lon, renderContext)]);
+      const latlngs = [];
+      let prevLon = shiftLonNearReference(points[0].lon, referenceLon);
+      latlngs.push([points[0].lat, prevLon]);
+
+      for (let i = 1; i < points.length; i++) {
+        const lon = unwrapLonNext(prevLon, points[i].lon);
+        latlngs.push([points[i].lat, lon]);
+        prevLon = lon;
+      }
 
       const line = L.polyline(latlngs, {
         color: "#FFD400",
@@ -898,7 +928,7 @@
           extraRows
         );
 
-        const latlng = [p.lat, toRenderLon(p.lon, renderContext)];
+        const latlng = toRenderLatLng(p.lat, p.lon, renderContext);
 
         let iconColor = "#ffff00";
         if (i === 0) iconColor = "#00aa00";
@@ -925,7 +955,7 @@
 
       console.log("Flight Route Loaded:", sourceName, "GPX", {
         points: points.length,
-        pacificMode
+        referenceLon
       });
     }
 
@@ -1422,7 +1452,7 @@
         destinationName: routeEndpoints.destinationFeature?.name || "",
         departureCoord: routeEndpoints.departureCoord,
         destinationCoord: routeEndpoints.destinationCoord,
-        pacificMode: renderContext.pacificMode
+        referenceLon: renderContext.referenceLon
       });
     }
 
