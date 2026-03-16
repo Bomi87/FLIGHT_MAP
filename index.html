@@ -271,12 +271,17 @@
       "베트남","인도","카자흐스탄","투르크메니스탄","나미비아","남아프리카",
       "앤티가 바부다","카타르"
     ]);
+const ALWAYS_KML_FILES = ["ACJ_NDB.kml"];
+    
+function getRequestedFiles() {
+  const params = new URLSearchParams(location.search);
+  const file = params.get("file") || "";
 
-    function getRequestedFile() {
-      const params = new URLSearchParams(location.search);
-      const file = params.get("file");
-      return file ? file.trim() : "";
-    }
+  return file
+    .split(",")
+    .map(x => x.trim())
+    .filter(Boolean);
+}
 
     function getVersionParam() {
       const params = new URLSearchParams(location.search);
@@ -1328,23 +1333,29 @@
       }
     }
 
-    async function init() {
-      try {
-        const requested = getRequestedFile();
+  async function init() {
+  try {
+    const requestedFiles = getRequestedFiles();
 
-        if (requested) {
-          await loadByFilename(requested);
-        } else {
-          await autoLoadDefault();
-        }
+    const filesToLoad = [
+      ...ALWAYS_KML_FILES,
+      ...requestedFiles
+    ];
 
-        refreshMapSize();
-      } catch (err) {
-        console.error(err);
-        alert("Error: " + (err.message || err));
+    if (filesToLoad.length > 0) {
+      for (const file of [...new Set(filesToLoad)]) {
+        await loadByFilename(file);
       }
+    } else {
+      await autoLoadDefault();
     }
 
+    refreshMapSize();
+  } catch (err) {
+    console.error(err);
+    alert("Error: " + (err.message || err));
+  }
+}
     window.addEventListener("resize", refreshMapSize);
     window.addEventListener("load", refreshMapSize);
     window.addEventListener("pageshow", refreshMapSize);
