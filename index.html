@@ -879,8 +879,8 @@
         throw new Error("No valid route points in GPX");
       }
 
-     const latlng = [p.lat, normalizePacificLon(p.lon)];
-      const segments = splitPacificSegments(latlngs);
+const latlngs = points.map(p => [p.lat, normalizePacificLon(p.lon)]);
+const segments = splitPacificSegments(latlngs);
 
       segments.forEach(seg => {
         const line = L.polyline(seg, {
@@ -901,7 +901,7 @@
           extraRows
         );
 
-        const latlng = [p.lat, normalizeStandardLon(p.lon)];
+        const latlng = [p.lat, normalizePacificLon(p.lon)];
 
         let iconColor = "#ffff00";
         if (i === 0) iconColor = "#00aa00";
