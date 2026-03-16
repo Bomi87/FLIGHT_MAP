@@ -64,7 +64,10 @@
       margin: 10px 12px;
     }
 
-    .kml-label {
+    .kml-label,
+    .waypoint-label,
+    .triangle-label,
+    .ndb-label {
       background: transparent !important;
       border: none !important;
       box-shadow: none !important;
@@ -72,7 +75,10 @@
       margin: 0 !important;
     }
 
-    .kml-label:before {
+    .kml-label:before,
+    .waypoint-label:before,
+    .triangle-label:before,
+    .ndb-label:before {
       display: none !important;
     }
 
@@ -91,18 +97,6 @@
          0 0 4px rgba(0, 0, 0, 0.65);
     }
 
-    .waypoint-label {
-      background: transparent !important;
-      border: none !important;
-      box-shadow: none !important;
-      padding: 0 !important;
-      margin: 0 !important;
-    }
-
-    .waypoint-label:before {
-      display: none !important;
-    }
-
     .waypoint-label-text {
       display: inline-block;
       white-space: nowrap;
@@ -119,45 +113,7 @@
          1px  1px 0 #000;
     }
 
-    .triangle-label {
-      background: transparent !important;
-      border: none !important;
-      box-shadow: none !important;
-      padding: 0 !important;
-      margin: 0 !important;
-    }
-
-    .triangle-label:before {
-      display: none !important;
-    }
-
-    .triangle-label-text {
-      display: inline-block;
-      white-space: nowrap;
-      font-weight: 700;
-      color: #ffffff;
-      font-size: 10px;
-      text-align: left;
-      text-shadow:
-        -1px -1px 0 #000,
-         1px -1px 0 #000,
-        -1px  1px 0 #000,
-         1px  1px 0 #000,
-         0 0 4px rgba(0, 0, 0, 0.65);
-    }
-
-    .ndb-label {
-      background: transparent !important;
-      border: none !important;
-      box-shadow: none !important;
-      padding: 0 !important;
-      margin: 0 !important;
-    }
-
-    .ndb-label:before {
-      display: none !important;
-    }
-
+    .triangle-label-text,
     .ndb-label-text {
       display: inline-block;
       white-space: nowrap;
@@ -165,7 +121,6 @@
       color: #ffffff;
       font-size: 10px;
       text-align: left;
-      transform: none;
       text-shadow:
         -1px -1px 0 #000,
          1px -1px 0 #000,
@@ -210,14 +165,8 @@
     }
 
     @media (min-width: 768px) {
-      .waypoint-label-text {
-        font-size: 13px;
-      }
-
-      .triangle-label-text {
-        font-size: 13px;
-      }
-
+      .waypoint-label-text,
+      .triangle-label-text,
       .ndb-label-text {
         font-size: 13px;
       }
@@ -298,6 +247,8 @@
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
     const waypointZoomLabelRegistry = [];
+    let ndbRawData = [];
+    let ndbVisible = false;
 
     const POPUP_OPTIONS = {
       maxWidth: 260,
@@ -1085,7 +1036,7 @@
       [...datas].forEach(node => {
         const key = node.getAttribute("name") || "Data";
         const valueNode = node.getElementsByTagName("value")[0];
-        const value = valueNode ? escapeHtml(node.getElementsByTagName("value")[0].textContent || "") : "";
+        const value = valueNode ? escapeHtml(valueNode.textContent || "") : "";
         if (value) rows.push({ key, value });
       });
 
@@ -1183,30 +1134,6 @@
        KML draw
     ----------------------------- */
 
- function createRepeatedLongitudes(lon) {
-
-  const centerLon = map.getCenter().lng;
-
-  const options = [
-    lon - 360,
-    lon,
-    lon + 360
-  ];
-
-  let best = options[0];
-  let minDiff = Math.abs(centerLon - best);
-
-  for (let i = 1; i < options.length; i++) {
-    const diff = Math.abs(centerLon - options[i]);
-    if (diff < minDiff) {
-      minDiff = diff;
-      best = options[i];
-    }
-  }
-
-  return [best];
-}
-
     function addPointMarkerInstance(latlng, feature, targetLayer, sourceName, popupHtml, options = {}) {
       const labelStyle = getLabelStyle(feature.style);
       const iconStyle = getIconStyle(feature.style);
@@ -1230,7 +1157,9 @@
           keyboard: false
         }).addTo(targetLayer);
 
-        labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
+        if (popupHtml) {
+          labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
+        }
 
         labelOnlyMarker.bindTooltip(labelHtml, {
           permanent: true,
@@ -1261,7 +1190,9 @@
           zIndexOffset: 2000
         }).addTo(targetLayer);
 
-        marker.bindPopup(popupHtml, POPUP_OPTIONS);
+        if (popupHtml) {
+          marker.bindPopup(popupHtml, POPUP_OPTIONS);
+        }
 
         if (isTriangleShapePoint(feature)) {
           bindPermanentHorizontalTriangleLabel(marker, feature);
@@ -1294,7 +1225,9 @@
         fillOpacity: markerOpacity
       }).addTo(targetLayer);
 
-      marker.bindPopup(popupHtml, POPUP_OPTIONS);
+      if (popupHtml) {
+        marker.bindPopup(popupHtml, POPUP_OPTIONS);
+      }
 
       if (isAlwaysVisibleShapePointLabel(feature)) {
         bindPermanentHorizontalTriangleLabel(marker, feature);
@@ -1312,28 +1245,56 @@
       if (!skipRouteBounds) addToRouteBounds(marker, sourceName);
     }
 
+    function getNearestWorldCopyLon(lon) {
+      const centerLon = map.getCenter().lng;
+      const options = [lon - 360, lon, lon + 360];
+
+      let bestLon = options[0];
+      let minDiff = Math.abs(centerLon - bestLon);
+
+      for (let i = 1; i < options.length; i++) {
+        const diff = Math.abs(centerLon - options[i]);
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestLon = options[i];
+        }
+      }
+
+      return bestLon;
+    }
+
+    function redrawNDB() {
+      acjNdbLayer.clearLayers();
+
+      if (!ndbVisible || !ndbRawData.length) return;
+
+      ndbRawData.forEach(feature => {
+        const popupHtml = buildPopupHtml(
+          feature.name || "NDB",
+          feature.description || "",
+          feature.extraRows || []
+        );
+
+        const bestLon = getNearestWorldCopyLon(feature.coords.lon);
+        const latlng = [feature.coords.lat, bestLon];
+
+        addPointMarkerInstance(
+          latlng,
+          feature,
+          acjNdbLayer,
+          "ACJ_NDB.kml",
+          popupHtml,
+          { skipRouteBounds: true }
+        );
+      });
+    }
+
     function drawKMLPoint(feature, targetLayer, sourceName, renderContext) {
       const popupHtml = buildPopupHtml(
         feature.name || "Waypoint",
         feature.description || "",
         feature.extraRows || []
       );
-
-      if (isNdbFile(sourceName)) {
-        const lons = createRepeatedLongitudes(feature.coords.lon);
-
-        lons.forEach(drawLon => {
-          addPointMarkerInstance(
-            [feature.coords.lat, drawLon],
-            feature,
-            targetLayer,
-            sourceName,
-            popupHtml,
-            { skipRouteBounds: true }
-          );
-        });
-        return;
-      }
 
       const latlng = toRenderLatLng(feature.coords.lat, feature.coords.lon, renderContext);
 
@@ -1448,7 +1409,7 @@
           buildPopupHtml(
             destFeature.name || "",
             destFeature.description || "",
-            destFeature.extraRows || []
+            depFeature?.extraRows || []
           ),
           POPUP_OPTIONS
         );
@@ -1460,6 +1421,14 @@
     function drawKMLFeatures(features, sourceName, targetLayer) {
       if (!features.length) {
         throw new Error("No valid features in KML");
+      }
+
+      if (isNdbFile(sourceName)) {
+        ndbRawData = features.filter(f => f.type === "Point");
+        if (ndbVisible) {
+          redrawNDB();
+        }
+        return;
       }
 
       const renderContext = getRenderContext(features);
@@ -1520,9 +1489,8 @@
         const button = L.DomUtil.create("button", "", container);
 
         function updateButton() {
-          const isOn = map.hasLayer(acjNdbLayer);
-          button.textContent = isOn ? "NDB ON" : "NDB OFF";
-          button.className = isOn ? "ndb-on" : "";
+          button.textContent = ndbVisible ? "NDB ON" : "NDB OFF";
+          button.className = ndbVisible ? "ndb-on" : "";
         }
 
         button.type = "button";
@@ -1534,16 +1502,22 @@
         L.DomEvent.on(button, "click", function (e) {
           L.DomEvent.stop(e);
 
-          if (map.hasLayer(acjNdbLayer)) {
-            map.removeLayer(acjNdbLayer);
+          ndbVisible = !ndbVisible;
+
+          if (ndbVisible) {
+            if (!map.hasLayer(acjNdbLayer)) {
+              map.addLayer(acjNdbLayer);
+            }
+            redrawNDB();
           } else {
-            map.addLayer(acjNdbLayer);
+            acjNdbLayer.clearLayers();
+            if (map.hasLayer(acjNdbLayer)) {
+              map.removeLayer(acjNdbLayer);
+            }
           }
 
           updateButton();
         });
-
-        map.on("layeradd layerremove", updateButton);
 
         return container;
       };
@@ -1602,17 +1576,14 @@
           ...requestedFiles
         ];
 
-        if (filesToLoad.length > 0) {
-          for (const file of [...new Set(filesToLoad)]) {
-            await loadByFilename(file);
-          }
-        } else {
-          await autoLoadDefault();
+        for (const file of [...new Set(filesToLoad)]) {
+          await loadByFilename(file);
         }
 
         updateWaypointZoomLabels();
         fitAllLoadedBounds();
         refreshMapSize();
+
       } catch (err) {
         console.error(err);
         alert("Error: " + (err.message || err));
@@ -1625,6 +1596,12 @@
     });
     window.addEventListener("load", refreshMapSize);
     window.addEventListener("pageshow", refreshMapSize);
+
+    map.on("moveend zoomend", function () {
+      if (ndbVisible) {
+        redrawNDB();
+      }
+    });
 
     init();
   </script>
