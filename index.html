@@ -596,7 +596,7 @@
        antimeridian split (-180 / 180)
     ----------------------------- */
 
-  function splitPacificSegments(latlngs) {
+function splitPacificSegments(latlngs) {
   if (!latlngs || latlngs.length < 2) return [latlngs];
 
   const segments = [];
@@ -606,26 +606,30 @@
     const p1 = latlngs[i - 1];
     const p2 = latlngs[i];
 
-    const lat1 = Number(p1[0]);
-    const lon1 = Number(p1[1]);
-    const lat2 = Number(p2[0]);
-    const lon2 = Number(p2[1]);
+    const lat1 = p1[0];
+    const lon1 = p1[1];
+    const lat2 = p2[0];
+    const lon2 = p2[1];
 
-    let dLon = lon2 - lon1;
+    const dLon = lon2 - lon1;
 
-    if (Math.abs(dLon) <= 180) {
+    const isPacificCross =
+      Math.abs(lon1) > 150 &&
+      Math.abs(lon2) > 150 &&
+      Math.abs(dLon) > 180;
+
+    if (!isPacificCross) {
       current.push([lat2, lon2]);
       continue;
     }
 
     let lon2Adjusted = lon2;
-    if (dLon > 180) {
-      lon2Adjusted = lon2 - 360;
-    } else if (dLon < -180) {
-      lon2Adjusted = lon2 + 360;
-    }
+
+    if (dLon > 180) lon2Adjusted = lon2 - 360;
+    if (dLon < -180) lon2Adjusted = lon2 + 360;
 
     const crossingLon = lon2Adjusted > lon1 ? 180 : -180;
+
     const t = (crossingLon - lon1) / (lon2Adjusted - lon1);
     const crossingLat = lat1 + (lat2 - lat1) * t;
 
@@ -633,12 +637,11 @@
     segments.push(current);
 
     const wrappedLon = crossingLon === 180 ? -180 : 180;
+
     current = [[crossingLat, wrappedLon], [lat2, lon2]];
   }
 
-  if (current.length) {
-    segments.push(current);
-  }
+  if (current.length) segments.push(current);
 
   return segments;
 }
