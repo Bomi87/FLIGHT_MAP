@@ -230,8 +230,7 @@
   <script>
     const map = L.map("map", {
       worldCopyJump: false,
-      preferCanvas: true,
-      maxBoundsViscosity: 1.0
+      preferCanvas: true
     }).setView([48, 180], 3);
 
     function refreshMapSize() {
@@ -296,7 +295,9 @@
 
     const drawn = L.featureGroup().addTo(map);
     const acjNdbLayer = L.featureGroup();
-    const allLoadedBoundsGroup = L.featureGroup();
+    const routeBoundsGroup = L.featureGroup();
+
+    const waypointZoomLabelRegistry = [];
 
     const POPUP_OPTIONS = {
       maxWidth: 260,
@@ -373,8 +374,6 @@
       return isAlwaysKmlFile(filename) ? acjNdbLayer : drawn;
     }
 
-   
-
     function normalizePacificLon(lon) {
       let x = Number(lon);
       while (x < 0) x += 360;
@@ -394,9 +393,15 @@
       return new DOMParser().parseFromString(text, "text/xml");
     }
 
+    function addToRouteBounds(layer, sourceName) {
+      if (!isNdbFile(sourceName)) {
+        routeBoundsGroup.addLayer(layer);
+      }
+    }
+
     function fitAllLoadedBounds() {
       try {
-        const bounds = allLoadedBoundsGroup.getBounds();
+        const bounds = routeBoundsGroup.getBounds();
         if (bounds && bounds.isValid && bounds.isValid()) {
           map.fitBounds(bounds, { padding: [20, 20] });
           refreshMapSize();
@@ -726,27 +731,6 @@
       return isIcon52ShapePoint(feature) || isTriangleShapePoint(feature);
     }
 
-    function bindPermanentPointLabel(layer, feature) {
-      if (!layer || !feature || !feature.name) return;
-
-      const cleanedName = cleanLabelText(feature.name);
-      if (!cleanedName) return;
-
-      const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
-
-      layer.bindTooltip(labelHtml, {
-        permanent: true,
-        direction: "right",
-        offset: [8, 0],
-        className: "waypoint-label",
-        opacity: 1
-      });
-
-      if (layer.openTooltip) {
-        layer.openTooltip();
-      }
-    }
-
     function bindPermanentHorizontalTriangleLabel(layer, feature) {
       if (!layer || !feature || !feature.name) return;
 
@@ -768,7 +752,7 @@
       }
     }
 
-    function bindWaypointZoomLabel(layer, feature) {
+    function registerWaypointZoomLabel(layer, feature, options = {}) {
       if (!layer || !feature || !feature.name) return;
       if (!isWaypointLabelFeature(feature)) return;
 
@@ -776,37 +760,45 @@
       if (!cleanedName) return;
 
       const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
-      let labelBound = false;
 
-      function updateLabel() {
-        const zoom = map.getZoom();
+      waypointZoomLabelRegistry.push({
+        layer,
+        labelHtml,
+        minZoom: options.minZoom ?? 5,
+        direction: options.direction || "bottom",
+        offset: options.offset || [-20, 10],
+        className: options.className || "waypoint-label",
+        visible: false
+      });
+    }
 
-        if (zoom >= 5) {
-          if (!labelBound) {
-            layer.bindTooltip(labelHtml, {
-              permanent: true,
-              direction: "bottom",
-              offset: [-20, 10],
-              className: "waypoint-label",
-              opacity: 1
-            });
+    function updateWaypointZoomLabels() {
+      const zoom = map.getZoom();
 
-            labelBound = true;
+      waypointZoomLabelRegistry.forEach(item => {
+        const shouldShow = zoom >= item.minZoom;
+
+        if (shouldShow && !item.visible) {
+          item.layer.bindTooltip(item.labelHtml, {
+            permanent: true,
+            direction: item.direction,
+            offset: item.offset,
+            className: item.className,
+            opacity: 1
+          });
+
+          if (item.layer.openTooltip) {
+            item.layer.openTooltip();
           }
 
-          if (layer.openTooltip) {
-            layer.openTooltip();
+          item.visible = true;
+        } else if (!shouldShow && item.visible) {
+          if (item.layer.unbindTooltip) {
+            item.layer.unbindTooltip();
           }
-        } else {
-          if (labelBound && layer.unbindTooltip) {
-            layer.unbindTooltip();
-            labelBound = false;
-          }
+          item.visible = false;
         }
-      }
-
-      map.on("zoomend", updateLabel);
-      updateLabel();
+      });
     }
 
     function bindNdbHorizontalLabel(layer, feature) {
@@ -829,6 +821,8 @@
         layer.openTooltip();
       }
     }
+
+    map.on("zoomend", updateWaypointZoomLabels);
 
     /* -----------------------------
        GPX
@@ -855,32 +849,13 @@
       }).filter(p => !isBadCoord(p.lat, p.lon));
     }
 
-    function drawWaypointMarker(lat, lon, popupHtml, index, total, targetLayer) {
-      const latlng = [lat, normalizePacificLon(lon)];
-
-      let iconColor = "#ffff00";
-      if (index === 0) iconColor = "#00aa00";
-      if (index === total - 1) iconColor = "#0000ff";
-
-      const marker = L.circleMarker(latlng, {
-        radius: 5,
-        color: "#222",
-        weight: 1,
-        fillColor: iconColor,
-        fillOpacity: 1
-      }).addTo(targetLayer);
-
-      marker.bindPopup(popupHtml, POPUP_OPTIONS);
-      allLoadedBoundsGroup.addLayer(marker);
-    }
-
     function drawGPXRoute(points, sourceName, targetLayer) {
       if (!points || points.length < 2) {
         throw new Error("No valid route points in GPX");
       }
 
-const latlngs = points.map(p => [p.lat, normalizePacificLon(p.lon)]);
-const segments = splitPacificSegments(latlngs);
+      const latlngs = points.map(p => [p.lat, normalizePacificLon(p.lon)]);
+      const segments = splitPacificSegments(latlngs);
 
       segments.forEach(seg => {
         const line = L.polyline(seg, {
@@ -888,7 +863,7 @@ const segments = splitPacificSegments(latlngs);
           weight: 5
         }).addTo(targetLayer);
 
-        allLoadedBoundsGroup.addLayer(line);
+        addToRouteBounds(line, sourceName);
       });
 
       points.forEach((p, i) => {
@@ -917,13 +892,13 @@ const segments = splitPacificSegments(latlngs);
 
         marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
-        bindWaypointZoomLabel(marker, {
+        registerWaypointZoomLabel(marker, {
           type: "Point",
           name: p.name || "",
           description: p.description || ""
         });
 
-        allLoadedBoundsGroup.addLayer(marker);
+        addToRouteBounds(marker, sourceName);
       });
 
       console.log("Flight Route Loaded:", sourceName, "GPX", points.length);
@@ -962,7 +937,8 @@ const segments = splitPacificSegments(latlngs);
 
       if (lineStyleNode) {
         style.lineColor = textOfFirst(lineStyleNode, "color");
-        style.lineWidth = parseFloat(textOfFirst(lineStyleNode, "width")) || 3;
+        const width = parseFloat(textOfFirst(lineStyleNode, "width"));
+        style.lineWidth = Number.isFinite(width) ? width : 3;
       }
 
       if (polyStyleNode) {
@@ -975,12 +951,15 @@ const segments = splitPacificSegments(latlngs);
 
       if (labelStyleNode) {
         style.labelColor = textOfFirst(labelStyleNode, "color");
-        style.labelScale = parseFloat(textOfFirst(labelStyleNode, "scale")) || 1;
+        const labelScale = parseFloat(textOfFirst(labelStyleNode, "scale"));
+        style.labelScale = Number.isFinite(labelScale) ? labelScale : 1;
       }
 
       if (iconStyleNode) {
         style.iconColor = textOfFirst(iconStyleNode, "color");
-        style.iconScale = parseFloat(textOfFirst(iconStyleNode, "scale")) || 1;
+        const iconScale = parseFloat(textOfFirst(iconStyleNode, "scale"));
+        style.iconScale = Number.isFinite(iconScale) ? iconScale : 1;
+
         const iconNode = iconStyleNode.getElementsByTagName("Icon")[0];
         if (iconNode) {
           style.iconHref = textOfFirst(iconNode, "href");
@@ -1188,7 +1167,7 @@ const segments = splitPacificSegments(latlngs);
           opacity: 1
         });
 
-        allLoadedBoundsGroup.addLayer(labelOnlyMarker);
+        addToRouteBounds(labelOnlyMarker, sourceName);
         return;
       }
 
@@ -1218,10 +1197,15 @@ const segments = splitPacificSegments(latlngs);
         } else if (isNdbFile(sourceName)) {
           bindNdbHorizontalLabel(marker, feature);
         } else {
-          bindWaypointZoomLabel(marker, feature);
+          registerWaypointZoomLabel(marker, feature, {
+            minZoom: 5,
+            direction: "bottom",
+            offset: [-20, 10],
+            className: "waypoint-label"
+          });
         }
 
-        allLoadedBoundsGroup.addLayer(marker);
+        addToRouteBounds(marker, sourceName);
         return;
       }
 
@@ -1244,13 +1228,18 @@ const segments = splitPacificSegments(latlngs);
       } else if (isNdbFile(sourceName)) {
         bindNdbHorizontalLabel(marker, feature);
       } else {
-        bindWaypointZoomLabel(marker, feature);
+        registerWaypointZoomLabel(marker, feature, {
+          minZoom: 5,
+          direction: "bottom",
+          offset: [-20, 10],
+          className: "waypoint-label"
+        });
       }
 
-      allLoadedBoundsGroup.addLayer(marker);
+      addToRouteBounds(marker, sourceName);
     }
 
-    function drawKMLLine(feature, targetLayer) {
+    function drawKMLLine(feature, targetLayer, sourceName) {
       const lineStyle = kmlColorToCss(feature.style.lineColor, "#FFD400", 1);
       const weight = feature.style.lineWidth || 4;
 
@@ -1273,11 +1262,11 @@ const segments = splitPacificSegments(latlngs);
           line.bindPopup(popupHtml, POPUP_OPTIONS);
         }
 
-        allLoadedBoundsGroup.addLayer(line);
+        addToRouteBounds(line, sourceName);
       });
     }
 
-    function drawKMLPolygon(feature, targetLayer) {
+    function drawKMLPolygon(feature, targetLayer, sourceName) {
       const lineStyle = kmlColorToCss(feature.style.lineColor, "#00aa55", 0.9);
       const fillStyle = kmlColorToCss(feature.style.polyColor, "#00CC66", 0.3);
 
@@ -1302,13 +1291,41 @@ const segments = splitPacificSegments(latlngs);
         polygon.bindPopup(popupHtml, POPUP_OPTIONS);
       }
 
-      allLoadedBoundsGroup.addLayer(polygon);
+      addToRouteBounds(polygon, sourceName);
     }
 
-    function drawRouteEndpointMarkers(routeEndpoints, targetLayer) {
+    function drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName) {
       if (!routeEndpoints) return;
 
+      const depFeature = routeEndpoints.departureFeature;
       const destFeature = routeEndpoints.destinationFeature;
+
+      if (depFeature?.coords) {
+        const depLatLng = [depFeature.coords.lat, normalizePacificLon(depFeature.coords.lon)];
+
+        const departureIcon = L.icon({
+          iconUrl: "https://maps.google.com/mapfiles/kml/paddle/grn-circle.png",
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+          popupAnchor: [0, -10]
+        });
+
+        const depMarker = L.marker(depLatLng, {
+          icon: departureIcon,
+          zIndexOffset: 1000
+        }).addTo(targetLayer);
+
+        depMarker.bindPopup(
+          buildPopupHtml(
+            depFeature.name || "",
+            depFeature.description || "",
+            depFeature.extraRows || []
+          ),
+          POPUP_OPTIONS
+        );
+
+        addToRouteBounds(depMarker, sourceName);
+      }
 
       if (destFeature?.coords) {
         const destLatLng = [destFeature.coords.lat, normalizePacificLon(destFeature.coords.lon)];
@@ -1334,7 +1351,7 @@ const segments = splitPacificSegments(latlngs);
           POPUP_OPTIONS
         );
 
-        allLoadedBoundsGroup.addLayer(destMarker);
+        addToRouteBounds(destMarker, sourceName);
       }
     }
 
@@ -1348,8 +1365,8 @@ const segments = splitPacificSegments(latlngs);
       const polygonFeatures = features.filter(f => f.type === "Polygon");
       const routeEndpoints = getRouteEndpoints(pointFeatures);
 
-      lineFeatures.forEach(f => drawKMLLine(f, targetLayer));
-      polygonFeatures.forEach(f => drawKMLPolygon(f, targetLayer));
+      lineFeatures.forEach(f => drawKMLLine(f, targetLayer, sourceName));
+      polygonFeatures.forEach(f => drawKMLPolygon(f, targetLayer, sourceName));
 
       let lastAirspaceLabelName = "";
 
@@ -1374,7 +1391,7 @@ const segments = splitPacificSegments(latlngs);
         drawKMLPoint(f, targetLayer, sourceName);
       });
 
-      drawRouteEndpointMarkers(routeEndpoints, targetLayer);
+      drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName);
 
       console.log("Flight Route Loaded:", sourceName, "KML", {
         points: pointFeatures.length,
@@ -1489,6 +1506,7 @@ const segments = splitPacificSegments(latlngs);
           await autoLoadDefault();
         }
 
+        updateWaypointZoomLabels();
         fitAllLoadedBounds();
         refreshMapSize();
       } catch (err) {
@@ -1497,7 +1515,10 @@ const segments = splitPacificSegments(latlngs);
       }
     }
 
-    window.addEventListener("resize", refreshMapSize);
+    window.addEventListener("resize", () => {
+      refreshMapSize();
+      updateWaypointZoomLabels();
+    });
     window.addEventListener("load", refreshMapSize);
     window.addEventListener("pageshow", refreshMapSize);
 
