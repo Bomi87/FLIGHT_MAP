@@ -49,8 +49,8 @@ const MAX_LIVE_TRAIL_POINTS = 500;
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
 const USER_GPS_ZOOM_MIN = 10;
-const AIRCRAFT_FOCUS_ZOOM_MAX = 8;
-const FOLLOW_AIRCRAFT_ZOOM_MIN = 9;
+const AIRCRAFT_FOCUS_ZOOM_MAX = 6;
+const FOLLOW_AIRCRAFT_ZOOM_MIN = 6;
 const MAX_USER_TRAIL_POINTS = 1000;
 
 const RUNNING_SPEED_MAX_KT = 8.0;
