@@ -228,11 +228,11 @@
   <div id="map"></div>
 
   <script>
-   const map = L.map("map", {
-  worldCopyJump: false,
-  preferCanvas: true,
-  zoomControl: true
-}).setView([30, 0], 3);
+    const map = L.map("map", {
+      worldCopyJump: false,
+      preferCanvas: true,
+      zoomControl: true
+    }).setView([30, 0], 3);
 
     function refreshMapSize() {
       setTimeout(() => {
@@ -1085,7 +1085,7 @@
       [...datas].forEach(node => {
         const key = node.getAttribute("name") || "Data";
         const valueNode = node.getElementsByTagName("value")[0];
-        const value = valueNode ? escapeHtml(valueNode.textContent || "") : "";
+        const value = valueNode ? escapeHtml(node.getElementsByTagName("value")[0].textContent || "") : "";
         if (value) rows.push({ key, value });
       });
 
@@ -1183,17 +1183,15 @@
        KML draw
     ----------------------------- */
 
-    function drawKMLPoint(feature, targetLayer, sourceName, renderContext) {
-      const popupHtml = buildPopupHtml(
-        feature.name || "Waypoint",
-        feature.description || "",
-        feature.extraRows || []
-      );
+    function createRepeatedLongitudes(lon) {
+      return [lon - 360, lon, lon + 360];
+    }
 
-      const latlng = toRenderLatLng(feature.coords.lat, feature.coords.lon, renderContext);
+    function addPointMarkerInstance(latlng, feature, targetLayer, sourceName, popupHtml, options = {}) {
       const labelStyle = getLabelStyle(feature.style);
       const iconStyle = getIconStyle(feature.style);
       const isAirspaceLabel = isAirspaceLabelFeature(feature);
+      const skipRouteBounds = !!options.skipRouteBounds;
 
       if (isAirspaceLabel) {
         const cleanedName = cleanLabelText(feature.name);
@@ -1222,7 +1220,7 @@
           opacity: 1
         });
 
-        addToRouteBounds(labelOnlyMarker, sourceName);
+        if (!skipRouteBounds) addToRouteBounds(labelOnlyMarker, sourceName);
         return;
       }
 
@@ -1260,7 +1258,7 @@
           });
         }
 
-        addToRouteBounds(marker, sourceName);
+        if (!skipRouteBounds) addToRouteBounds(marker, sourceName);
         return;
       }
 
@@ -1291,7 +1289,41 @@
         });
       }
 
-      addToRouteBounds(marker, sourceName);
+      if (!skipRouteBounds) addToRouteBounds(marker, sourceName);
+    }
+
+    function drawKMLPoint(feature, targetLayer, sourceName, renderContext) {
+      const popupHtml = buildPopupHtml(
+        feature.name || "Waypoint",
+        feature.description || "",
+        feature.extraRows || []
+      );
+
+      if (isNdbFile(sourceName)) {
+        const lons = createRepeatedLongitudes(feature.coords.lon);
+
+        lons.forEach(drawLon => {
+          addPointMarkerInstance(
+            [feature.coords.lat, drawLon],
+            feature,
+            targetLayer,
+            sourceName,
+            popupHtml,
+            { skipRouteBounds: true }
+          );
+        });
+        return;
+      }
+
+      const latlng = toRenderLatLng(feature.coords.lat, feature.coords.lon, renderContext);
+
+      addPointMarkerInstance(
+        latlng,
+        feature,
+        targetLayer,
+        sourceName,
+        popupHtml
+      );
     }
 
     function drawKMLLine(feature, targetLayer, sourceName, renderContext) {
