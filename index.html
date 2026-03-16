@@ -596,45 +596,52 @@
        antimeridian split (-180 / 180)
     ----------------------------- */
 
-    function splitPacificSegments(latlngs) {
-      if (!latlngs || latlngs.length < 2) return [latlngs];
+  function splitPacificSegments(latlngs) {
+  if (!latlngs || latlngs.length < 2) return [latlngs];
 
-      const segments = [];
-      let current = [latlngs[0]];
+  const segments = [];
+  let current = [latlngs[0]];
 
-      for (let i = 1; i < latlngs.length; i++) {
-        const p1 = latlngs[i - 1];
-        const p2 = latlngs[i];
+  for (let i = 1; i < latlngs.length; i++) {
+    const p1 = latlngs[i - 1];
+    const p2 = latlngs[i];
 
-        const lat1 = p1[0];
-        const lon1 = p1[1];
-        const lat2 = p2[0];
-        const lon2 = p2[1];
+    const lat1 = Number(p1[0]);
+    const lon1 = Number(p1[1]);
+    const lat2 = Number(p2[0]);
+    const lon2 = Number(p2[1]);
 
-        const diff = lon2 - lon1;
+    let dLon = lon2 - lon1;
 
-        if (Math.abs(diff) > 180) {
-          const crossingLon = diff > 0 ? 180 : -180;
-          const adjustedLon2 = diff > 0 ? lon2 - 360 : lon2 + 360;
-          const t = (crossingLon - lon1) / (adjustedLon2 - lon1);
-          const crossingLat = lat1 + (lat2 - lat1) * t;
-
-          current.push([crossingLat, crossingLon]);
-          segments.push(current);
-
-          const oppositeLon = crossingLon === 180 ? -180 : 180;
-          current = [[crossingLat, oppositeLon], [lat2, lon2]];
-        } else {
-          current.push([lat2, lon2]);
-        }
-      }
-
-      if (current.length > 0) {
-        segments.push(current);
-      }
-
-      return segments;
+    if (Math.abs(dLon) <= 180) {
+      current.push([lat2, lon2]);
+      continue;
     }
+
+    let lon2Adjusted = lon2;
+    if (dLon > 180) {
+      lon2Adjusted = lon2 - 360;
+    } else if (dLon < -180) {
+      lon2Adjusted = lon2 + 360;
+    }
+
+    const crossingLon = lon2Adjusted > lon1 ? 180 : -180;
+    const t = (crossingLon - lon1) / (lon2Adjusted - lon1);
+    const crossingLat = lat1 + (lat2 - lat1) * t;
+
+    current.push([crossingLat, crossingLon]);
+    segments.push(current);
+
+    const wrappedLon = crossingLon === 180 ? -180 : 180;
+    current = [[crossingLat, wrappedLon], [lat2, lon2]];
+  }
+
+  if (current.length) {
+    segments.push(current);
+  }
+
+  return segments;
+}
 
     /* -----------------------------
        endpoint helpers
