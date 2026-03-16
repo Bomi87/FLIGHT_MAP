@@ -186,19 +186,19 @@
     }
 
     .leaflet-control-ndb-toggle button {
-  display: block;
-  width: 100%;
-  min-width: 72px;
-  height: 26px;
-  border: none;
-  background: #7c3aed;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0 8px;
-  text-align: center;
-}
+      display: block;
+      width: 100%;
+      min-width: 72px;
+      height: 26px;
+      border: none;
+      background: #7c3aed;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 0 8px;
+      text-align: center;
+    }
 
     .leaflet-control-ndb-toggle button:hover {
       background: #6d28d9;
@@ -295,7 +295,7 @@
     }).addTo(map);
 
     const drawn = L.featureGroup().addTo(map);
-    const acjNdbLayer = L.featureGroup();   // 기본 OFF
+    const acjNdbLayer = L.featureGroup();
     const allLoadedBoundsGroup = L.featureGroup();
 
     const POPUP_OPTIONS = {
@@ -371,6 +371,10 @@
 
     function getTargetLayer(filename) {
       return isAlwaysKmlFile(filename) ? acjNdbLayer : drawn;
+    }
+
+    function normalizeStandardLon(lon) {
+      return Number(lon);
     }
 
     function normalizePacificLon(lon) {
@@ -854,7 +858,7 @@
     }
 
     function drawWaypointMarker(lat, lon, popupHtml, index, total, targetLayer) {
-      const latlng = [lat, normalizePacificLon(lon)];
+      const latlng = [lat, normalizeStandardLon(lon)];
 
       let iconColor = "#ffff00";
       if (index === 0) iconColor = "#00aa00";
@@ -899,7 +903,7 @@
           extraRows
         );
 
-        const latlng = [p.lat, normalizePacificLon(p.lon)];
+        const latlng = [p.lat, normalizeStandardLon(p.lon)];
 
         let iconColor = "#ffff00";
         if (i === 0) iconColor = "#00aa00";
@@ -1154,7 +1158,7 @@
         feature.extraRows || []
       );
 
-      const latlng = [feature.coords.lat, normalizePacificLon(feature.coords.lon)];
+      const latlng = [feature.coords.lat, normalizeStandardLon(feature.coords.lon)];
       const labelStyle = getLabelStyle(feature.style);
       const iconStyle = getIconStyle(feature.style);
       const isAirspaceLabel = isAirspaceLabelFeature(feature);
@@ -1309,7 +1313,7 @@
       const destFeature = routeEndpoints.destinationFeature;
 
       if (destFeature?.coords) {
-        const destLatLng = [destFeature.coords.lat, normalizePacificLon(destFeature.coords.lon)];
+        const destLatLng = [destFeature.coords.lat, normalizeStandardLon(destFeature.coords.lon)];
 
         const destinationIcon = L.icon({
           iconUrl: "https://maps.google.com/mapfiles/kml/paddle/blu-circle.png",
