@@ -27,7 +27,7 @@ if (multiRegs.length || multiHexes.length) {
   ];
 } else if (singleReg || singleHex) {
   TARGETS = [{
-    key: singleReg ? `reg:${singleReg}` : `hex:${singleHex}`,
+    key: singleHex ? `hex:${singleHex}` : `reg:${singleReg}`,
     reg: singleReg,
     hex: singleHex
   }];
@@ -55,12 +55,19 @@ const ADSB_PROVIDERS = [
     base: "https://opendata.adsb.fi/api",
     hexPath: "v2/hex",
     regPath: "v2/registration"
+  },
+  {
+    id: "airplanes_live",
+    base: "https://api.airplanes.live",
+    hexPath: "hex",
+    regPath: "reg"
   }
 ];
 
 const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
 const MAX_LIVE_TRAIL_POINTS = 500;
+const FETCH_TIMEOUT_MS = 3500;
 
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
@@ -84,7 +91,7 @@ const USER_TRAIL_DASH_MAX_DIST_M = 180;
 const USER_TRAIL_DASH_MAX_TIME_S = 30;
 
 const USER_TRAIL_SMOOTHING_WINDOW = 3;
-const USER_TRAIL_STORAGE_KEY = "userTrailState_v3";
+const USER_TRAIL_STORAGE_KEY = "userTrailState_v4";
 const USER_TRAIL_STORAGE_LIMIT = 300;
 const USER_TRAIL_STORAGE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
@@ -113,12 +120,14 @@ const aircraftStates = new Map();
   animationToken,
   color,
   buttonEl,
-  isLive
+  isLive,
+  staleCount
 }
 */
 
 let lastGoodProviderId = null;
 let activeFollowTargetKey = null;
+let isPollingAircraft = false;
 
 /* 상세정보 패널 상태 */
 let selectedAircraftTargetKey = null;
@@ -167,7 +176,8 @@ function initAircraftStates() {
       animationToken: 0,
       color: AIRCRAFT_COLORS[idx % AIRCRAFT_COLORS.length],
       buttonEl: null,
-      isLive: false
+      isLive: false,
+      staleCount: 0
     });
   });
 }
@@ -256,7 +266,9 @@ function normalizeHex(v) {
   return String(v || "").trim().toLowerCase();
 }
 
-/* KML 쪽 0~360 좌표계에 맞춰 항공기 longitude 보정 */
+function getAircraftCallsign(ac) {
+  return String(ac?.flight || ac?.callsign || "").trim().toUpperCase();
+}
 
 function getOrderedProviders() {
   if (!lastGoodProviderId) return [...ADSB_PROVIDERS];
@@ -314,6 +326,7 @@ function resolveAircraftForTargets(targets, byHex, byReg) {
   return { found, missingTargets };
 }
 
+/* KML 쪽 0~360 좌표계에 맞춰 항공기 longitude 보정 */
 function normalizeAircraftLon(lon) {
   let x = Number(lon);
   if (!isFinite(x)) return x;
@@ -1050,6 +1063,7 @@ function updateAircraftForTarget(target, ac) {
   if (!state || !ac) return;
 
   state.lastAircraft = ac;
+  state.staleCount = 0;
   ensureAircraftMarker(target, ac);
   updateLiveTrail(target, ac);
   refreshAircraftFollowButtons();
@@ -1138,14 +1152,26 @@ function animateAircraftIfNeeded(target, prevAc, nextAc) {
   state.animationFrameId = requestAnimationFrame(step);
 }
 
-/* ------------------ ADS-B FETCH (PER-TARGET RESCUE) ------------------ */
+/* ------------------ ADS-B FETCH ------------------ */
 
-async function fetchJson(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
+async function fetchJson(url, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return await res.json();
 }
 
 function indexAircraftList(aircraftList) {
@@ -1163,31 +1189,28 @@ function indexAircraftList(aircraftList) {
   return { byHex, byReg };
 }
 
-async function fetchProviderAircraftData(provider, targets) {
-  const regs = [...new Set(targets.map(t => t.reg).filter(Boolean))];
+async function fetchProviderByHex(provider, targets) {
   const hexes = [...new Set(targets.map(t => t.hex).filter(Boolean))];
+  if (hexes.length === 0) return [];
 
-  let aircraft = [];
+  const url = buildProviderUrl(provider, "hex", hexes.join(","));
+  const data = await fetchJson(url);
+  return Array.isArray(data.ac) ? data.ac : [];
+}
 
-  if (hexes.length > 0) {
-    const hexUrl = buildProviderUrl(provider, "hex", hexes.join(","));
-    const hexData = await fetchJson(hexUrl);
-    if (Array.isArray(hexData.ac)) aircraft.push(...hexData.ac);
-  }
+async function fetchProviderByReg(provider, targets) {
+  const regs = [...new Set(targets.map(t => t.reg).filter(Boolean))];
+  if (regs.length === 0) return [];
 
-  if (regs.length > 0) {
-    const regUrl = buildProviderUrl(provider, "reg", regs.join(","));
-    const regData = await fetchJson(regUrl);
-    if (Array.isArray(regData.ac)) aircraft.push(...regData.ac);
-  }
-
-  return dedupeAircraftList(aircraft);
+  const url = buildProviderUrl(provider, "reg", regs.join(","));
+  const data = await fetchJson(url);
+  return Array.isArray(data.ac) ? data.ac : [];
 }
 
 async function fetchBatchAircraftData() {
   const providers = getOrderedProviders();
 
-  let resolvedMap = new Map();       // target.key -> aircraft
+  let resolvedMap = new Map();
   let unresolvedTargets = [...TARGETS];
   let anyProviderSucceeded = false;
   let lastError = null;
@@ -1196,27 +1219,64 @@ async function fetchBatchAircraftData() {
     if (unresolvedTargets.length === 0) break;
 
     try {
-      const aircraft = await fetchProviderAircraftData(provider, unresolvedTargets);
-      anyProviderSucceeded = true;
+      let providerFoundCount = 0;
 
-      if (aircraft.length === 0) {
-        continue;
+      /* 1차: HEX */
+      let hexAircraft = [];
+      try {
+        hexAircraft = dedupeAircraftList(await fetchProviderByHex(provider, unresolvedTargets));
+        anyProviderSucceeded = true;
+      } catch (err) {
+        lastError = err;
       }
 
-      const { byHex, byReg } = indexAircraftList(aircraft);
-      const { found, missingTargets } = resolveAircraftForTargets(unresolvedTargets, byHex, byReg);
+      if (hexAircraft.length > 0) {
+        const { byHex, byReg } = indexAircraftList(hexAircraft);
+        const { found, missingTargets } = resolveAircraftForTargets(unresolvedTargets, byHex, byReg);
 
-      if (found.size > 0) {
-        lastGoodProviderId = provider.id;
+        providerFoundCount += found.size;
 
         for (const [targetKey, ac] of found.entries()) {
           if (!resolvedMap.has(targetKey)) {
             resolvedMap.set(targetKey, ac);
           }
         }
+
+        unresolvedTargets = missingTargets;
       }
 
-      unresolvedTargets = missingTargets;
+      if (unresolvedTargets.length === 0) {
+        if (providerFoundCount > 0) lastGoodProviderId = provider.id;
+        continue;
+      }
+
+      /* 2차: REG rescue */
+      let regAircraft = [];
+      try {
+        regAircraft = dedupeAircraftList(await fetchProviderByReg(provider, unresolvedTargets));
+        anyProviderSucceeded = true;
+      } catch (err) {
+        lastError = err;
+      }
+
+      if (regAircraft.length > 0) {
+        const { byHex, byReg } = indexAircraftList(regAircraft);
+        const { found, missingTargets } = resolveAircraftForTargets(unresolvedTargets, byHex, byReg);
+
+        providerFoundCount += found.size;
+
+        for (const [targetKey, ac] of found.entries()) {
+          if (!resolvedMap.has(targetKey)) {
+            resolvedMap.set(targetKey, ac);
+          }
+        }
+
+        unresolvedTargets = missingTargets;
+      }
+
+      if (providerFoundCount > 0) {
+        lastGoodProviderId = provider.id;
+      }
     } catch (err) {
       lastError = err;
     }
@@ -1230,7 +1290,9 @@ async function fetchBatchAircraftData() {
 }
 
 async function pollAircraft() {
-  if (!TARGETS.length) return;
+  if (!TARGETS.length || isPollingAircraft) return;
+
+  isPollingAircraft = true;
 
   try {
     const resolvedMap = await fetchBatchAircraftData();
@@ -1243,10 +1305,12 @@ async function pollAircraft() {
 
       if (!ac) {
         state.isLive = false;
+        state.staleCount = (state.staleCount || 0) + 1;
         continue;
       }
 
       state.isLive = true;
+      state.staleCount = 0;
 
       if (!state.lastAircraft) {
         updateAircraftForTarget(target, ac);
@@ -1263,9 +1327,12 @@ async function pollAircraft() {
       const state = aircraftStates.get(target.key);
       if (!state) continue;
       state.isLive = false;
+      state.staleCount = (state.staleCount || 0) + 1;
     }
 
     refreshAircraftFollowButtons();
+  } finally {
+    isPollingAircraft = false;
   }
 }
 
