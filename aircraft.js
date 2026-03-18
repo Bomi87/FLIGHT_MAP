@@ -9,10 +9,8 @@ function parseCsvParam(name) {
     .filter(Boolean);
 }
 
-const singleReg = (params.get("reg") || "").toUpperCase().trim();
 const singleHex = (params.get("hex") || "").toLowerCase().trim();
 
-const multiRegs = parseCsvParam("regs").map(x => x.toUpperCase());
 const multiHexes = [
   ...parseCsvParam("hexes"),
   ...parseCsvParam("hexs")
@@ -20,15 +18,14 @@ const multiHexes = [
 
 let TARGETS = [];
 
-if (multiRegs.length || multiHexes.length) {
-  TARGETS = [
-    ...multiRegs.map(reg => ({ key: `reg:${reg}`, reg, hex: "" })),
-    ...multiHexes.map(hex => ({ key: `hex:${hex}`, reg: "", hex }))
-  ];
-} else if (singleReg || singleHex) {
+if (multiHexes.length) {
+  TARGETS = multiHexes.map(hex => ({
+    key: `hex:${hex}`,
+    hex
+  }));
+} else if (singleHex) {
   TARGETS = [{
-    key: singleHex ? `hex:${singleHex}` : `reg:${singleReg}`,
-    reg: singleReg,
+    key: `hex:${singleHex}`,
     hex: singleHex
   }];
 }
@@ -41,33 +38,29 @@ const ADSB_PROVIDERS = [
   {
     id: "adsb_lol",
     base: "https://api.adsb.lol",
-    hexPath: "v2/hex",
-    regPath: "v2/reg"
+    hexPath: "v2/hex"
   },
   {
     id: "adsb_one",
     base: "https://api.adsb.one",
-    hexPath: "v2/hex",
-    regPath: "v2/reg"
+    hexPath: "v2/hex"
   },
   {
     id: "adsb_fi",
     base: "https://opendata.adsb.fi/api",
-    hexPath: "v2/hex",
-    regPath: "v2/registration"
+    hexPath: "v2/hex"
   },
   {
     id: "airplanes_live",
     base: "https://api.airplanes.live",
-    hexPath: "hex",
-    regPath: "reg"
+    hexPath: "hex"
   }
 ];
 
 const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
 const MAX_LIVE_TRAIL_POINTS = 500;
-const FETCH_TIMEOUT_MS = 3500;
+const FETCH_TIMEOUT_MS = 3000;
 
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
@@ -91,7 +84,7 @@ const USER_TRAIL_DASH_MAX_DIST_M = 180;
 const USER_TRAIL_DASH_MAX_TIME_S = 30;
 
 const USER_TRAIL_SMOOTHING_WINDOW = 3;
-const USER_TRAIL_STORAGE_KEY = "userTrailState_v4";
+const USER_TRAIL_STORAGE_KEY = "userTrailState_v5";
 const USER_TRAIL_STORAGE_LIMIT = 300;
 const USER_TRAIL_STORAGE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
@@ -258,10 +251,6 @@ function clonePoint(p) {
   };
 }
 
-function normalizeReg(v) {
-  return String(v || "").trim().toUpperCase();
-}
-
 function normalizeHex(v) {
   return String(v || "").trim().toLowerCase();
 }
@@ -279,9 +268,8 @@ function getOrderedProviders() {
   return preferred ? [preferred, ...others] : [...ADSB_PROVIDERS];
 }
 
-function buildProviderUrl(provider, type, joinedValue) {
-  const path = type === "hex" ? provider.hexPath : provider.regPath;
-  return `${provider.base}/${path}/${encodeURIComponent(joinedValue)}`;
+function buildProviderUrl(provider, joinedValue) {
+  return `${provider.base}/${provider.hexPath}/${encodeURIComponent(joinedValue)}`;
 }
 
 function dedupeAircraftList(list) {
@@ -290,8 +278,7 @@ function dedupeAircraftList(list) {
 
   for (const ac of list || []) {
     const hex = normalizeHex(ac.hex);
-    const reg = normalizeReg(ac.r || ac.reg);
-    const key = hex ? `hex:${hex}` : (reg ? `reg:${reg}` : "");
+    const key = hex ? `hex:${hex}` : "";
 
     if (!key) {
       result.push(ac);
@@ -306,15 +293,12 @@ function dedupeAircraftList(list) {
   return result;
 }
 
-function resolveAircraftForTargets(targets, byHex, byReg) {
+function resolveAircraftForTargets(targets, byHex) {
   const found = new Map();
   const missingTargets = [];
 
   for (const target of targets) {
-    let ac = null;
-
-    if (target.hex) ac = byHex.get(target.hex) || null;
-    if (!ac && target.reg) ac = byReg.get(target.reg) || null;
+    const ac = byHex.get(target.hex) || null;
 
     if (ac) {
       found.set(target.key, ac);
@@ -364,12 +348,10 @@ function injectAircraftUiCss() {
 
 function getAircraftButtonLabel(ac, target) {
   const callsign = (ac?.flight || ac?.callsign || "").trim();
-  const reg = (ac?.r || ac?.reg || target?.reg || "").trim();
   const hex = (ac?.hex || target?.hex || "").toUpperCase();
 
-  if (callsign && reg) return `${callsign} (${reg})`;
+  if (callsign && hex) return `${callsign} (${hex})`;
   if (callsign) return callsign;
-  if (reg) return reg;
   if (hex) return `HEX: ${hex}`;
   return "UNKNOWN";
 }
@@ -441,7 +423,6 @@ function getVerticalState(ac) {
 /* 항상 보이는 작은 라벨 */
 function formatAircraftLabelHtml(ac, color) {
   const flight = (ac.flight || ac.callsign || "").trim();
-  const reg = (ac.r || ac.reg || "").trim();
   const altitudeText = formatAltitudeText(ac);
 
   const verticalState = getVerticalState(ac);
@@ -451,7 +432,7 @@ function formatAircraftLabelHtml(ac, color) {
     vertical.color = "#000000";
   }
 
-  const smallLine1 = flight || reg || "UNKNOWN";
+  const smallLine1 = flight || String(ac.hex || "").toUpperCase() || "UNKNOWN";
   const smallLine2 = altitudeText || "";
 
   return `
@@ -547,7 +528,6 @@ function buildDetailRow(label, value, valueColor = "#ffffff") {
 
 function formatAircraftDetailPanelHtml(ac, color) {
   const flight = (ac.flight || ac.callsign || "").trim();
-  const reg = (ac.r || ac.reg || "").trim();
   const type = (ac.t || ac.type || "").trim();
   const altitudeText = formatAltitudeText(ac) || "-";
   const machText = formatMachText(ac) || "-";
@@ -570,9 +550,8 @@ function formatAircraftDetailPanelHtml(ac, color) {
 
   return `
     <div style="margin-bottom:4px;color:${escapeHtml(color)};font-size:13px;font-weight:900;">
-      ${escapeHtml(flight || reg || hex || "AIRCRAFT")}
+      ${escapeHtml(flight || hex || "AIRCRAFT")}
     </div>
-    ${reg ? `<div style="margin-bottom:4px;">${escapeHtml(reg)}</div>` : ""}
     ${type ? `<div style="margin-bottom:6px;">${escapeHtml(type)}</div>` : ""}
     ${buildDetailRow("ALT", altitudeText)}
     ${buildDetailRow("MACH", machText)}
@@ -1176,33 +1155,20 @@ async function fetchJson(url, timeoutMs = FETCH_TIMEOUT_MS) {
 
 function indexAircraftList(aircraftList) {
   const byHex = new Map();
-  const byReg = new Map();
 
   for (const ac of aircraftList || []) {
     const hex = normalizeHex(ac.hex);
-    const reg = normalizeReg(ac.r || ac.reg);
-
     if (hex && !byHex.has(hex)) byHex.set(hex, ac);
-    if (reg && !byReg.has(reg)) byReg.set(reg, ac);
   }
 
-  return { byHex, byReg };
+  return { byHex };
 }
 
 async function fetchProviderByHex(provider, targets) {
   const hexes = [...new Set(targets.map(t => t.hex).filter(Boolean))];
   if (hexes.length === 0) return [];
 
-  const url = buildProviderUrl(provider, "hex", hexes.join(","));
-  const data = await fetchJson(url);
-  return Array.isArray(data.ac) ? data.ac : [];
-}
-
-async function fetchProviderByReg(provider, targets) {
-  const regs = [...new Set(targets.map(t => t.reg).filter(Boolean))];
-  if (regs.length === 0) return [];
-
-  const url = buildProviderUrl(provider, "reg", regs.join(","));
+  const url = buildProviderUrl(provider, hexes.join(","));
   const data = await fetchJson(url);
   return Array.isArray(data.ac) ? data.ac : [];
 }
@@ -1219,64 +1185,27 @@ async function fetchBatchAircraftData() {
     if (unresolvedTargets.length === 0) break;
 
     try {
-      let providerFoundCount = 0;
+      const aircraft = dedupeAircraftList(await fetchProviderByHex(provider, unresolvedTargets));
+      anyProviderSucceeded = true;
 
-      /* 1차: HEX */
-      let hexAircraft = [];
-      try {
-        hexAircraft = dedupeAircraftList(await fetchProviderByHex(provider, unresolvedTargets));
-        anyProviderSucceeded = true;
-      } catch (err) {
-        lastError = err;
-      }
-
-      if (hexAircraft.length > 0) {
-        const { byHex, byReg } = indexAircraftList(hexAircraft);
-        const { found, missingTargets } = resolveAircraftForTargets(unresolvedTargets, byHex, byReg);
-
-        providerFoundCount += found.size;
-
-        for (const [targetKey, ac] of found.entries()) {
-          if (!resolvedMap.has(targetKey)) {
-            resolvedMap.set(targetKey, ac);
-          }
-        }
-
-        unresolvedTargets = missingTargets;
-      }
-
-      if (unresolvedTargets.length === 0) {
-        if (providerFoundCount > 0) lastGoodProviderId = provider.id;
+      if (aircraft.length === 0) {
         continue;
       }
 
-      /* 2차: REG rescue */
-      let regAircraft = [];
-      try {
-        regAircraft = dedupeAircraftList(await fetchProviderByReg(provider, unresolvedTargets));
-        anyProviderSucceeded = true;
-      } catch (err) {
-        lastError = err;
-      }
+      const { byHex } = indexAircraftList(aircraft);
+      const { found, missingTargets } = resolveAircraftForTargets(unresolvedTargets, byHex);
 
-      if (regAircraft.length > 0) {
-        const { byHex, byReg } = indexAircraftList(regAircraft);
-        const { found, missingTargets } = resolveAircraftForTargets(unresolvedTargets, byHex, byReg);
-
-        providerFoundCount += found.size;
+      if (found.size > 0) {
+        lastGoodProviderId = provider.id;
 
         for (const [targetKey, ac] of found.entries()) {
           if (!resolvedMap.has(targetKey)) {
             resolvedMap.set(targetKey, ac);
           }
         }
-
-        unresolvedTargets = missingTargets;
       }
 
-      if (providerFoundCount > 0) {
-        lastGoodProviderId = provider.id;
-      }
+      unresolvedTargets = missingTargets;
     } catch (err) {
       lastError = err;
     }
