@@ -37,9 +37,25 @@ TARGETS = TARGETS.slice(0, 5);
 
 /* ------------------ API / SETTINGS ------------------ */
 
-const ADSB_API_BASES = [
-  "https://api.adsb.lol",
-  "https://api.adsb.one"
+const ADSB_PROVIDERS = [
+  {
+    id: "adsb_lol",
+    base: "https://api.adsb.lol",
+    hexPath: "v2/hex",
+    regPath: "v2/reg"
+  },
+  {
+    id: "adsb_one",
+    base: "https://api.adsb.one",
+    hexPath: "v2/hex",
+    regPath: "v2/reg"
+  },
+  {
+    id: "adsb_fi",
+    base: "https://opendata.adsb.fi/api",
+    hexPath: "v2/hex",
+    regPath: "v2/registration"
+  }
 ];
 
 const POLL_INTERVAL_MS = 5000;
@@ -101,7 +117,7 @@ const aircraftStates = new Map();
 }
 */
 
-let lastGoodApiBase = null;
+let lastGoodProviderId = null;
 let activeFollowTargetKey = null;
 
 /* 상세정보 패널 상태 */
@@ -241,6 +257,63 @@ function normalizeHex(v) {
 }
 
 /* KML 쪽 0~360 좌표계에 맞춰 항공기 longitude 보정 */
+
+function getOrderedProviders() {
+  if (!lastGoodProviderId) return [...ADSB_PROVIDERS];
+
+  const preferred = ADSB_PROVIDERS.find(p => p.id === lastGoodProviderId);
+  const others = ADSB_PROVIDERS.filter(p => p.id !== lastGoodProviderId);
+
+  return preferred ? [preferred, ...others] : [...ADSB_PROVIDERS];
+}
+
+function buildProviderUrl(provider, type, joinedValue) {
+  const path = type === "hex" ? provider.hexPath : provider.regPath;
+  return `${provider.base}/${path}/${encodeURIComponent(joinedValue)}`;
+}
+
+function dedupeAircraftList(list) {
+  const result = [];
+  const seen = new Set();
+
+  for (const ac of list || []) {
+    const hex = normalizeHex(ac.hex);
+    const reg = normalizeReg(ac.r || ac.reg);
+    const key = hex ? `hex:${hex}` : (reg ? `reg:${reg}` : "");
+
+    if (!key) {
+      result.push(ac);
+      continue;
+    }
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(ac);
+  }
+
+  return result;
+}
+
+function resolveAircraftForTargets(targets, byHex, byReg) {
+  const found = new Map();
+  const missingTargets = [];
+
+  for (const target of targets) {
+    let ac = null;
+
+    if (target.hex) ac = byHex.get(target.hex) || null;
+    if (!ac && target.reg) ac = byReg.get(target.reg) || null;
+
+    if (ac) {
+      found.set(target.key, ac);
+    } else {
+      missingTargets.push(target);
+    }
+  }
+
+  return { found, missingTargets };
+}
+
 function normalizeAircraftLon(lon) {
   let x = Number(lon);
   if (!isFinite(x)) return x;
@@ -1065,7 +1138,7 @@ function animateAircraftIfNeeded(target, prevAc, nextAc) {
   state.animationFrameId = requestAnimationFrame(step);
 }
 
-/* ------------------ ADS-B FETCH (BATCH) ------------------ */
+/* ------------------ ADS-B FETCH (PER-TARGET RESCUE) ------------------ */
 
 async function fetchJson(url) {
   const res = await fetch(url, { cache: "no-store" });
@@ -1090,57 +1163,83 @@ function indexAircraftList(aircraftList) {
   return { byHex, byReg };
 }
 
+async function fetchProviderAircraftData(provider, targets) {
+  const regs = [...new Set(targets.map(t => t.reg).filter(Boolean))];
+  const hexes = [...new Set(targets.map(t => t.hex).filter(Boolean))];
+
+  let aircraft = [];
+
+  if (hexes.length > 0) {
+    const hexUrl = buildProviderUrl(provider, "hex", hexes.join(","));
+    const hexData = await fetchJson(hexUrl);
+    if (Array.isArray(hexData.ac)) aircraft.push(...hexData.ac);
+  }
+
+  if (regs.length > 0) {
+    const regUrl = buildProviderUrl(provider, "reg", regs.join(","));
+    const regData = await fetchJson(regUrl);
+    if (Array.isArray(regData.ac)) aircraft.push(...regData.ac);
+  }
+
+  return dedupeAircraftList(aircraft);
+}
+
 async function fetchBatchAircraftData() {
-  const bases = lastGoodApiBase
-    ? [lastGoodApiBase, ...ADSB_API_BASES.filter(x => x !== lastGoodApiBase)]
-    : [...ADSB_API_BASES];
+  const providers = getOrderedProviders();
 
-  const regs = [...new Set(TARGETS.map(t => t.reg).filter(Boolean))];
-  const hexes = [...new Set(TARGETS.map(t => t.hex).filter(Boolean))];
-
+  let resolvedMap = new Map();       // target.key -> aircraft
+  let unresolvedTargets = [...TARGETS];
+  let anyProviderSucceeded = false;
   let lastError = null;
 
-  for (const base of bases) {
+  for (const provider of providers) {
+    if (unresolvedTargets.length === 0) break;
+
     try {
-      let aircraft = [];
+      const aircraft = await fetchProviderAircraftData(provider, unresolvedTargets);
+      anyProviderSucceeded = true;
 
-      if (hexes.length > 0) {
-        const url = `${base}/v2/hex/${encodeURIComponent(hexes.join(","))}`;
-        const data = await fetchJson(url);
-        if (Array.isArray(data.ac)) aircraft.push(...data.ac);
+      if (aircraft.length === 0) {
+        continue;
       }
 
-      if (regs.length > 0) {
-        const url = `${base}/v2/reg/${encodeURIComponent(regs.join(","))}`;
-        const data = await fetchJson(url);
-        if (Array.isArray(data.ac)) aircraft.push(...data.ac);
+      const { byHex, byReg } = indexAircraftList(aircraft);
+      const { found, missingTargets } = resolveAircraftForTargets(unresolvedTargets, byHex, byReg);
+
+      if (found.size > 0) {
+        lastGoodProviderId = provider.id;
+
+        for (const [targetKey, ac] of found.entries()) {
+          if (!resolvedMap.has(targetKey)) {
+            resolvedMap.set(targetKey, ac);
+          }
+        }
       }
 
-      lastGoodApiBase = base;
-      return aircraft;
+      unresolvedTargets = missingTargets;
     } catch (err) {
       lastError = err;
     }
   }
 
-  throw lastError || new Error("Aircraft batch fetch failed");
+  if (!anyProviderSucceeded && lastError) {
+    throw lastError;
+  }
+
+  return resolvedMap;
 }
 
 async function pollAircraft() {
   if (!TARGETS.length) return;
 
   try {
-    const aircraft = await fetchBatchAircraftData();
-    const { byHex, byReg } = indexAircraftList(aircraft);
+    const resolvedMap = await fetchBatchAircraftData();
 
     for (const target of TARGETS) {
       const state = aircraftStates.get(target.key);
       if (!state) continue;
 
-      let ac = null;
-
-      if (target.hex) ac = byHex.get(target.hex) || null;
-      if (!ac && target.reg) ac = byReg.get(target.reg) || null;
+      const ac = resolvedMap.get(target.key) || null;
 
       if (!ac) {
         state.isLive = false;
