@@ -759,8 +759,8 @@ function applyControlButtonStyle(btn) {
 function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
   applyControlButtonStyle(btn);
   btn.style.width = "auto";
-  btn.style.minWidth = "104px";
-  btn.style.maxWidth = "140px";
+  btn.style.minWidth = "84px";
+  btn.style.maxWidth = "98px";
   btn.style.display = "flex";
   btn.style.alignItems = "center";
   btn.style.justifyContent = "flex-start";
@@ -791,7 +791,7 @@ function buildAircraftButtonInnerHtml(label, color) {
       overflow:hidden;
       text-overflow:ellipsis;
       white-space:nowrap;
-      max-width:100px;
+      max-width:78px;
       display:inline-block;
       font-size:11px;
       ${label.startsWith("HEX:") ? "font-family:Consolas, Monaco, monospace;" : ""}
@@ -948,14 +948,12 @@ function createToggleButton() {
   aircraftList.style.display = "grid";
 
   /* 2열, 각 열당 5개 */
- aircraftList.style.gridTemplateColumns = "repeat(2, max-content)";
-aircraftList.style.gridAutoFlow = "row";
-  aircraftList.style.gridAutoColumns = "max-content";
-
-  aircraftList.style.gap = "6px";
-  aircraftList.style.alignItems = "start";
-  aircraftList.style.justifyContent = "start";
-  aircraftList.style.maxWidth = "calc(100vw - 16px)";
+aircraftList.style.gridTemplateColumns = "repeat(5, max-content)";
+aircraftList.style.gridAutoRows = "max-content";
+aircraftList.style.gap = "6px";
+aircraftList.style.alignItems = "start";
+aircraftList.style.justifyContent = "start";
+aircraftList.style.maxWidth = "calc(100vw - 16px)";
 
   wrap.appendChild(acBtn);
   wrap.appendChild(aircraftList);
