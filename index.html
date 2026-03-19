@@ -581,6 +581,11 @@
       return rings.map(ring => unwrapRingSequence(ring, renderContext?.referenceLon));
     }
 
+    /* 전역 공유: aircraft.js가 KML과 같은 기준을 쓰도록 */
+    window.__wrapLon180 = wrapLon180;
+    window.__shiftLonNearReference = shiftLonNearReference;
+    window.__ROUTE_RENDER_REFERENCE_LON = null;
+
     /* -----------------------------
        영공 라벨 판별
     ----------------------------- */
@@ -639,10 +644,6 @@
       return fallbackColor || "#00ff00";
     }
 
-    /* -----------------------------
-       endpoint helpers
-    ----------------------------- */
-
     function compressConsecutiveByName(features) {
       const result = [];
       for (const f of features) {
@@ -691,10 +692,6 @@
       if (!feature.name || !String(feature.name).trim()) return false;
       return true;
     }
-
-    /* -----------------------------
-       icon52.png / triangle
-    ----------------------------- */
 
     function isIcon52ShapePoint(feature) {
       if (!feature || feature.type !== "Point") return false;
@@ -826,10 +823,6 @@
 
     map.on("zoomend", updateWaypointZoomLabels);
 
-    /* -----------------------------
-       NDB 성능 helpers
-    ----------------------------- */
-
     function isLatLngInExpandedBounds(lat, lon, padRatio = 0.15) {
       const bounds = map.getBounds();
       const south = bounds.getSouth();
@@ -847,10 +840,6 @@
         lon <= (east + lonPad)
       );
     }
-
-    /* -----------------------------
-       GPX
-    ----------------------------- */
 
     function parseGPX(text) {
       const xml = parseXml(text);
@@ -880,6 +869,8 @@
 
       const referenceLon = wrapLon180(points[0].lon);
       const renderContext = { referenceLon };
+
+      window.__ROUTE_RENDER_REFERENCE_LON = referenceLon;
 
       const latlngs = [];
       let prevLon = shiftLonNearReference(points[0].lon, referenceLon);
@@ -932,16 +923,7 @@
 
         addToRouteBounds(marker, sourceName);
       });
-
-      console.log("Flight Route Loaded:", sourceName, "GPX", {
-        points: points.length,
-        referenceLon
-      });
     }
-
-    /* -----------------------------
-       KML helpers
-    ----------------------------- */
 
     function parseCoordinates(coordText) {
       if (!coordText) return [];
@@ -1159,10 +1141,6 @@
       return features;
     }
 
-    /* -----------------------------
-       KML draw
-    ----------------------------- */
-
     function addPointMarkerInstance(latlng, feature, targetLayer, sourceName, popupHtml, options = {}) {
       const labelStyle = getLabelStyle(feature.style);
       const iconStyle = getIconStyle(feature.style);
@@ -1305,7 +1283,11 @@
       const zoom = map.getZoom();
 
       ndbRawData.forEach(feature => {
-        const bestLon = getNearestWorldCopyLon(feature.coords.lon);
+        const refLon = Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)
+          ? window.__ROUTE_RENDER_REFERENCE_LON
+          : map.getCenter().lng;
+
+        const bestLon = shiftLonNearReference(feature.coords.lon, refLon);
         const latlng = [feature.coords.lat, bestLon];
 
         if (!isLatLngInExpandedBounds(latlng[0], latlng[1], NDB_BOUNDS_PAD_RATIO)) {
@@ -1460,7 +1442,7 @@
         destMarker.bindPopup(
           buildPopupHtml(
             destFeature.name || "",
-            destFeature.description || "",
+            depFeature?.description || "",
             destFeature.extraRows || []
           ),
           POPUP_OPTIONS
@@ -1482,6 +1464,9 @@
       }
 
       const renderContext = getRenderContext(features);
+
+      window.__ROUTE_RENDER_REFERENCE_LON = renderContext.referenceLon;
+
       const pointFeatures = features.filter(f => f.type === "Point");
       const lineFeatures = features.filter(f => f.type === "LineString");
       const polygonFeatures = features.filter(f => f.type === "Polygon");
@@ -1514,22 +1499,7 @@
       });
 
       drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName, renderContext);
-
-      console.log("Flight Route Loaded:", sourceName, "KML", {
-        points: pointFeatures.length,
-        lines: lineFeatures.length,
-        polygons: polygonFeatures.length,
-        departureName: routeEndpoints.departureFeature?.name || "",
-        destinationName: routeEndpoints.destinationFeature?.name || "",
-        departureCoord: routeEndpoints.departureCoord,
-        destinationCoord: routeEndpoints.destinationCoord,
-        referenceLon: renderContext.referenceLon
-      });
     }
-
-    /* -----------------------------
-       NDB Toggle Button
-    ----------------------------- */
 
     function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
@@ -1577,10 +1547,6 @@
     }
 
     createNdbToggleControl().addTo(map);
-
-    /* -----------------------------
-       load
-    ----------------------------- */
 
     async function loadByFilename(filename) {
       const ext = getExtension(filename);
