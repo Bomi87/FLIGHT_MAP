@@ -654,30 +654,34 @@
       return result;
     }
 
-    function getRouteEndpoints(pointFeatures) {
-      const endpointCandidates = compressConsecutiveByName(
-        pointFeatures.filter(f => !isAirspaceLabelFeature(f))
-      );
+  function getRouteEndpoints(pointFeatures) {
+  const endpointCandidates = compressConsecutiveByName(
+    pointFeatures.filter(f =>
+      !isAirspaceLabelFeature(f) &&
+      !isTriangleShapePoint(f) &&
+      !isIcon52ShapePoint(f)
+    )
+  );
 
-      if (endpointCandidates.length >= 2) {
-        const depFeature = endpointCandidates[0];
-        const destFeature = endpointCandidates[endpointCandidates.length - 1];
+  if (endpointCandidates.length >= 2) {
+    const depFeature = endpointCandidates[0];
+    const destFeature = endpointCandidates[endpointCandidates.length - 1];
 
-        return {
-          departureFeature: depFeature,
-          destinationFeature: destFeature,
-          departureCoord: depFeature.coords,
-          destinationCoord: destFeature.coords
-        };
-      }
+    return {
+      departureFeature: depFeature,
+      destinationFeature: destFeature,
+      departureCoord: depFeature.coords,
+      destinationCoord: destFeature.coords
+    };
+  }
 
-      return {
-        departureFeature: null,
-        destinationFeature: null,
-        departureCoord: null,
-        destinationCoord: null
-      };
-    }
+  return {
+    departureFeature: null,
+    destinationFeature: null,
+    departureCoord: null,
+    destinationCoord: null
+  };
+}
 
     function isEndpointPointFeature(feature, routeEndpoints) {
       return (
