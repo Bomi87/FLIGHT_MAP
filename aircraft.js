@@ -766,9 +766,10 @@ function applyControlButtonStyle(btn) {
 
 function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
   applyControlButtonStyle(btn);
-  btn.style.width = "100%";
-  btn.style.minWidth = "0";
-  btn.style.maxWidth = "none";
+  btn.style.width = "auto";
+btn.style.minWidth = "88px";
+btn.style.maxWidth = "140px";
+btn.style.flex = "0 0 auto";
   btn.style.height = "26px";
   btn.style.display = "flex";
   btn.style.alignItems = "center";
@@ -945,8 +946,8 @@ function createToggleButton() {
   wrap.style.display = "flex";
   wrap.style.flexDirection = "column";
   wrap.style.gap = "6px";
-  wrap.style.width = "calc(100vw - 16px)";
-  wrap.style.maxWidth = "calc(100vw - 16px)";
+  wrap.style.width = "auto";
+wrap.style.maxWidth = "calc(100vw - 16px)";
   wrap.style.boxSizing = "border-box";
 
   const acBtn = document.createElement("button");
@@ -962,9 +963,13 @@ function createToggleButton() {
 
   const aircraftList = document.createElement("div");
   aircraftList.id = "aircraft-follow-list";
-  aircraftList.style.display = "grid";
-  aircraftList.style.gridTemplateColumns = "repeat(5, minmax(0, 1fr))";
-  aircraftList.style.gridAutoRows = "26px";
+ aircraftList.style.display = "flex";
+aircraftList.style.flexWrap = "wrap";
+aircraftList.style.gap = "4px";
+aircraftList.style.alignItems = "flex-start";
+aircraftList.style.justifyContent = "flex-start";
+aircraftList.style.width = "auto";
+aircraftList.style.maxWidth = "calc(100vw - 16px)";
   aircraftList.style.gap = "4px";
   aircraftList.style.alignItems = "stretch";
   aircraftList.style.justifyContent = "stretch";
