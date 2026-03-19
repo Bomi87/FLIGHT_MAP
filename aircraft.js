@@ -197,6 +197,7 @@ function initAircraftStates() {
       buttonEl: null,
       isLive: false,
       staleCount: 0
+      fixedLabel: getHexDescription(target.hex), 
     });
   });
 }
@@ -373,18 +374,19 @@ function injectAircraftUiCss() {
 /* ------------------ BUTTON LABEL ------------------ */
 
 function getAircraftButtonLabel(ac, target) {
-  const hex = (ac?.hex || target?.hex || "").toLowerCase().trim();
-  const fixedName = getHexDescription(hex);
+  const state = aircraftStates.get(target.key);
 
-  /* 지정한 HEX는 ADS-B 연결 여부와 상관없이 항상 고정 이름 표시 */
-  if (fixedName) return fixedName;
+  // ✅ 고정값 있으면 무조건 이거 사용
+  if (state?.fixedLabel) {
+    return state.fixedLabel;
+  }
 
   const callsign = (ac?.flight || ac?.callsign || "").trim();
-  const hexUpper = hex.toUpperCase();
+  const hex = (ac?.hex || target?.hex || "").toUpperCase();
 
-  if (callsign && hexUpper) return `${callsign} (${hexUpper})`;
+  if (callsign && hex) return `${callsign} (${hex})`;
   if (callsign) return callsign;
-  if (hexUpper) return `HEX: ${hexUpper}`;
+  if (hex) return `HEX: ${hex}`;
   return "UNKNOWN";
 }
 
@@ -862,7 +864,7 @@ function refreshAircraftFollowButtons() {
     const btn = document.createElement("button");
     btn.type = "button";
 
-    const label = getAircraftButtonLabel(state.lastAircraft, target);
+ const label = getAircraftButtonLabel(state.lastAircraft, target);
     const isActive = activeFollowTargetKey === target.key;
     const isLive = !!state.isLive;
 
