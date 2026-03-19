@@ -31,7 +31,7 @@ if (multiHexes.length) {
 }
 
 /* 최대 10대 */
-TARGETS = TARGETS.slice(0, 10);
+TARGETS = TARGETS.slice(0, 12);
 
 /* ------------------ HEX DESCRIPTION ------------------ */
 
@@ -121,7 +121,9 @@ const AIRCRAFT_COLORS = [
   "#fd7e14",
   "#20c997",
   "#e83e8c",
-  "#6610f2"
+  "#6610f2",
+  "#ff4444",
+  "#00c853"
 ];
 
 /* ------------------ STATE ------------------ */
