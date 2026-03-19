@@ -764,11 +764,11 @@ function applyControlButtonStyle(btn) {
 
 function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
   applyControlButtonStyle(btn);
-  btn.style.width = "auto";
-  btn.style.minWidth = "88px";
-  btn.style.maxWidth = "120px";
-  btn.style.flex = "0 0 auto";
-  btn.style.height = "26px";
+  btn.style.width = "92px";
+  btn.style.minWidth = "92px";
+  btn.style.maxWidth = "92px";
+  btn.style.flex = "0 0 92px";
+  btn.style.height = "24px";
   btn.style.display = "flex";
   btn.style.alignItems = "center";
   btn.style.justifyContent = "flex-start";
@@ -785,6 +785,7 @@ function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
     ? `0 0 0 1px ${color}33, 0 1px 4px rgba(0,0,0,0.14)`
     : "0 1px 4px rgba(0,0,0,0.14)";
   btn.style.boxSizing = "border-box";
+  btn.style.overflow = "hidden";
 }
 
 function buildAircraftButtonInnerHtml(label, color) {
@@ -799,7 +800,7 @@ function buildAircraftButtonInnerHtml(label, color) {
       display:inline-block;
       box-sizing:border-box;
     "></span>
-    <span style="
+    <span class="aircraft-btn-text" style="
       overflow:hidden;
       text-overflow:ellipsis;
       white-space:nowrap;
@@ -812,7 +813,18 @@ function buildAircraftButtonInnerHtml(label, color) {
     ">${escapeHtml(label)}</span>
   `;
 }
+function fitAircraftButtonText(btn) {
+  const textEl = btn.querySelector(".aircraft-btn-text");
+  if (!textEl) return;
 
+  let fontSize = 10;
+  textEl.style.fontSize = fontSize + "px";
+
+  while (fontSize > 7 && textEl.scrollWidth > textEl.clientWidth) {
+    fontSize -= 0.5;
+    textEl.style.fontSize = fontSize + "px";
+  }
+}
 function focusAllAircraft() {
   activeFollowTargetKey = null;
   refreshAircraftFollowButtons();
@@ -877,9 +889,9 @@ function refreshAircraftFollowButtons() {
     const isLive = !!state.isLive;
 
     applyAircraftFollowButtonStyle(btn, state.color, isActive, isLive);
-    btn.innerHTML = buildAircraftButtonInnerHtml(label, state.color);
-    btn.title = isLive ? label : `${label} (NOT LIVE)`;
-
+btn.innerHTML = buildAircraftButtonInnerHtml(label, state.color);
+fitAircraftButtonText(btn);
+btn.title = isLive ? label : `${label} (NOT LIVE)`;
     btn.onclick = () => {
       const latestState = aircraftStates.get(target.key);
       if (!latestState) return;
