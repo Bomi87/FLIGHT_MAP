@@ -373,14 +373,18 @@ function injectAircraftUiCss() {
 /* ------------------ BUTTON LABEL ------------------ */
 
 function getAircraftButtonLabel(ac, target) {
-  const callsign = (ac?.flight || ac?.callsign || "").trim();
-  const hex = (ac?.hex || target?.hex || "").toUpperCase();
-  const desc = getHexDescription(ac?.hex || target?.hex);
+  const hex = (ac?.hex || target?.hex || "").toLowerCase().trim();
+  const fixedName = getHexDescription(hex);
 
-  if (callsign && hex) return `${callsign} (${hex})`;
+  /* 지정한 HEX는 ADS-B 연결 여부와 상관없이 항상 고정 이름 표시 */
+  if (fixedName) return fixedName;
+
+  const callsign = (ac?.flight || ac?.callsign || "").trim();
+  const hexUpper = hex.toUpperCase();
+
+  if (callsign && hexUpper) return `${callsign} (${hexUpper})`;
   if (callsign) return callsign;
-  if (desc) return desc;
-  if (hex) return `HEX: ${hex}`;
+  if (hexUpper) return `HEX: ${hexUpper}`;
   return "UNKNOWN";
 }
 
