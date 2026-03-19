@@ -30,7 +30,28 @@ if (multiHexes.length) {
   }];
 }
 
-TARGETS = TARGETS.slice(0, 5);
+/* 최대 10대 */
+TARGETS = TARGETS.slice(0, 10);
+
+/* ------------------ HEX DESCRIPTION ------------------ */
+
+const HEX_INFO_MAP = {
+  "71c550": "현대 (G650)",
+  "71c290": "현대 (BBJ)",
+  "71c299": "LG (G650)",
+  "71ba27": "한화 (BBJ)",
+  "71c080": "SK (ACJ)",
+  "71c372": "SK (G650)",
+  "71c508": "삼성 (B788)",
+  "71c230": "KE (GLEX)",
+  "71c068": "KE (G650)",
+  "71c222": "KE (BBJ)"
+};
+
+function getHexDescription(hex) {
+  const normalized = String(hex || "").trim().toLowerCase();
+  return HEX_INFO_MAP[normalized] || "";
+}
 
 /* ------------------ API / SETTINGS ------------------ */
 
@@ -95,7 +116,12 @@ const AIRCRAFT_COLORS = [
   "#1e90ff",
   "#28a745",
   "#d63384",
-  "#6f42c1"
+  "#6f42c1",
+  "#17a2b8",
+  "#fd7e14",
+  "#20c997",
+  "#e83e8c",
+  "#6610f2"
 ];
 
 /* ------------------ STATE ------------------ */
@@ -349,9 +375,11 @@ function injectAircraftUiCss() {
 function getAircraftButtonLabel(ac, target) {
   const callsign = (ac?.flight || ac?.callsign || "").trim();
   const hex = (ac?.hex || target?.hex || "").toUpperCase();
+  const desc = getHexDescription(ac?.hex || target?.hex);
 
   if (callsign && hex) return `${callsign} (${hex})`;
   if (callsign) return callsign;
+  if (desc) return desc;
   if (hex) return `HEX: ${hex}`;
   return "UNKNOWN";
 }
@@ -502,7 +530,7 @@ function ensureAircraftDetailPanel() {
   panel.style.left = "12px";
   panel.style.zIndex = "99999";
   panel.style.display = "none";
-  panel.style.maxWidth = "220px";
+  panel.style.maxWidth = "240px";
   panel.style.padding = "6px 8px";
   panel.style.borderRadius = "8px";
   panel.style.background = "rgba(0,0,0,0.18)";
@@ -534,6 +562,7 @@ function formatAircraftDetailPanelHtml(ac, color) {
   const vertical = getVerticalState(ac);
   const vrText = formatVerticalRateText(ac);
   const hex = (ac.hex || "").toUpperCase();
+  const hexDesc = getHexDescription(ac.hex);
 
   let gsText = "-";
   let iasText = "-";
@@ -559,6 +588,7 @@ function formatAircraftDetailPanelHtml(ac, color) {
     ${buildDetailRow("G/S", gsText)}
     ${buildDetailRow("V/S", vsDisplay, vsColor)}
     ${hex ? buildDetailRow("HEX", hex) : ""}
+    ${hexDesc ? buildDetailRow("INFO", hexDesc) : ""}
   `;
 }
 
@@ -729,8 +759,8 @@ function applyControlButtonStyle(btn) {
 function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
   applyControlButtonStyle(btn);
   btn.style.width = "auto";
-  btn.style.minWidth = "104px";
-  btn.style.maxWidth = "168px";
+  btn.style.minWidth = "128px";
+  btn.style.maxWidth = "170px";
   btn.style.display = "flex";
   btn.style.alignItems = "center";
   btn.style.justifyContent = "flex-start";
@@ -916,8 +946,12 @@ function createToggleButton() {
   const aircraftList = document.createElement("div");
   aircraftList.id = "aircraft-follow-list";
   aircraftList.style.display = "grid";
-  aircraftList.style.gridTemplateColumns = "repeat(3, max-content)";
-  aircraftList.style.gridAutoRows = "max-content";
+
+  /* 2열, 각 열당 5개 */
+  aircraftList.style.gridTemplateRows = "repeat(5, max-content)";
+  aircraftList.style.gridAutoFlow = "column";
+  aircraftList.style.gridAutoColumns = "max-content";
+
   aircraftList.style.gap = "6px";
   aircraftList.style.alignItems = "start";
   aircraftList.style.justifyContent = "start";
