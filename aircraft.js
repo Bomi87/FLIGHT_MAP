@@ -30,7 +30,7 @@ if (multiHexes.length) {
   }];
 }
 
-/* 최대 10대 */
+/* 최대 12대 */
 TARGETS = TARGETS.slice(0, 12);
 
 /* ------------------ HEX DESCRIPTION ------------------ */
@@ -241,12 +241,103 @@ function metersPerSecondToKnots(ms) {
   return (Number(ms) || 0) * 1.943844;
 }
 
+function wrapLon180Local(lon) {
+  let x = Number(lon);
+  if (!isFinite(x)) return lon;
+
+  while (x <= -180) x += 360;
+  while (x > 180) x -= 360;
+
+  return x;
+}
+
+function getMapCenterLonSafe() {
+  try {
+    if (map && typeof map.getCenter === "function") {
+      const c = map.getCenter();
+      if (c && isFinite(c.lng)) return Number(c.lng);
+    }
+  } catch (_) {}
+  return 0;
+}
+
+function getRouteReferenceLonSafe() {
+  const v = window.__ROUTE_RENDER_REFERENCE_LON;
+  return Number.isFinite(v) ? Number(v) : NaN;
+}
+
+function shiftLonNearReferenceLocal(lon, referenceLon) {
+  if (typeof window.__shiftLonNearReference === "function") {
+    return window.__shiftLonNearReference(lon, referenceLon);
+  }
+
+  let x = wrapLon180Local(lon);
+  if (!isFinite(referenceLon)) return x;
+
+  while (x - referenceLon > 180) x -= 360;
+  while (x - referenceLon < -180) x += 360;
+
+  return x;
+}
+
+function getClosestWrappedLongitude(rawLon, referenceLon) {
+  const lon = Number(rawLon);
+  const ref = Number(referenceLon);
+
+  if (!isFinite(lon)) return lon;
+  if (!isFinite(ref)) return lon;
+
+  const options = [lon - 720, lon - 360, lon, lon + 360, lon + 720];
+
+  let best = options[0];
+  let minDiff = Math.abs(options[0] - ref);
+
+  for (let i = 1; i < options.length; i++) {
+    const diff = Math.abs(options[i] - ref);
+    if (diff < minDiff) {
+      minDiff = diff;
+      best = options[i];
+    }
+  }
+
+  return best;
+}
+
+function getWrappedLonByMapOrPrev(rawLon, prevLon) {
+  const referenceLon = isFinite(prevLon) ? Number(prevLon) : getMapCenterLonSafe();
+  return getClosestWrappedLongitude(rawLon, referenceLon);
+}
+
+function getWrappedLonUsingRouteReference(rawLon, fallbackPrevLon) {
+  const lon = Number(rawLon);
+  if (!isFinite(lon)) return lon;
+
+  const routeRef = getRouteReferenceLonSafe();
+
+  if (isFinite(routeRef)) {
+    return shiftLonNearReferenceLocal(lon, routeRef);
+  }
+
+  return getWrappedLonByMapOrPrev(lon, fallbackPrevLon);
+}
+
+function getSmallestLonDelta(lon1, lon2) {
+  const a = Number(lon1);
+  const b = Number(lon2);
+  if (!isFinite(a) || !isFinite(b)) return 0;
+
+  let diff = b - a;
+  while (diff > 180) diff -= 360;
+  while (diff < -180) diff += 360;
+  return diff;
+}
+
 function metersBetweenLatLng(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const toRad = d => d * Math.PI / 180;
 
   const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
+  const dLon = toRad(getSmallestLonDelta(lon1, lon2));
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -258,17 +349,26 @@ function metersBetweenLatLng(lat1, lon1, lat2, lon2) {
 
 function averagePoint(points) {
   if (!points || points.length === 0) return null;
-  const sum = points.reduce(
-    (acc, p) => {
-      acc.lat += p.lat;
-      acc.lng += p.lng;
-      return acc;
-    },
-    { lat: 0, lng: 0 }
-  );
+
+  if (points.length === 1) {
+    return {
+      lat: points[0].lat,
+      lng: points[0].lng
+    };
+  }
+
+  const refLon = Number(points[0].lng);
+  let latSum = 0;
+  let lonSum = 0;
+
+  for (const p of points) {
+    latSum += p.lat;
+    lonSum += getClosestWrappedLongitude(p.lng, refLon);
+  }
+
   return {
-    lat: sum.lat / points.length,
-    lng: sum.lng / points.length
+    lat: latSum / points.length,
+    lng: lonSum / points.length
   };
 }
 
@@ -338,17 +438,6 @@ function resolveAircraftForTargets(targets, byHex) {
   }
 
   return { found, missingTargets };
-}
-
-/* KML 쪽 0~360 좌표계에 맞춰 항공기 longitude 보정 */
-function normalizeAircraftLon(lon) {
-  let x = Number(lon);
-  if (!isFinite(x)) return x;
-
-  while (x < 0) x += 360;
-  while (x >= 360) x -= 360;
-
-  return x;
 }
 
 function injectAircraftUiCss() {
@@ -815,6 +904,7 @@ function buildAircraftButtonInnerHtml(label, color) {
     ">${escapeHtml(label)}</span>
   `;
 }
+
 function fitAircraftButtonText(btn) {
   const textEl = btn.querySelector(".aircraft-btn-text");
   if (!textEl) return;
@@ -827,6 +917,7 @@ function fitAircraftButtonText(btn) {
     textEl.style.fontSize = fontSize + "px";
   }
 }
+
 function focusAllAircraft() {
   activeFollowTargetKey = null;
   refreshAircraftFollowButtons();
@@ -891,9 +982,10 @@ function refreshAircraftFollowButtons() {
     const isLive = !!state.isLive;
 
     applyAircraftFollowButtonStyle(btn, state.color, isActive, isLive);
-btn.innerHTML = buildAircraftButtonInnerHtml(label, state.color);
-fitAircraftButtonText(btn);
-btn.title = isLive ? label : `${label} (NOT LIVE)`;
+    btn.innerHTML = buildAircraftButtonInnerHtml(label, state.color);
+    fitAircraftButtonText(btn);
+    btn.title = isLive ? label : `${label} (NOT LIVE)`;
+
     btn.onclick = () => {
       const latestState = aircraftStates.get(target.key);
       if (!latestState) return;
@@ -1007,17 +1099,30 @@ function syncFollowView(target) {
 
 /* ------------------ AIRCRAFT DRAW ------------------ */
 
+function getWrappedAircraftLatLng(target, ac) {
+  const state = aircraftStates.get(target.key);
+  if (!state) return null;
+
+  const lat = Number(ac.lat);
+  const rawLon = Number(ac.lon);
+
+  if (!isFinite(lat) || !isFinite(rawLon)) return null;
+
+  const prevLon = state.lastLatLng ? Number(state.lastLatLng[1]) : NaN;
+  const wrappedLon = getWrappedLonUsingRouteReference(rawLon, prevLon);
+
+  return [lat, wrappedLon];
+}
+
 function ensureAircraftMarker(target, ac) {
   const state = aircraftStates.get(target.key);
   if (!state) return;
 
-  const lat = Number(ac.lat);
-  const lon = normalizeAircraftLon(ac.lon);
+  const newLatLng = getWrappedAircraftLatLng(target, ac);
+  if (!newLatLng) return;
+
   const track = Number(ac.track || ac.true_heading || ac.mag_heading || 0);
 
-  if (isNaN(lat) || isNaN(lon)) return;
-
-  const newLatLng = [lat, lon];
   state.lastLatLng = newLatLng;
 
   const typeCode = ac.t || ac.type || "";
@@ -1066,11 +1171,9 @@ function updateLiveTrail(target, ac) {
   const state = aircraftStates.get(target.key);
   if (!state) return;
 
-  const lat = Number(ac.lat);
-  const lon = normalizeAircraftLon(ac.lon);
-  if (isNaN(lat) || isNaN(lon)) return;
+  const point = getWrappedAircraftLatLng(target, ac);
+  if (!point) return;
 
-  const point = [lat, lon];
   const prev = state.liveTrail[state.liveTrail.length - 1];
 
   if (prev) {
@@ -1122,14 +1225,18 @@ function animateAircraftIfNeeded(target, prevAc, nextAc) {
   }
 
   const fromLat = Number(prevAc.lat);
-  const fromLon = normalizeAircraftLon(prevAc.lon);
+  const fromRawLon = Number(prevAc.lon);
   const toLat = Number(nextAc.lat);
-  const toLon = normalizeAircraftLon(nextAc.lon);
+  const toRawLon = Number(nextAc.lon);
 
-  if ([fromLat, fromLon, toLat, toLon].some(v => isNaN(v))) {
+  if ([fromLat, fromRawLon, toLat, toRawLon].some(v => !isFinite(v))) {
     updateAircraftForTarget(target, nextAc);
     return;
   }
+
+  const referenceLon = state.lastLatLng ? Number(state.lastLatLng[1]) : getRouteReferenceLonSafe();
+  const fromLon = getWrappedLonUsingRouteReference(fromRawLon, referenceLon);
+  const toLon = getWrappedLonUsingRouteReference(toRawLon, fromLon);
 
   if (state.animationFrameId) {
     cancelAnimationFrame(state.animationFrameId);
@@ -1818,9 +1925,16 @@ function appendUserTrailPoint(lat, lng, accuracy, timestamp) {
   serializeTrailState();
 }
 
+function getWrappedUserLon(rawLon) {
+  const prevLon = lastUserLatLng ? Number(lastUserLatLng[1]) : NaN;
+  return getWrappedLonUsingRouteReference(rawLon, prevLon);
+}
+
 function updateUserLocation(position) {
   const lat = position.coords.latitude;
-  const lon = position.coords.longitude;
+  const rawLon = position.coords.longitude;
+  const lon = getWrappedUserLon(rawLon);
+
   const accuracy = position.coords.accuracy || 0;
   const speedKt = metersPerSecondToKnots(position.coords.speed);
   const gpsTimestamp = Number(position.timestamp) || Date.now();
