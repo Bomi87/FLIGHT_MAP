@@ -377,7 +377,6 @@ function injectAircraftUiCss() {
 function getAircraftButtonLabel(ac, target) {
   const state = aircraftStates.get(target.key);
 
-  /* 지정한 HEX는 고정 이름 우선 */
   if (state?.fixedLabel) {
     return state.fixedLabel;
   }
@@ -455,7 +454,6 @@ function getVerticalState(ac) {
   return { arrow: "→", color: "#ffffff" };
 }
 
-/* 항상 보이는 작은 라벨 */
 function formatAircraftLabelHtml(ac, color) {
   const flight = (ac.flight || ac.callsign || "").trim();
   const altitudeText = formatAltitudeText(ac);
@@ -767,9 +765,9 @@ function applyControlButtonStyle(btn) {
 function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
   applyControlButtonStyle(btn);
   btn.style.width = "auto";
-btn.style.minWidth = "88px";
-btn.style.maxWidth = "140px";
-btn.style.flex = "0 0 auto";
+  btn.style.minWidth = "88px";
+  btn.style.maxWidth = "120px";
+  btn.style.flex = "0 0 auto";
   btn.style.height = "26px";
   btn.style.display = "flex";
   btn.style.alignItems = "center";
@@ -947,7 +945,7 @@ function createToggleButton() {
   wrap.style.flexDirection = "column";
   wrap.style.gap = "6px";
   wrap.style.width = "auto";
-wrap.style.maxWidth = "calc(100vw - 16px)";
+  wrap.style.maxWidth = "calc(100vw - 16px)";
   wrap.style.boxSizing = "border-box";
 
   const acBtn = document.createElement("button");
@@ -963,18 +961,13 @@ wrap.style.maxWidth = "calc(100vw - 16px)";
 
   const aircraftList = document.createElement("div");
   aircraftList.id = "aircraft-follow-list";
- aircraftList.style.display = "flex";
-aircraftList.style.flexWrap = "wrap";
-aircraftList.style.gap = "4px";
-aircraftList.style.alignItems = "flex-start";
-aircraftList.style.justifyContent = "flex-start";
-aircraftList.style.width = "auto";
-aircraftList.style.maxWidth = "calc(100vw - 16px)";
+  aircraftList.style.display = "flex";
+  aircraftList.style.flexWrap = "wrap";
   aircraftList.style.gap = "4px";
-  aircraftList.style.alignItems = "stretch";
-  aircraftList.style.justifyContent = "stretch";
-  aircraftList.style.width = "100%";
-  aircraftList.style.maxWidth = "100%";
+  aircraftList.style.alignItems = "flex-start";
+  aircraftList.style.justifyContent = "flex-start";
+  aircraftList.style.width = "auto";
+  aircraftList.style.maxWidth = "calc(100vw - 16px)";
   aircraftList.style.boxSizing = "border-box";
 
   wrap.appendChild(acBtn);
