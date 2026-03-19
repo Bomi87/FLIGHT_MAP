@@ -36,16 +36,16 @@ TARGETS = TARGETS.slice(0, 10);
 /* ------------------ HEX DESCRIPTION ------------------ */
 
 const HEX_INFO_MAP = {
-  "71c550": "현대 (G650)",
-  "71c290": "현대 (BBJ)",
-  "71c299": "LG (G650)",
-  "71ba27": "한화 (BBJ)",
-  "71c080": "SK (ACJ)",
-  "71c372": "SK (G650)",
-  "71c508": "삼성 (B788)",
-  "71c230": "KE (GLEX)",
-  "71c068": "KE (G650)",
-  "71c222": "KE (BBJ)"
+  "71c550": "현대(G650)",
+  "71c290": "현대(BBJ)",
+  "71c299": "LG(G650)",
+  "71ba27": "한화(BBJ)",
+  "71c080": "SK(ACJ)",
+  "71c372": "SK(G650)",
+  "71c508": "삼성(B788)",
+  "71c230": "KE(GLEX)",
+  "71c068": "KE(G650)",
+  "71c222": "KE(BBJ)"
 };
 
 function getHexDescription(hex) {
@@ -140,7 +140,8 @@ const aircraftStates = new Map();
   color,
   buttonEl,
   isLive,
-  staleCount
+  staleCount,
+  fixedLabel
 }
 */
 
@@ -197,7 +198,7 @@ function initAircraftStates() {
       buttonEl: null,
       isLive: false,
       staleCount: 0,
-      fixedLabel: getHexDescription(target.hex), 
+      fixedLabel: getHexDescription(target.hex)
     });
   });
 }
@@ -376,7 +377,7 @@ function injectAircraftUiCss() {
 function getAircraftButtonLabel(ac, target) {
   const state = aircraftStates.get(target.key);
 
-  // ✅ 고정값 있으면 무조건 이거 사용
+  /* 지정한 HEX는 고정 이름 우선 */
   if (state?.fixedLabel) {
     return state.fixedLabel;
   }
@@ -386,7 +387,7 @@ function getAircraftButtonLabel(ac, target) {
 
   if (callsign && hex) return `${callsign} (${hex})`;
   if (callsign) return callsign;
-  if (hex) return `HEX: ${hex}`;
+  if (hex) return `HEX:${hex}`;
   return "UNKNOWN";
 }
 
@@ -753,25 +754,29 @@ function applyControlButtonStyle(btn) {
   btn.style.borderRadius = "8px";
   btn.style.background = "rgba(255,255,255,0.94)";
   btn.style.color = "#111";
-  btn.style.fontSize = "11px";
+  btn.style.fontSize = "10px";
   btn.style.fontWeight = "700";
   btn.style.cursor = "pointer";
   btn.style.boxShadow = "0 1px 4px rgba(0,0,0,0.14)";
   btn.style.backdropFilter = "blur(3px)";
-  btn.style.padding = "0 8px";
+  btn.style.padding = "0 6px";
   btn.style.whiteSpace = "nowrap";
+  btn.style.boxSizing = "border-box";
 }
 
 function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
   applyControlButtonStyle(btn);
-  btn.style.width = "auto";
-  btn.style.minWidth = "84px";
-  btn.style.maxWidth = "98px";
+  btn.style.width = "100%";
+  btn.style.minWidth = "0";
+  btn.style.maxWidth = "none";
+  btn.style.height = "26px";
   btn.style.display = "flex";
   btn.style.alignItems = "center";
   btn.style.justifyContent = "flex-start";
-  btn.style.gap = "6px";
+  btn.style.gap = "4px";
   btn.style.textAlign = "left";
+  btn.style.padding = "0 5px";
+  btn.style.fontSize = "10px";
   btn.style.opacity = isLive ? "1" : "0.42";
   btn.style.filter = isLive ? "none" : "grayscale(35%)";
   btn.style.border = isActive
@@ -780,26 +785,30 @@ function applyAircraftFollowButtonStyle(btn, color, isActive, isLive) {
   btn.style.boxShadow = isActive
     ? `0 0 0 1px ${color}33, 0 1px 4px rgba(0,0,0,0.14)`
     : "0 1px 4px rgba(0,0,0,0.14)";
+  btn.style.boxSizing = "border-box";
 }
 
 function buildAircraftButtonInnerHtml(label, color) {
   return `
     <span style="
-      width:8px;
-      height:8px;
-      min-width:8px;
+      width:6px;
+      height:6px;
+      min-width:6px;
       border-radius:999px;
       background:${escapeHtml(color)};
       border:1px solid rgba(0,0,0,0.35);
       display:inline-block;
+      box-sizing:border-box;
     "></span>
     <span style="
       overflow:hidden;
       text-overflow:ellipsis;
       white-space:nowrap;
-      max-width:78px;
+      min-width:0;
+      flex:1;
       display:inline-block;
-      font-size:11px;
+      font-size:10px;
+      line-height:1;
       ${label.startsWith("HEX:") ? "font-family:Consolas, Monaco, monospace;" : ""}
     ">${escapeHtml(label)}</span>
   `;
@@ -864,7 +873,7 @@ function refreshAircraftFollowButtons() {
     const btn = document.createElement("button");
     btn.type = "button";
 
- const label = getAircraftButtonLabel(state.lastAircraft, target);
+    const label = getAircraftButtonLabel(state.lastAircraft, target);
     const isActive = activeFollowTargetKey === target.key;
     const isLive = !!state.isLive;
 
@@ -936,7 +945,9 @@ function createToggleButton() {
   wrap.style.display = "flex";
   wrap.style.flexDirection = "column";
   wrap.style.gap = "6px";
+  wrap.style.width = "calc(100vw - 16px)";
   wrap.style.maxWidth = "calc(100vw - 16px)";
+  wrap.style.boxSizing = "border-box";
 
   const acBtn = document.createElement("button");
   acBtn.id = "focus-aircraft-btn";
@@ -952,14 +963,14 @@ function createToggleButton() {
   const aircraftList = document.createElement("div");
   aircraftList.id = "aircraft-follow-list";
   aircraftList.style.display = "grid";
-
-  /* 2열, 각 열당 5개 */
-aircraftList.style.gridTemplateColumns = "repeat(5, max-content)";
-aircraftList.style.gridAutoRows = "max-content";
-aircraftList.style.gap = "6px";
-aircraftList.style.alignItems = "start";
-aircraftList.style.justifyContent = "start";
-aircraftList.style.maxWidth = "calc(100vw - 16px)";
+  aircraftList.style.gridTemplateColumns = "repeat(5, minmax(0, 1fr))";
+  aircraftList.style.gridAutoRows = "26px";
+  aircraftList.style.gap = "4px";
+  aircraftList.style.alignItems = "stretch";
+  aircraftList.style.justifyContent = "stretch";
+  aircraftList.style.width = "100%";
+  aircraftList.style.maxWidth = "100%";
+  aircraftList.style.boxSizing = "border-box";
 
   wrap.appendChild(acBtn);
   wrap.appendChild(aircraftList);
