@@ -196,7 +196,7 @@ function initAircraftStates() {
       color: AIRCRAFT_COLORS[idx % AIRCRAFT_COLORS.length],
       buttonEl: null,
       isLive: false,
-      staleCount: 0
+      staleCount: 0,
       fixedLabel: getHexDescription(target.hex), 
     });
   });
