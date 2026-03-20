@@ -3,72 +3,6 @@
 <Document>
 	<name>HL8080 PANC-RKSI PLAN</name>
 	<atom:link rel="app" href="https://www.google.com/earth/about/versions/#earth-pro" title="Google Earth Pro 7.3.7.1094"></atom:link>
-	<StyleMap id="route16">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#route_n16</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#route_h17</styleUrl>
-		</Pair>
-	</StyleMap>
-	<StyleMap id="route17">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#route_n17</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#route_h16</styleUrl>
-		</Pair>
-	</StyleMap>
-	<Style id="route_h16">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://earth.google.com/images/kml-icons/track-directional/track-none.png</href>
-			</Icon>
-		</IconStyle>
-		<LineStyle>
-			<color>ff00aaff</color>
-			<width>5</width>
-		</LineStyle>
-	</Style>
-	<Style id="route_h17">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://earth.google.com/images/kml-icons/track-directional/track-none.png</href>
-			</Icon>
-		</IconStyle>
-		<LineStyle>
-			<color>ffffaaff</color>
-			<width>5</width>
-		</LineStyle>
-	</Style>
-	<Style id="route_n16">
-		<IconStyle>
-			<Icon>
-				<href>https://earth.google.com/images/kml-icons/track-directional/track-none.png</href>
-			</Icon>
-		</IconStyle>
-		<LineStyle>
-			<color>ffffaaff</color>
-			<width>5</width>
-		</LineStyle>
-	</Style>
-	<Style id="route_n17">
-		<IconStyle>
-			<Icon>
-				<href>https://earth.google.com/images/kml-icons/track-directional/track-none.png</href>
-			</Icon>
-		</IconStyle>
-		<LineStyle>
-			<color>ff00aaff</color>
-			<width>5</width>
-		</LineStyle>
-	</Style>
 	<Style id="style_10">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -21406,26 +21340,6 @@
 			<altitudeMode>absolute</altitudeMode>
 			<coordinates>
 				0,0,0 0,0,0 
-			</coordinates>
-		</LineString>
-	</Placemark>
-	<Placemark>
-		<name>Path</name>
-		<styleUrl>#route17</styleUrl>
-		<LineString>
-			<tessellate>1</tessellate>
-			<coordinates>
-				-151.373222,60.874053,0 -152.131789,60.618667,0 -153.905003,59.93605300000001,0 -154.625492,59.643439,0 -154.733431,59.598814,0 -156.278986,58.936539,0 -156.752347,58.72471399999999,0 -158.212806,57.969736,0 -161.999008,55.766664,0 -162.773997,55.267294,0 -176.674111,51.87123099999999,0 174.8825,51.781306,0 171.553728,51.399931,0 165.123283,50.174575,0 160.766597,49.847625,0 159.685556,49.356389,0 153.363872,45.874367,0 147.848511,42.065981,0 144.996092,40.419525,0 142.533033,39.231247,0 140.921483,38.138572,0 140.606114,38.109167,0 140.296056,38.076192,0 139.761208,38.026075,0 139.428458,37.990353,0 139.114886,37.958294,0 138.10365,37.93065,0 137.283633,37.901822,0 133.733756,37.718022,0 133,37.666111,0 132.671944,37.641389,0 131.574167,37.638889,0 130.269444,37.675833,0 129.8475,37.684722,0 129.684444,37.687778,0 128.753778,37.700778,0 128.584444,37.675556,0 128.135278,37.606944,0 127.664444,37.533056,0 
-			</coordinates>
-		</LineString>
-	</Placemark>
-	<Placemark>
-		<name>Path</name>
-		<styleUrl>#route16</styleUrl>
-		<LineString>
-			<tessellate>1</tessellate>
-			<coordinates>
-				-151.926619,61.170825,0 -154.262689,61.13719700000001,0 -154.497139,61.131589,0 -155.634581,61.098581,0 -156.490892,61.072383,0 -158.872228,60.970725,0 -160.475858,60.878069,0 -161.824331,60.78483600000001,0 -166.990436,58.702956,0 -170.233053,57.156803,0 -174,56,0 178.302639,54.227083,0 173.547522,53.53447499999999,0 170.154239,52.93775,0 163.702353,51.607208,0 160.390631,50.19559999999999,0 159.346667,49.71,0 153.003336,46.216667,0 147.475761,42.39105,0 146.859178,41.916083,0 144.996092,40.419525,0 142.533033,39.231247,0 140.921483,38.138572,0 140.606114,38.109167,0 140.296056,38.076192,0 139.761208,38.026075,0 139.428458,37.990353,0 139.114886,37.958294,0 138.10365,37.93065,0 137.283633,37.901822,0 133.733756,37.718022,0 133,37.666111,0 132.671944,37.641389,0 131.574167,37.638889,0 130.269444,37.675833,0 129.8475,37.684722,0 129.684444,37.687778,0 128.753778,37.700778,0 128.584444,37.675556,0 128.135278,37.606944,0 127.664444,37.533056,0 
 			</coordinates>
 		</LineString>
 	</Placemark>
