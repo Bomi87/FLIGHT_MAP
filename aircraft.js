@@ -534,11 +534,11 @@ function getVerticalState(ac) {
 
   if (vr == null) return null;
 
-  if (vr > 300) {
+  if (vr > 200) {
     return { arrow: "▲", color: "#ff3b30" };
   }
 
-  if (vr < -300) {
+  if (vr < -200) {
     return { arrow: "▼", color: "#007aff" };
   }
 
