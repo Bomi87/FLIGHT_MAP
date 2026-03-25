@@ -2,6 +2,7 @@
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
 <Document>
 	<name>HL8080 RKSS-VVNB PLAN</name>
+	<open>1</open>
 	<atom:link rel="app" href="https://www.google.com/earth/about/versions/#earth-pro" title="Google Earth Pro 7.3.7.1094"></atom:link>
 	<StyleMap id="0_0">
 		<Pair>
@@ -6093,6 +6094,48 @@
 			</Icon>
 		</IconStyle>
 	</Style>
+	<Placemark>
+		<name>ntm1</name>
+		<Style>
+			<PolyStyle>
+				<color>7f00ff00</color>
+				<outline>1</outline>
+			</PolyStyle>
+		</Style>
+		<Polygon>
+			<extrude>1</extrude>
+			<altitudeMode>relativeToGround</altitudeMode>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.733333333333,35.0166666666667,91440 133.016666666667,38.0333333333333,91440 133.016666666667,37.45,91440 125.983333333333,31.0166666666667,91440 124.65,33.1,91440 125.733333333333,35.0166666666667,91440 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark>
+		<name>SEV ICE FCST (FL080~FL160)</name>
+		<styleUrl>#stylemap_id0</styleUrl>
+		<Style>
+			<IconStyle>
+				<scale>1</scale>
+				<Icon>
+					<href>https://maps.google.com/mapfiles/kml/pal4/icon52.png</href>
+				</Icon>
+			</IconStyle>
+			<LabelStyle>
+				<color>ff00ff00</color>
+				<scale>1.2</scale>
+			</LabelStyle>
+		</Style>
+		<Point>
+			<extrude>1</extrude>
+			<altitudeMode>relativeToGround</altitudeMode>
+			<coordinates>125.733333333333,35.0166666666667,160000</coordinates>
+		</Point>
+		<gx:balloonVisibility>1</gx:balloonVisibility>
+	</Placemark>
 	<Placemark>
 		<name>&lt;b/&gt;</name>
 		<LookAt>
