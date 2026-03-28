@@ -34,7 +34,7 @@ const HEX_TO_REG_MAP = {
   "71c230": "HL8230",
   "71c068": "HL8068",
   "71c222": "HL8222",
-  "507c88": "UK33020"
+  "71c524": "HL8524"
 };
 
 const REG_TO_HEX_MAP = Object.fromEntries(
