@@ -2118,9 +2118,25 @@ function initAircraftTracking() {
   }
 
   if (TARGETS.length > 0) {
-    pollAircraft();
-    setInterval(pollAircraft, POLL_INTERVAL_MS);
-  }
+  pollAircraft();
+  setInterval(pollAircraft, POLL_INTERVAL_MS);
+}
 }
 
 initAircraftTracking();
+
+
+// 🔥 Render keep-alive (여기에 추가)
+function keepServerAlive() {
+  const url = "https://bomi-flt.onrender.com/healthz";
+
+  // 첫 실행
+  fetch(url).catch(() => {});
+
+  // 10분마다
+  setInterval(() => {
+    fetch(url).catch(() => {});
+  }, 10 * 60 * 1000);
+}
+
+keepServerAlive();
