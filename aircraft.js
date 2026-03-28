@@ -1,3 +1,5 @@
+const FR24_CLIENT_CACHE_TTL = 12000; // 12초
+const fr24ClientCache = new Map();   // hex -> { savedAt, data }
 const params = new URLSearchParams(window.location.search);
 
 /* ------------------ TARGET PARSE ------------------ */
@@ -206,7 +208,9 @@ function initAircraftStates() {
 }
 
 initAircraftStates();
-
+const TARGET_MAP_BY_HEX = new Map(
+  TARGETS.map(t => [t.hex, t])
+);
 /* ------------------ UTILS ------------------ */
 
 function escapeHtml(str) {
@@ -383,6 +387,31 @@ function clonePoint(p) {
 
 function normalizeHex(v) {
   return String(v || "").trim().toLowerCase();
+}
+function getFreshFr24ClientCache(hex) {
+  const key = normalizeHex(hex);
+  if (!key) return null;
+
+  const cached = fr24ClientCache.get(key);
+  if (!cached) return null;
+
+  const ageMs = Date.now() - cached.savedAt;
+  if (ageMs > FR24_CLIENT_CACHE_TTL) {
+    fr24ClientCache.delete(key);
+    return null;
+  }
+
+  return cached.data;
+}
+
+function setFr24ClientCache(ac) {
+  const hex = normalizeHex(ac?.hex);
+  if (!hex) return;
+
+  fr24ClientCache.set(hex, {
+    savedAt: Date.now(),
+    data: ac
+  });
 }
 
 function getAircraftCallsign(ac) {
@@ -1395,21 +1424,40 @@ async function pollAircraft() {
     // 1️⃣ ADS-B 먼저
     let resolvedMap = await fetchBatchAircraftData();
 
-    // 2️⃣ ADS-B 못 찾은 대상 찾기
+    // 2️⃣ ADS-B 못 찾은 대상
     const missingTargets = TARGETS.filter(t => !resolvedMap.has(t.key));
 
-    // 3️⃣ FR24 fallback
-    if (missingTargets.length > 0) {
+    // 3️⃣ 먼저 FR24 클라이언트 fresh cache 확인
+    const fr24ServerTargets = [];
+
+    for (const target of missingTargets) {
+      const cached = getFreshFr24ClientCache(target.hex);
+
+      if (cached) {
+        resolvedMap.set(target.key, cached);
+      } else {
+        fr24ServerTargets.push(target);
+      }
+    }
+
+    // 4️⃣ fresh cache 없는 대상만 서버 fallback 호출
+    if (fr24ServerTargets.length > 0) {
       try {
-        const hexList = missingTargets.map(t => t.hex).join(",");
+        const hexList = fr24ServerTargets.map(t => t.hex).join(",");
         const url = `https://bomi-flt.onrender.com/api/fr24-fallback?hexes=${encodeURIComponent(hexList)}`;
 
         const data = await fetchJson(url, 5000);
 
         if (data?.aircraft?.length > 0) {
           for (const ac of data.aircraft) {
-            const hex = (ac.hex || "").toLowerCase();
-            const target = TARGETS.find(t => t.hex === hex);
+            const hex = normalizeHex(ac.hex);
+            if (!hex) continue;
+
+            // 4-1) 클라이언트 cache 저장
+            setFr24ClientCache(ac);
+
+            // 4-2) 현재 타겟에 반영
+            const target = TARGET_MAP_BY_HEX.get(hex);
             if (target && !resolvedMap.has(target.key)) {
               resolvedMap.set(target.key, ac);
             }
@@ -1420,7 +1468,7 @@ async function pollAircraft() {
       }
     }
 
-    // 4️⃣ 결과 적용
+    // 5️⃣ 결과 적용
     for (const target of TARGETS) {
       const state = aircraftStates.get(target.key);
       if (!state) continue;
@@ -1460,7 +1508,6 @@ async function pollAircraft() {
     isPollingAircraft = false;
   }
 }
-
 /* ------------------ COMPASS / GPS ------------------ */
 
 function getHeadingArrowLatLng(baseLatLng, headingDeg) {
