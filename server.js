@@ -146,33 +146,29 @@ async function getFr24AircraftByHex(hex) {
   const targetHex = String(hex || "").trim().toLowerCase();
   if (!targetHex || !FR24_API_KEY) return null;
 
-  for (const bounds of FR24_BOUNDS_LIST) {
-    try {
-      const data = await fetchFr24LiveByBounds(bounds);
-      const list = pickArrayFromFr24Response(data);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    for (const bounds of FR24_BOUNDS_LIST) {
+      try {
+        const data = await fetchFr24LiveByBounds(bounds);
+        const list = pickArrayFromFr24Response(data);
 
-      if (!list.length) {
-        continue;
+        const found = list.find(item => {
+          const itemHex = String(
+            item?.hex ??
+            item?.aircraftHex ??
+            item?.transponder ??
+            item?.icao24 ??
+            item?.icao ??
+            ""
+          ).trim().toLowerCase();
+
+          return itemHex === targetHex;
+        });
+
+        if (found) return normalizeFr24Aircraft(found);
+      } catch (err) {
+        console.error(`FR24 bounds fetch failed (${bounds}):`, err.message);
       }
-
-      const found = list.find(item => {
-        const itemHex = String(
-          item?.hex ??
-          item?.aircraftHex ??
-          item?.transponder ??
-          item?.icao24 ??
-          item?.icao ??
-          ""
-        ).trim().toLowerCase();
-
-        return itemHex === targetHex;
-      });
-
-      if (found) {
-        return normalizeFr24Aircraft(found);
-      }
-    } catch (err) {
-      console.error(`FR24 bounds fetch failed (${bounds}):`, err.message);
     }
   }
 
