@@ -14,7 +14,7 @@ const FR24_API_KEY = process.env.FR24_API_KEY || "";
 const APP_VERSION = "fr24-reg-direct-v1";
 
 const FETCH_TIMEOUT_MS = 12000;
-const FRESH_CACHE_TTL_MS = 2 * 60 * 1000;    // 2분
+const FRESH_CACHE_TTL_MS = 15 * 1000;
 const STALE_CACHE_TTL_MS = 30 * 60 * 1000;   // 30분
 const BETWEEN_BATCH_DELAY_MS = 350;
 const MAX_REGS_PER_REQUEST = 10;
@@ -457,31 +457,22 @@ app.get("/api/fr24-fallback", async (req, res) => {
     }
 
     const results = [];
-    const remainingHexes = [];
-
-    for (const hex of hexes) {
-      const fresh = getFreshCachedAircraft(hex);
-      if (fresh) {
-        results.push({
-          ...fresh,
-          mode: "fresh-cache"
-        });
-      } else {
-        remainingHexes.push(hex);
-      }
-    }
-
     let foundMap = new Map();
     let unknownHexes = [];
 
-    if (remainingHexes.length) {
-      const liveResult = await getFr24AircraftByHexes(remainingHexes);
+    // 1) 무조건 live 먼저 조회
+    try {
+      const liveResult = await getFr24AircraftByHexes(hexes);
       foundMap = liveResult.foundMap;
       unknownHexes = liveResult.unknownHexes;
+    } catch (err) {
+      console.error("FR24 live lookup failed:", err.message || err);
     }
 
-    for (const hex of remainingHexes) {
+    // 2) live 결과 우선 반영, 없으면 cache fallback
+    for (const hex of hexes) {
       const live = foundMap.get(hex);
+
       if (live) {
         results.push({
           ...live,
@@ -494,7 +485,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
       if (fresh) {
         results.push({
           ...fresh,
-          mode: "fresh-cache-after-live"
+          mode: "fresh-cache"
         });
         continue;
       }
@@ -508,6 +499,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
       }
     }
 
+    // 3) 입력한 순서대로 정렬
     const orderMap = new Map(hexes.map((hex, idx) => [hex, idx]));
     results.sort((a, b) => {
       return (orderMap.get(a.hex) ?? 9999) - (orderMap.get(b.hex) ?? 9999);
