@@ -177,50 +177,43 @@ function cleanupCache() {
   }
 }
 
-async function getFr24AircraftByHex(hex) {
-  const targetHex = String(hex || "").trim().toLowerCase();
-  if (!targetHex || !FR24_API_KEY) return null;
+console.log(`search hex=${targetHex}`);
 
-  console.log(`search hex=${targetHex}`);
+for (let attempt = 0; attempt < 3; attempt++) {
+  for (const bounds of FR24_BOUNDS_LIST) {
+    try {
+      const data = await fetchFr24LiveByBounds(bounds);
+      const list = pickArrayFromFr24Response(data);
 
-  // 작동하던 수준으로만 유지
-  for (let attempt = 0; attempt < 3; attempt++) {
-    for (const bounds of FR24_BOUNDS_LIST) {
-      try {
-        const data = await fetchFr24LiveByBounds(bounds);
-        const list = pickArrayFromFr24Response(data);
+      console.log(
+        `attempt=${attempt + 1}, bounds=${bounds}, list.length=${list.length}`
+      );
 
-        console.log(
-          `attempt=${attempt + 1}, bounds=${bounds}, list.length=${list.length}`
-        );
+      const found = list.find(item => {
+        const itemHex = String(
+          item?.hex ??
+          item?.aircraftHex ??
+          item?.transponder ??
+          item?.icao24 ??
+          item?.icao ??
+          ""
+        ).trim().toLowerCase();
 
-        const found = list.find(item => {
-          const itemHex = String(
-            item?.hex ??
-            item?.aircraftHex ??
-            item?.transponder ??
-            item?.icao24 ??
-            item?.icao ??
-            ""
-          ).trim().toLowerCase();
+        return itemHex === targetHex;
+      });
 
-          return itemHex === targetHex;
-        });
-
-        if (found) {
-          console.log(`found ${targetHex} in bounds=${bounds}`);
-          const normalized = normalizeFr24Aircraft(found);
-          if (normalized) setCachedAircraft(normalized);
-          return normalized;
-        }
-      } catch (err) {
-        console.error(`FR24 bounds fetch failed (${bounds}):`, err.message);
+      if (found) {
+        console.log(`found ${targetHex} in bounds=${bounds}`);
+        return normalizeFr24Aircraft(found);
       }
+    } catch (err) {
+      console.error(`FR24 bounds fetch failed (${bounds}):`, err.message);
     }
   }
+}
 
-  console.log(`not found: ${targetHex}`);
-  return null;
+console.log(`not found: ${targetHex}`);
+return null;
 }
 
 app.get("/api/fr24-fallback", async (req, res) => {
