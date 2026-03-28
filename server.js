@@ -12,23 +12,14 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const FR24_API_KEY = process.env.FR24_API_KEY || "";
 
-/*
-  FR24 live flight positions
-  bounds 순서: north,south,west,east
-
-  중국 보완용 3단계 bounds:
-  1) 중국 중심
-  2) 동아시아 확장
-  3) 아시아 광역
-*/
 const FR24_BOUNDS_LIST = [
-  "40,30,120,140",   // 한국
-  "50,20,100,150",   // 동아시아
-  "60,-10,60,180",   // 아시아 확장
-  "85,-30,-20,180"   // 마지막 fallback
+  "45,35,105,125", // 중국 북부/베이징
+  "40,28,112,124", // 동부/상하이
+  "32,20,105,122", // 남부/광저우-선전
+  "35,22,95,112",  // 내륙/청두-충칭
+  "50,35,85,110",  // 서북부
+  "55,15,73,135"   // 중국+주변 fallback
 ];
-
-/* ------------------ FR24 FETCH ------------------ */
 
 async function fetchFr24LiveByBounds(bounds) {
   const url =
@@ -146,11 +137,17 @@ async function getFr24AircraftByHex(hex) {
   const targetHex = String(hex || "").trim().toLowerCase();
   if (!targetHex || !FR24_API_KEY) return null;
 
+  console.log(`search hex=${targetHex}`);
+
   for (let attempt = 0; attempt < 3; attempt++) {
     for (const bounds of FR24_BOUNDS_LIST) {
       try {
         const data = await fetchFr24LiveByBounds(bounds);
         const list = pickArrayFromFr24Response(data);
+
+        console.log(
+          `attempt=${attempt + 1}, bounds=${bounds}, list.length=${list.length}`
+        );
 
         const found = list.find(item => {
           const itemHex = String(
@@ -165,17 +162,19 @@ async function getFr24AircraftByHex(hex) {
           return itemHex === targetHex;
         });
 
-        if (found) return normalizeFr24Aircraft(found);
+        if (found) {
+          console.log(`found ${targetHex} in bounds=${bounds}`);
+          return normalizeFr24Aircraft(found);
+        }
       } catch (err) {
         console.error(`FR24 bounds fetch failed (${bounds}):`, err.message);
       }
     }
   }
 
+  console.log(`not found: ${targetHex}`);
   return null;
 }
-
-/* ------------------ API ROUTES ------------------ */
 
 app.get("/api/fr24-fallback", async (req, res) => {
   try {
@@ -210,7 +209,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
 
 app.get("/api/fr24-debug", async (req, res) => {
   try {
-    const bounds = req.query.bounds || "55,18,73,135";
+    const bounds = req.query.bounds || "55,15,73,135";
     const data = await fetchFr24LiveByBounds(bounds);
     return res.json(data);
   } catch (err) {
@@ -218,9 +217,6 @@ app.get("/api/fr24-debug", async (req, res) => {
   }
 });
 
-/* ------------------ START ------------------ */
-
 app.listen(PORT, () => {
   console.log(`FR24 proxy server running on port ${PORT}`);
 });
-
