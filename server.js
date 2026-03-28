@@ -11,89 +11,31 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const FR24_API_KEY = process.env.FR24_API_KEY || "";
-const APP_VERSION = "fr24-cn-stable-v1";
+const APP_VERSION = "fr24-cn-stable-v2";
 
 /*
-  중국/주변용 bounds
-  너무 많으면 느려지고 너무 적으면 누락됨
+  너무 많이 쪼개면 429가 나서 오히려 역효과
+  그래서 중국 위주 핵심 구역만 12개로 압축
 */
 const FR24_BOUNDS_LIST = [
-  // 동북 / 랴오닝 / 지린 / 헤이룽장
-  "49,43,121,131",
-  "47,41,121,131",
-  "45,39,121,131",
-  "44,38,117,125",
-
-  // 베이징 / 톈진 / 허베이 / 산시
-  "42,38,113,120",
-  "40,36,113,120",
-  "39,35,108,115",
-  "38,34,112,118",
-
-  // 산둥 / 황해 연안
-  "38,34,118,123",
-  "36,32,118,123",
-
-  // 허난 / 후베이 / 안후이 북부
-  "36,32,111,117",
-  "34,30,111,117",
-  "34,30,117,122",
-
-  // 장쑤 / 상하이 / 저장
-  "33,29,118,123",
-  "31,27,118,123",
-  "30,26,120,124",
-
-  // 푸젠 / 광둥 동부 / 대만해협 북부
-  "28,24,117,122",
-  "26,22,116,120",
-  "25,21,118,123",
-
-  // 광둥 / 광시 / 하이난
-  "25,21,110,116",
-  "23,19,109,115",
-  "21,17,108,112",
-
-  // 후난 / 장시 / 광시 북부
-  "29,25,111,117",
-  "27,23,111,117",
-
-  // 쓰촨 / 충칭 / 구이저우 / 윈난 동부
-  "33,29,103,109",
-  "31,27,103,109",
-  "29,25,103,109",
-
-  // 윈난 / 미얀마 접경
-  "27,23,98,104",
-  "25,21,98,104",
-
-  // 산시 / 간쑤 / 닝샤
-  "39,35,104,110",
-  "41,37,102,108",
-
-  // 신장 동부 / 칭하이 / 티베트 북동부
-  "41,35,94,102",
-  "37,31,94,102",
-
-  // 신장 서부
-  "45,39,80,90",
-  "42,36,80,90",
-
-  // 내몽골 / 몽골 접경
-  "46,42,108,116",
-  "45,41,116,124",
-  "44,40,100,108",
-
-  // 넓은 fallback
-  "55,15,73,135"
+  "47,41,121,131", // 동북
+  "44,38,117,125", // 랴오닝/허베이 동부
+  "42,38,113,120", // 베이징/톈진
+  "39,35,108,115", // 산시/허베이 서부
+  "38,34,118,123", // 산둥 북부
+  "36,32,118,123", // 산둥/장쑤 북부
+  "34,30,111,117", // 허난/후베이
+  "33,29,118,123", // 장쑤/상하이
+  "28,24,117,122", // 푸젠/저장 남부
+  "25,21,110,116", // 광둥/광시
+  "33,29,103,109", // 쓰촨/충칭
+  "55,15,73,135"   // 마지막 fallback
 ];
-/*
-  fresh cache: 최근 성공값
-  stale cache: 오래됐지만 마지막 성공값
-*/
-const FRESH_CACHE_TTL_MS = 2 * 60 * 1000;    // 2분
-const STALE_CACHE_TTL_MS = 30 * 60 * 1000;   // 30분
-const FETCH_TIMEOUT_MS = 8000;
+
+const FRESH_CACHE_TTL_MS = 2 * 60 * 1000;   // 2분
+const STALE_CACHE_TTL_MS = 30 * 60 * 1000;  // 30분
+const FETCH_TIMEOUT_MS = 12000;
+const BETWEEN_BOUNDS_DELAY_MS = 350;
 
 const aircraftCache = new Map();
 
@@ -314,6 +256,7 @@ async function searchHexInBounds(targetHex, bounds) {
 async function getFr24AircraftByHex(hex) {
   const targetHex = String(hex || "").trim().toLowerCase();
   if (!targetHex) return null;
+
   if (!FR24_API_KEY) {
     console.error("FR24_API_KEY missing");
     return null;
@@ -321,26 +264,28 @@ async function getFr24AircraftByHex(hex) {
 
   console.log(`search hex=${targetHex}`);
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // 429 방지를 위해 재시도는 1회만
+  for (let attempt = 0; attempt < 1; attempt++) {
     for (const bounds of FR24_BOUNDS_LIST) {
       try {
         const found = await searchHexInBounds(targetHex, bounds);
 
         if (found) {
-          console.log(`found ${targetHex} in bounds=${bounds}, attempt=${attempt + 1}`);
+          console.log(`found ${targetHex} in bounds=${bounds}`);
           setCachedAircraft(found, { source_detail: `fr24:${bounds}` });
           return found;
         }
       } catch (err) {
-        console.error(
-          `FR24 bounds fetch failed (${bounds}) attempt=${attempt + 1}:`,
-          err.message || err
-        );
-      }
-    }
+        const msg = String(err.message || err);
+        console.error(`FR24 bounds fetch failed (${bounds}):`, msg);
 
-    if (attempt < 2) {
-      await delay(300);
+        if (msg.includes("429")) {
+          console.error("FR24 rate limited, aborting search early");
+          return null;
+        }
+      }
+
+      await delay(BETWEEN_BOUNDS_DELAY_MS);
     }
   }
 
@@ -389,6 +334,27 @@ app.get("/api/cache-debug", (req, res) => {
     aircraft: rows
   });
 });
+
+app.get("/api/fr24-debug", async (req, res) => {
+  try {
+    const bounds = req.query.bounds || "55,15,73,135";
+    const data = await fetchFr24LiveByBounds(bounds);
+    const list = pickArrayFromFr24Response(data);
+
+    return res.json({
+      version: APP_VERSION,
+      bounds,
+      count: list.length,
+      data
+    });
+  } catch (err) {
+    return res.status(500).json({
+      version: APP_VERSION,
+      error: String(err.message || err)
+    });
+  }
+});
+
 app.get("/api/fr24-find", async (req, res) => {
   try {
     const hex = String(req.query.hex || "").trim().toLowerCase();
@@ -436,12 +402,26 @@ app.get("/api/fr24-find", async (req, res) => {
           });
         }
       } catch (err) {
+        const msg = String(err.message || err);
+
         checks.push({
           bounds,
-          error: String(err.message || err),
+          error: msg,
           found: false
         });
+
+        if (msg.includes("429")) {
+          return res.json({
+            version: APP_VERSION,
+            hex,
+            found: false,
+            stoppedReason: "rate_limited",
+            checks
+          });
+        }
       }
+
+      await delay(BETWEEN_BOUNDS_DELAY_MS);
     }
 
     return res.json({
@@ -449,25 +429,6 @@ app.get("/api/fr24-find", async (req, res) => {
       hex,
       found: false,
       checks
-    });
-  } catch (err) {
-    return res.status(500).json({
-      version: APP_VERSION,
-      error: String(err.message || err)
-    });
-  }
-});
-app.get("/api/fr24-debug", async (req, res) => {
-  try {
-    const bounds = req.query.bounds || "55,15,73,135";
-    const data = await fetchFr24LiveByBounds(bounds);
-    const list = pickArrayFromFr24Response(data);
-
-    return res.json({
-      version: APP_VERSION,
-      bounds,
-      count: list.length,
-      data
     });
   } catch (err) {
     return res.status(500).json({
@@ -548,6 +509,8 @@ app.get("/api/fr24-fallback", async (req, res) => {
           });
         }
       }
+
+      await delay(200);
     }
 
     return res.json({
