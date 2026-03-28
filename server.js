@@ -193,10 +193,6 @@ app.get("/api/fr24-fallback", async (req, res) => {
     return res.status(500).json({ aircraft: [] });
   }
 });
-
-app.listen(PORT, () => {
-  console.log(`FR24 proxy server running on port ${PORT}`);
-});
 app.get("/api/fr24-debug", async (req, res) => {
   try {
     const bounds = req.query.bounds || "18,55,73,135";
@@ -205,4 +201,8 @@ app.get("/api/fr24-debug", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: String(err.message || err) });
   }
+});
+
+app.listen(PORT, () => {
+  console.log(`FR24 proxy server running on port ${PORT}`);
 });
