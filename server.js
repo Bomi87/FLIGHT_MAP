@@ -11,18 +11,17 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const FR24_API_KEY = process.env.FR24_API_KEY || "";
-const APP_VERSION = "fr24-reg-direct-v1";
+const APP_VERSION = "fr24-reg-direct-v2";
 
 const FETCH_TIMEOUT_MS = 12000;
-const FRESH_CACHE_TTL_MS = 10 * 1000;
-const STALE_CACHE_TTL_MS = 30 * 60 * 1000;   // 30분
+const FRESH_CACHE_TTL_MS = 10 * 1000;          // 10초
+const STALE_CACHE_TTL_MS = 30 * 60 * 1000;     // 30분
 const BETWEEN_BATCH_DELAY_MS = 350;
 const MAX_REGS_PER_REQUEST = 10;
 
 const aircraftCache = new Map();
 
 /* ------------------ FIXED HEX MAP ------------------ */
-
 
 const HEX_TO_REG_MAP = {
   "71c550": "HL8550",
@@ -35,7 +34,7 @@ const HEX_TO_REG_MAP = {
   "71c230": "HL8230",
   "71c068": "HL8068",
   "71c222": "HL8222",
-   "507c88": "UK33020"           
+  "507c88": "UK33020"
 };
 
 const REG_TO_HEX_MAP = Object.fromEntries(
@@ -461,9 +460,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
     let foundMap = new Map();
     let unknownHexes = [];
 
-    // -----------------------------
-    // 1) fresh cache 먼저 체크
-    // -----------------------------
+    // 1) fresh cache 먼저 확인
     for (const hex of hexes) {
       const fresh = getFreshCachedAircraft(hex);
 
@@ -477,9 +474,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
       }
     }
 
-    // -----------------------------
     // 2) 필요한 것만 live 조회
-    // -----------------------------
     if (needLiveHexes.length > 0) {
       try {
         const liveResult = await getFr24AircraftByHexes(needLiveHexes);
@@ -490,9 +485,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
       }
     }
 
-    // -----------------------------
-    // 3) live → stale cache fallback
-    // -----------------------------
+    // 3) live 없으면 stale cache fallback
     for (const hex of needLiveHexes) {
       const live = foundMap.get(hex);
 
@@ -513,9 +506,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
       }
     }
 
-    // -----------------------------
-    // 4) 입력 순서 정렬
-    // -----------------------------
+    // 4) 입력 순서대로 정렬
     const orderMap = new Map(hexes.map((hex, idx) => [hex, idx]));
     results.sort((a, b) => {
       return (orderMap.get(a.hex) ?? 9999) - (orderMap.get(b.hex) ?? 9999);
@@ -526,7 +517,6 @@ app.get("/api/fr24-fallback", async (req, res) => {
       aircraft: results,
       unknown_hexes: unknownHexes
     });
-
   } catch (err) {
     console.error(err);
 
