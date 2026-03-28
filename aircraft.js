@@ -1414,61 +1414,131 @@ async function fetchBatchAircraftData() {
 
   return resolvedMap;
 }
+function shouldUseFr24Assist(target, adsbAircraft) {
+  const state = aircraftStates.get(target.key);
+  if (!state) return false;
 
+  // ADS-B 자체가 없으면 당연히 FR24 시도
+  if (!adsbAircraft) return true;
+
+  const currentLat = Number(adsbAircraft.lat);
+  const currentLon = Number(adsbAircraft.lon);
+
+  if (!isFinite(currentLat) || !isFinite(currentLon)) {
+    return true;
+  }
+
+  // trail이 아직 너무 짧으면 FR24 보강 시도
+  if (!state.liveTrail || state.liveTrail.length < 2) {
+    return true;
+  }
+
+  // 이전 실제 위치와 거의 안 변하면 "멈춘 것처럼" 판단
+  const prevAc = state.lastAircraft;
+  if (prevAc) {
+    const prevLat = Number(prevAc.lat);
+    const prevLon = Number(prevAc.lon);
+
+    if (isFinite(prevLat) && isFinite(prevLon)) {
+      const distM = metersBetweenLatLng(prevLat, prevLon, currentLat, currentLon);
+
+      // 3km 이하 변화면 정체 의심
+      if (distM < 3000) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+async function fetchFr24AssistForTargets(targets) {
+  if (!targets || !targets.length) return new Map();
+
+  const hexList = targets.map(t => t.hex).join(",");
+  const url = `https://bomi-flt.onrender.com/api/fr24-fallback?hexes=${encodeURIComponent(hexList)}`;
+
+  const data = await fetchJson(url, 8000);
+  const byTargetKey = new Map();
+
+  for (const ac of (data?.aircraft || [])) {
+    const hex = normalizeHex(ac.hex);
+    const target = targets.find(t => t.hex === hex);
+    if (target) {
+      byTargetKey.set(target.key, ac);
+    }
+  }
+
+  return byTargetKey;
+}
 async function pollAircraft() {
   if (!TARGETS.length || isPollingAircraft) return;
 
   isPollingAircraft = true;
 
   try {
-    // 1️⃣ ADS-B 먼저
+    // 1) ADS-B 먼저
     let resolvedMap = await fetchBatchAircraftData();
 
-    // 2️⃣ ADS-B 못 찾은 대상
-    const missingTargets = TARGETS.filter(t => !resolvedMap.has(t.key));
+    // 2) FR24가 필요한 대상 선정
+    const fr24Targets = [];
 
-    // 3️⃣ 먼저 FR24 클라이언트 fresh cache 확인
-    const fr24ServerTargets = [];
+    for (const target of TARGETS) {
+      const adsbAc = resolvedMap.get(target.key) || null;
 
-    for (const target of missingTargets) {
-      const cached = getFreshFr24ClientCache(target.hex);
-
-      if (cached) {
-        resolvedMap.set(target.key, cached);
-      } else {
-        fr24ServerTargets.push(target);
+      if (shouldUseFr24Assist(target, adsbAc)) {
+        fr24Targets.push(target);
       }
     }
 
-    // 4️⃣ fresh cache 없는 대상만 서버 fallback 호출
-    if (fr24ServerTargets.length > 0) {
+    // 3) FR24 보강 조회
+    if (fr24Targets.length > 0) {
       try {
-        const hexList = fr24ServerTargets.map(t => t.hex).join(",");
-        const url = `https://bomi-flt.onrender.com/api/fr24-fallback?hexes=${encodeURIComponent(hexList)}`;
+        const fr24Map = await fetchFr24AssistForTargets(fr24Targets);
 
-        const data = await fetchJson(url, 5000);
+        for (const target of fr24Targets) {
+          const fr24Ac = fr24Map.get(target.key);
+          const adsbAc = resolvedMap.get(target.key) || null;
 
-        if (data?.aircraft?.length > 0) {
-          for (const ac of data.aircraft) {
-            const hex = normalizeHex(ac.hex);
-            if (!hex) continue;
+          if (!fr24Ac) continue;
 
-            // 4-1) 클라이언트 cache 저장
-            setFr24ClientCache(ac);
+          // ADS-B가 아예 없으면 무조건 FR24 사용
+          if (!adsbAc) {
+            resolvedMap.set(target.key, fr24Ac);
+            continue;
+          }
 
-            // 4-2) 현재 타겟에 반영
-            const target = TARGET_MAP_BY_HEX.get(hex);
-            if (target && !resolvedMap.has(target.key)) {
-              resolvedMap.set(target.key, ac);
+          // ADS-B가 있어도 "멈춘 것 같으면" FR24로 덮어씀
+          const prevAc = aircraftStates.get(target.key)?.lastAircraft || null;
+
+          if (prevAc) {
+            const prevLat = Number(prevAc.lat);
+            const prevLon = Number(prevAc.lon);
+            const adsbLat = Number(adsbAc.lat);
+            const adsbLon = Number(adsbAc.lon);
+
+            if (
+              isFinite(prevLat) && isFinite(prevLon) &&
+              isFinite(adsbLat) && isFinite(adsbLon)
+            ) {
+              const adsbMoveM = metersBetweenLatLng(prevLat, prevLon, adsbLat, adsbLon);
+
+              // ADS-B 좌표가 거의 안 변하면 FR24 위치로 교체
+              if (adsbMoveM < 3000) {
+                resolvedMap.set(target.key, fr24Ac);
+              }
             }
+          } else {
+            // 이전 위치 없으면 FR24가 더 풍부한 경우 사용
+            resolvedMap.set(target.key, fr24Ac);
           }
         }
       } catch (err) {
-        console.warn("FR24 fallback failed:", err);
+        console.warn("FR24 assist failed:", err);
       }
     }
 
-    // 5️⃣ 결과 적용
+    // 4) 화면 반영
     for (const target of TARGETS) {
       const state = aircraftStates.get(target.key);
       if (!state) continue;
@@ -1492,7 +1562,6 @@ async function pollAircraft() {
     }
 
     refreshAircraftFollowButtons();
-
   } catch (err) {
     console.error("pollAircraft error:", err);
 
