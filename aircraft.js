@@ -1398,14 +1398,13 @@ async function pollAircraft() {
     // 2️⃣ ADS-B 못 찾은 대상 찾기
     const missingTargets = TARGETS.filter(t => !resolvedMap.has(t.key));
 
-    // 3️⃣ FR24 fallback (핵심🔥)
+    // 3️⃣ FR24 fallback
     if (missingTargets.length > 0) {
       try {
         const hexList = missingTargets.map(t => t.hex).join(",");
-        const url = `/api/fr24-fallback?hexes=${hexList}`;
+        const url = `https://bomi-flt.onrender.com/api/fr24-fallback?hexes=${encodeURIComponent(hexList)}`;
 
-        const res = await fetch(url);
-        const data = await res.json();
+        const data = await fetchJson(url, 5000);
 
         if (data?.aircraft?.length > 0) {
           for (const ac of data.aircraft) {
