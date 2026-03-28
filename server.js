@@ -45,11 +45,15 @@ async function fetchFr24LiveByBounds(bounds) {
 }
 
 function pickArrayFromFr24Response(data) {
+  if (Array.isArray(data)) return data;   // 
+
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.rows)) return data.rows;
   if (Array.isArray(data?.aircraft)) return data.aircraft;
+
   return [];
 }
+
 
 function normalizeFr24Aircraft(raw) {
   const hex =
