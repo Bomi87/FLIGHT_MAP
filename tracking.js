@@ -92,7 +92,7 @@ const FR24_STALE_THRESHOLD = 2;
 const FR24_MIN_INTERVAL_MS = 30000;
 
 /* 서버 프록시 endpoint */
-const FR24_FALLBACK_ENDPOINT = "/api/fr24-fallback";
+const FR24_FALLBACK_ENDPOINT = "https://bomi-flt.onrender.com/api/fr24-fallback";
 
 const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
