@@ -1392,8 +1392,36 @@ async function pollAircraft() {
   isPollingAircraft = true;
 
   try {
-    const resolvedMap = await fetchBatchAircraftData();
+    // 1️⃣ ADS-B 먼저
+    let resolvedMap = await fetchBatchAircraftData();
 
+    // 2️⃣ ADS-B 못 찾은 대상 찾기
+    const missingTargets = TARGETS.filter(t => !resolvedMap.has(t.key));
+
+    // 3️⃣ FR24 fallback (핵심🔥)
+    if (missingTargets.length > 0) {
+      try {
+        const hexList = missingTargets.map(t => t.hex).join(",");
+        const url = `/api/fr24-fallback?hexes=${hexList}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data?.aircraft?.length > 0) {
+          for (const ac of data.aircraft) {
+            const hex = (ac.hex || "").toLowerCase();
+            const target = TARGETS.find(t => t.hex === hex);
+            if (target && !resolvedMap.has(target.key)) {
+              resolvedMap.set(target.key, ac);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("FR24 fallback failed:", err);
+      }
+    }
+
+    // 4️⃣ 결과 적용
     for (const target of TARGETS) {
       const state = aircraftStates.get(target.key);
       if (!state) continue;
@@ -1417,6 +1445,7 @@ async function pollAircraft() {
     }
 
     refreshAircraftFollowButtons();
+
   } catch (err) {
     console.error("pollAircraft error:", err);
 
