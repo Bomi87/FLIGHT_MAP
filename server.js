@@ -328,7 +328,74 @@ app.get("/api/cache-debug", (req, res) => {
     aircraft: rows
   });
 });
+app.get("/api/fr24-find", async (req, res) => {
+  try {
+    const hex = String(req.query.hex || "").trim().toLowerCase();
 
+    if (!hex) {
+      return res.status(400).json({
+        version: APP_VERSION,
+        error: "hex is required"
+      });
+    }
+
+    const checks = [];
+
+    for (const bounds of FR24_BOUNDS_LIST) {
+      try {
+        const data = await fetchFr24LiveByBounds(bounds);
+        const list = pickArrayFromFr24Response(data);
+
+        const found = list.find(item => {
+          const itemHex = String(
+            item?.hex ??
+            item?.aircraftHex ??
+            item?.transponder ??
+            item?.icao24 ??
+            item?.icao ??
+            ""
+          ).trim().toLowerCase();
+
+          return itemHex === hex;
+        });
+
+        checks.push({
+          bounds,
+          count: list.length,
+          found: !!found,
+          aircraft: found ? normalizeFr24Aircraft(found) : null
+        });
+
+        if (found) {
+          return res.json({
+            version: APP_VERSION,
+            hex,
+            found: true,
+            checks
+          });
+        }
+      } catch (err) {
+        checks.push({
+          bounds,
+          error: String(err.message || err),
+          found: false
+        });
+      }
+    }
+
+    return res.json({
+      version: APP_VERSION,
+      hex,
+      found: false,
+      checks
+    });
+  } catch (err) {
+    return res.status(500).json({
+      version: APP_VERSION,
+      error: String(err.message || err)
+    });
+  }
+});
 app.get("/api/fr24-debug", async (req, res) => {
   try {
     const bounds = req.query.bounds || "55,15,73,135";
