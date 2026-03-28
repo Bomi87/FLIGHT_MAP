@@ -11,27 +11,48 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const FR24_API_KEY = process.env.FR24_API_KEY || "";
-const APP_VERSION = "fr24-cn-stable-v2";
+const APP_VERSION = "fr24-reg-direct-v1";
 
-/*
-  너무 많이 쪼개면 429가 나서 오히려 역효과
-  그래서 중국 위주 핵심 구역만 12개로 압축
-*/
-const FR24_BOUNDS_LIST = [
- "44,38,117,125",
-  "42,38,113,120",
-  "38,34,118,123",
-  "33,29,118,123",
-  "25,21,110,116",
-  "55,15,73,135"
-];
-
-const FRESH_CACHE_TTL_MS = 2 * 60 * 1000;   // 2분
-const STALE_CACHE_TTL_MS = 30 * 60 * 1000;  // 30분
 const FETCH_TIMEOUT_MS = 12000;
-const BETWEEN_BOUNDS_DELAY_MS = 700;
+const FRESH_CACHE_TTL_MS = 2 * 60 * 1000;    // 2분
+const STALE_CACHE_TTL_MS = 30 * 60 * 1000;   // 30분
+const BETWEEN_BATCH_DELAY_MS = 350;
+const MAX_REGS_PER_REQUEST = 10;
 
 const aircraftCache = new Map();
+
+/* ------------------ FIXED HEX MAP ------------------ */
+/*
+  사용자가 준 기준 데이터
+
+  HL8550 현대(G650) 71C550
+  HL8290 현대(BBJ) 71C290
+  HL8299 LG(G650) 71C299
+  HL7227 한화(BBJ) 71BA27
+  HL8080 SK(ACJ) 71C080
+  HL8372 SK(G650) 71C372
+  HL8508 삼성(B788) 71C508
+  HL8230 KE(GLEX) 71C230
+  HL8068 KE(G650) 71C068
+  HL8222 KE(BBJ) 71C222
+*/
+
+const HEX_TO_REG_MAP = {
+  "71c550": "HL8550",
+  "71c290": "HL8290",
+  "71c299": "HL8299",
+  "71ba27": "HL7227",
+  "71c080": "HL8080",
+  "71c372": "HL8372",
+  "71c508": "HL8508",
+  "71c230": "HL8230",
+  "71c068": "HL8068",
+  "71c222": "HL8222"
+};
+
+const REG_TO_HEX_MAP = Object.fromEntries(
+  Object.entries(HEX_TO_REG_MAP).map(([hex, reg]) => [reg.toUpperCase(), hex])
+);
 
 /* ------------------ COMMON ------------------ */
 
@@ -39,19 +60,20 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+function normalizeHex(value) {
+  return String(value || "").trim().toLowerCase();
+}
 
-  try {
-    const res = await fetch(url, {
-      ...options,
-      signal: controller.signal
-    });
-    return res;
-  } finally {
-    clearTimeout(timer);
+function normalizeReg(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function chunkArray(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
   }
+  return out;
 }
 
 function cleanupCache() {
@@ -65,22 +87,25 @@ function cleanupCache() {
 }
 
 function setCachedAircraft(aircraft, meta = {}) {
-  if (!aircraft?.hex) return;
+  const hex = normalizeHex(aircraft?.hex);
+  if (!hex) return;
 
   const now = Date.now();
 
-  aircraftCache.set(aircraft.hex, {
+  aircraftCache.set(hex, {
     savedAt: now,
     data: {
       ...aircraft,
+      hex,
+      reg: normalizeReg(aircraft?.reg),
       last_seen_iso: new Date(now).toISOString(),
-      source_detail: meta.source_detail || "fr24"
+      source_detail: meta.source_detail || "fr24:registration"
     }
   });
 }
 
 function getFreshCachedAircraft(hex) {
-  const key = String(hex || "").trim().toLowerCase();
+  const key = normalizeHex(hex);
   if (!key) return null;
 
   const cached = aircraftCache.get(key);
@@ -96,7 +121,7 @@ function getFreshCachedAircraft(hex) {
 }
 
 function getStaleCachedAircraft(hex) {
-  const key = String(hex || "").trim().toLowerCase();
+  const key = normalizeHex(hex);
   if (!key) return null;
 
   const cached = aircraftCache.get(key);
@@ -114,25 +139,65 @@ function getStaleCachedAircraft(hex) {
   };
 }
 
-/* ------------------ FR24 FETCH ------------------ */
+async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-async function fetchFr24LiveByBounds(bounds) {
-  const url =
-    `https://fr24api.flightradar24.com/api/live/flight-positions/full?bounds=${encodeURIComponent(bounds)}`;
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
-  const res = await fetchWithTimeout(url, {
-    headers: {
-      Accept: "application/json",
-      "Accept-Version": "v1",
-      Authorization: `Bearer ${FR24_API_KEY}`
-    }
-  });
+/* ------------------ FR24 ------------------ */
 
-  if (!res.ok) {
-    throw new Error(`FR24 HTTP ${res.status}`);
+function buildFr24Headers() {
+  return {
+    "Accept": "application/json",
+    "Accept-Version": "v1",
+    "Authorization": `Bearer ${FR24_API_KEY}`
+  };
+}
+
+async function fetchFr24ByRegistrations(registrations) {
+  const regs = registrations
+    .map(normalizeReg)
+    .filter(Boolean);
+
+  if (!regs.length) {
+    return [];
   }
 
-  return await res.json();
+  const qs = new URLSearchParams();
+  qs.set("registrations", regs.join(","));
+
+  const url =
+    `https://fr24api.flightradar24.com/api/live/flight-positions/full?${qs.toString()}`;
+
+  const res = await fetchWithTimeout(url, {
+    method: "GET",
+    headers: buildFr24Headers()
+  });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    throw new Error(`FR24 HTTP ${res.status}: ${text}`);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    throw new Error(`FR24 invalid JSON: ${text}`);
+  }
+
+  return pickArrayFromFr24Response(data);
 }
 
 function pickArrayFromFr24Response(data) {
@@ -144,14 +209,24 @@ function pickArrayFromFr24Response(data) {
 }
 
 function normalizeFr24Aircraft(raw) {
-  const hex = String(
+  const reg = normalizeReg(
+    raw?.registration ??
+    raw?.reg ??
+    raw?.aircraftRegistration ??
+    raw?.identification?.registration ??
+    ""
+  );
+
+  const mappedHex = REG_TO_HEX_MAP[reg] || "";
+
+  const hex = normalizeHex(
     raw?.hex ??
     raw?.aircraftHex ??
     raw?.transponder ??
     raw?.icao24 ??
     raw?.icao ??
-    ""
-  ).trim().toLowerCase();
+    mappedHex
+  );
 
   if (!hex) return null;
 
@@ -207,6 +282,8 @@ function normalizeFr24Aircraft(raw) {
 
   return {
     hex,
+    reg,
+    registration: reg,
     flight,
     callsign,
     lat,
@@ -224,67 +301,53 @@ function normalizeFr24Aircraft(raw) {
   };
 }
 
-async function searchHexInBounds(targetHex, bounds) {
-  const data = await fetchFr24LiveByBounds(bounds);
-  const list = pickArrayFromFr24Response(data);
+async function getFr24AircraftByHexes(hexes) {
+  const uniqueHexes = [...new Set(hexes.map(normalizeHex).filter(Boolean))];
 
-  console.log(`bounds=${bounds}, list.length=${list.length}`);
+  const regTargets = [];
+  const unknownHexes = [];
 
-  const found = list.find(item => {
-    const itemHex = String(
-      item?.hex ??
-      item?.aircraftHex ??
-      item?.transponder ??
-      item?.icao24 ??
-      item?.icao ??
-      ""
-    ).trim().toLowerCase();
-
-    return itemHex === targetHex;
-  });
-
-  if (!found) return null;
-  return normalizeFr24Aircraft(found);
-}
-
-async function getFr24AircraftByHex(hex) {
-  const targetHex = String(hex || "").trim().toLowerCase();
-  if (!targetHex) return null;
-
-  if (!FR24_API_KEY) {
-    console.error("FR24_API_KEY missing");
-    return null;
-  }
-
-  console.log(`search hex=${targetHex}`);
-
-  // 429 방지를 위해 재시도는 1회만
-  for (let attempt = 0; attempt < 1; attempt++) {
-    for (const bounds of FR24_BOUNDS_LIST) {
-      try {
-        const found = await searchHexInBounds(targetHex, bounds);
-
-        if (found) {
-          console.log(`found ${targetHex} in bounds=${bounds}`);
-          setCachedAircraft(found, { source_detail: `fr24:${bounds}` });
-          return found;
-        }
-      } catch (err) {
-        const msg = String(err.message || err);
-        console.error(`FR24 bounds fetch failed (${bounds}):`, msg);
-
-        if (msg.includes("429")) {
-          console.error("FR24 rate limited, aborting search early");
-          return null;
-        }
-      }
-
-      await delay(BETWEEN_BOUNDS_DELAY_MS);
+  for (const hex of uniqueHexes) {
+    const reg = HEX_TO_REG_MAP[hex];
+    if (reg) {
+      regTargets.push(reg);
+    } else {
+      unknownHexes.push(hex);
     }
   }
 
-  console.log(`not found in FR24: ${targetHex}`);
-  return null;
+  const foundMap = new Map();
+
+  if (!FR24_API_KEY) {
+    throw new Error("FR24_API_KEY missing");
+  }
+
+  const regBatches = chunkArray(regTargets, MAX_REGS_PER_REQUEST);
+
+  for (const regs of regBatches) {
+    try {
+      const rows = await fetchFr24ByRegistrations(regs);
+
+      for (const row of rows) {
+        const normalized = normalizeFr24Aircraft(row);
+        if (!normalized) continue;
+
+        foundMap.set(normalized.hex, normalized);
+        setCachedAircraft(normalized, {
+          source_detail: `fr24:registrations:${regs.join(",")}`
+        });
+      }
+    } catch (err) {
+      console.error("FR24 registration batch failed:", regs, err.message || err);
+    }
+
+    await delay(BETWEEN_BATCH_DELAY_MS);
+  }
+
+  return {
+    foundMap,
+    unknownHexes
+  };
 }
 
 /* ------------------ ROUTES ------------------ */
@@ -301,7 +364,19 @@ app.get("/healthz", (req, res) => {
     version: APP_VERSION,
     hasApiKey: !!FR24_API_KEY,
     cacheCount: aircraftCache.size,
-    boundsCount: FR24_BOUNDS_LIST.length
+    mappingCount: Object.keys(HEX_TO_REG_MAP).length,
+    mode: "registration-direct-only"
+  });
+});
+
+app.get("/api/mapping", (req, res) => {
+  return res.json({
+    version: APP_VERSION,
+    mode: "registration-direct-only",
+    mapping: Object.entries(HEX_TO_REG_MAP).map(([hex, reg]) => ({
+      hex,
+      reg
+    }))
   });
 });
 
@@ -312,6 +387,7 @@ app.get("/api/cache-debug", (req, res) => {
   for (const [hex, entry] of aircraftCache.entries()) {
     rows.push({
       hex,
+      reg: entry?.data?.reg || "",
       savedAt: new Date(entry.savedAt).toISOString(),
       ageMs: Date.now() - entry.savedAt,
       flight: entry?.data?.flight || "",
@@ -329,17 +405,31 @@ app.get("/api/cache-debug", (req, res) => {
   });
 });
 
-app.get("/api/fr24-debug", async (req, res) => {
+app.get("/api/fr24-by-reg", async (req, res) => {
   try {
-    const bounds = req.query.bounds || "55,15,73,135";
-    const data = await fetchFr24LiveByBounds(bounds);
-    const list = pickArrayFromFr24Response(data);
+    const reg = normalizeReg(req.query.reg || "");
+
+    if (!reg) {
+      return res.status(400).json({
+        version: APP_VERSION,
+        error: "reg is required"
+      });
+    }
+
+    const rows = await fetchFr24ByRegistrations([reg]);
+    const aircraft = rows
+      .map(normalizeFr24Aircraft)
+      .filter(Boolean);
+
+    for (const a of aircraft) {
+      setCachedAircraft(a, { source_detail: `fr24:registrations:${reg}` });
+    }
 
     return res.json({
       version: APP_VERSION,
-      bounds,
-      count: list.length,
-      data
+      reg,
+      count: aircraft.length,
+      aircraft
     });
   } catch (err) {
     return res.status(500).json({
@@ -349,87 +439,16 @@ app.get("/api/fr24-debug", async (req, res) => {
   }
 });
 
-app.get("/api/fr24-find", async (req, res) => {
-  try {
-    const hex = String(req.query.hex || "").trim().toLowerCase();
+app.get("/api/fr24-hex-lookup", (req, res) => {
+  const hex = normalizeHex(req.query.hex || "");
+  const reg = HEX_TO_REG_MAP[hex] || "";
 
-    if (!hex) {
-      return res.status(400).json({
-        version: APP_VERSION,
-        error: "hex is required"
-      });
-    }
-
-    const checks = [];
-
-    for (const bounds of FR24_BOUNDS_LIST) {
-      try {
-        const data = await fetchFr24LiveByBounds(bounds);
-        const list = pickArrayFromFr24Response(data);
-
-        const found = list.find(item => {
-          const itemHex = String(
-            item?.hex ??
-            item?.aircraftHex ??
-            item?.transponder ??
-            item?.icao24 ??
-            item?.icao ??
-            ""
-          ).trim().toLowerCase();
-
-          return itemHex === hex;
-        });
-
-        checks.push({
-          bounds,
-          count: list.length,
-          found: !!found,
-          aircraft: found ? normalizeFr24Aircraft(found) : null
-        });
-
-        if (found) {
-          return res.json({
-            version: APP_VERSION,
-            hex,
-            found: true,
-            checks
-          });
-        }
-      } catch (err) {
-        const msg = String(err.message || err);
-
-        checks.push({
-          bounds,
-          error: msg,
-          found: false
-        });
-
-        if (msg.includes("429")) {
-          return res.json({
-            version: APP_VERSION,
-            hex,
-            found: false,
-            stoppedReason: "rate_limited",
-            checks
-          });
-        }
-      }
-
-      await delay(BETWEEN_BOUNDS_DELAY_MS);
-    }
-
-    return res.json({
-      version: APP_VERSION,
-      hex,
-      found: false,
-      checks
-    });
-  } catch (err) {
-    return res.status(500).json({
-      version: APP_VERSION,
-      error: String(err.message || err)
-    });
-  }
+  return res.json({
+    version: APP_VERSION,
+    hex,
+    reg,
+    found: !!reg
+  });
 });
 
 app.get("/api/fr24-fallback", async (req, res) => {
@@ -438,81 +457,82 @@ app.get("/api/fr24-fallback", async (req, res) => {
 
     const hexes = String(req.query.hexes || "")
       .split(",")
-      .map(x => x.trim().toLowerCase())
+      .map(normalizeHex)
       .filter(Boolean);
 
     if (!hexes.length) {
       return res.json({
         version: APP_VERSION,
-        aircraft: []
+        aircraft: [],
+        unknown_hexes: []
       });
     }
 
     const results = [];
+    const remainingHexes = [];
 
     for (const hex of hexes) {
-      try {
-        const live = await getFr24AircraftByHex(hex);
+      const fresh = getFreshCachedAircraft(hex);
+      if (fresh) {
+        results.push({
+          ...fresh,
+          mode: "fresh-cache"
+        });
+      } else {
+        remainingHexes.push(hex);
+      }
+    }
 
-        if (live) {
-          results.push({
-            ...live,
-            mode: "live"
-          });
-          continue;
-        }
+    let foundMap = new Map();
+    let unknownHexes = [];
 
-        const fresh = getFreshCachedAircraft(hex);
-        if (fresh) {
-          console.log(`fresh cache hit: ${hex}`);
-          results.push({
-            ...fresh,
-            mode: "fresh-cache"
-          });
-          continue;
-        }
+    if (remainingHexes.length) {
+      const liveResult = await getFr24AircraftByHexes(remainingHexes);
+      foundMap = liveResult.foundMap;
+      unknownHexes = liveResult.unknownHexes;
+    }
 
-        const stale = getStaleCachedAircraft(hex);
-        if (stale) {
-          console.log(`stale cache hit: ${hex}`);
-          results.push({
-            ...stale,
-            mode: "stale-cache"
-          });
-          continue;
-        }
-
-        console.log(`no result: ${hex}`);
-      } catch (err) {
-        console.error(`FR24 fetch failed for ${hex}:`, err.message || err);
-
-        const fresh = getFreshCachedAircraft(hex);
-        if (fresh) {
-          results.push({
-            ...fresh,
-            mode: "fresh-cache-error-fallback"
-          });
-          continue;
-        }
-
-        const stale = getStaleCachedAircraft(hex);
-        if (stale) {
-          results.push({
-            ...stale,
-            mode: "stale-cache-error-fallback"
-          });
-        }
+    for (const hex of remainingHexes) {
+      const live = foundMap.get(hex);
+      if (live) {
+        results.push({
+          ...live,
+          mode: "live"
+        });
+        continue;
       }
 
-      await delay(200);
+      const fresh = getFreshCachedAircraft(hex);
+      if (fresh) {
+        results.push({
+          ...fresh,
+          mode: "fresh-cache-after-live"
+        });
+        continue;
+      }
+
+      const stale = getStaleCachedAircraft(hex);
+      if (stale) {
+        results.push({
+          ...stale,
+          mode: "stale-cache"
+        });
+      }
     }
+
+    const orderMap = new Map(hexes.map((hex, idx) => [hex, idx]));
+    results.sort((a, b) => {
+      return (orderMap.get(a.hex) ?? 9999) - (orderMap.get(b.hex) ?? 9999);
+    });
 
     return res.json({
       version: APP_VERSION,
-      aircraft: results
+      aircraft: results,
+      unknown_hexes: unknownHexes
     });
   } catch (err) {
     console.error(err);
+
     return res.status(500).json({
       version: APP_VERSION,
       aircraft: [],
