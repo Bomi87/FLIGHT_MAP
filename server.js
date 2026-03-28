@@ -12,23 +12,14 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const FR24_API_KEY = process.env.FR24_API_KEY || "";
 
+// 너무 많이 쪼개지 말고, 작동했던 중국 중심 6개만 유지
 const FR24_BOUNDS_LIST = [
-  "46,38,116,129",
-  "44,36,124,132",
-  "42,34,112,121",
-  "40,32,118,126",
-  "38,30,108,118",
-  "36,28,118,123",
-  "34,26,112,121",
-  "32,24,118,123",
-  "30,22,110,118",
-  "28,20,110,117",
-  "26,18,108,116",
-  "25,19,116,123",
-  "36,26,98,110",
-  "40,30,90,105",
-  "45,35,80,98",
-  "50,20,73,135"
+  "45,35,105,125", // 중국 북부/베이징
+  "40,28,112,124", // 동부/상하이
+  "32,20,105,122", // 남부/광저우-선전
+  "35,22,95,112",  // 내륙/청두-충칭
+  "50,35,85,110",  // 서북부
+  "55,15,73,135"   // 중국+주변 fallback
 ];
 
 const CACHE_TTL_MS = 60000; // 60초
@@ -62,14 +53,15 @@ function pickArrayFromFr24Response(data) {
 }
 
 function normalizeFr24Aircraft(raw) {
-  const hex = String(
-    raw?.hex ??
-    raw?.aircraftHex ??
-    raw?.transponder ??
-    raw?.icao24 ??
-    raw?.icao ??
-    ""
-  ).trim().toLowerCase();
+  const hex =
+    String(
+      raw?.hex ??
+      raw?.aircraftHex ??
+      raw?.transponder ??
+      raw?.icao24 ??
+      raw?.icao ??
+      ""
+    ).trim().toLowerCase();
 
   if (!hex) return null;
 
@@ -80,26 +72,29 @@ function normalizeFr24Aircraft(raw) {
     return null;
   }
 
-  const flight = String(
-    raw?.flight ??
-    raw?.callsign ??
-    raw?.identification?.callsign ??
-    ""
-  ).trim();
+  const flight =
+    String(
+      raw?.flight ??
+      raw?.callsign ??
+      raw?.identification?.callsign ??
+      ""
+    ).trim();
 
-  const callsign = String(
-    raw?.callsign ??
-    raw?.flight ??
-    raw?.identification?.callsign ??
-    ""
-  ).trim();
+  const callsign =
+    String(
+      raw?.callsign ??
+      raw?.flight ??
+      raw?.identification?.callsign ??
+      ""
+    ).trim();
 
-  const type = String(
-    raw?.type ??
-    raw?.aircraftType ??
-    raw?.aircraft?.model?.code ??
-    ""
-  ).trim();
+  const type =
+    String(
+      raw?.type ??
+      raw?.aircraftType ??
+      raw?.aircraft?.model?.code ??
+      ""
+    ).trim();
 
   const altitude =
     raw?.alt ??
@@ -188,7 +183,8 @@ async function getFr24AircraftByHex(hex) {
 
   console.log(`search hex=${targetHex}`);
 
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // 작동하던 수준으로만 유지
+  for (let attempt = 0; attempt < 3; attempt++) {
     for (const bounds of FR24_BOUNDS_LIST) {
       try {
         const data = await fetchFr24LiveByBounds(bounds);
@@ -214,9 +210,7 @@ async function getFr24AircraftByHex(hex) {
         if (found) {
           console.log(`found ${targetHex} in bounds=${bounds}`);
           const normalized = normalizeFr24Aircraft(found);
-          if (normalized) {
-            setCachedAircraft(normalized);
-          }
+          if (normalized) setCachedAircraft(normalized);
           return normalized;
         }
       } catch (err) {
@@ -225,7 +219,7 @@ async function getFr24AircraftByHex(hex) {
     }
   }
 
-  console.log(`not found in FR24: ${targetHex}`);
+  console.log(`not found: ${targetHex}`);
   return null;
 }
 
@@ -278,7 +272,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
 
 app.get("/api/fr24-debug", async (req, res) => {
   try {
-    const bounds = req.query.bounds || "50,20,73,135";
+    const bounds = req.query.bounds || "55,15,73,135";
     const data = await fetchFr24LiveByBounds(bounds);
     return res.json(data);
   } catch (err) {
