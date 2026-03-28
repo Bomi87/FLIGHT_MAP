@@ -17,7 +17,7 @@ const FETCH_TIMEOUT_MS = 12000;
 const FRESH_CACHE_TTL_MS = 10 * 1000;          // 10초
 const STALE_CACHE_TTL_MS = 30 * 60 * 1000;     // 30분
 const BETWEEN_BATCH_DELAY_MS = 350;
-const MAX_REGS_PER_REQUEST = 10;
+const MAX_REGS_PER_REQUEST = 12;
 
 const aircraftCache = new Map();
 
