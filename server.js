@@ -45,15 +45,12 @@ async function fetchFr24LiveByBounds(bounds) {
 }
 
 function pickArrayFromFr24Response(data) {
-  if (Array.isArray(data)) return data;   // 
-
+  if (Array.isArray(data)) return data;
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.rows)) return data.rows;
   if (Array.isArray(data?.aircraft)) return data.aircraft;
-
   return [];
 }
-
 
 function normalizeFr24Aircraft(raw) {
   const hex =
@@ -74,28 +71,29 @@ function normalizeFr24Aircraft(raw) {
   }
 
   const flight =
-    String(raw?.flight ?? raw?.callsign ?? raw?.identification?.callsign ?? "").trim();
+    String(raw?.flight ?? raw?.callsign ?? "").trim();
 
   const callsign =
-    String(raw?.callsign ?? raw?.flight ?? raw?.identification?.callsign ?? "").trim();
+    String(raw?.callsign ?? raw?.flight ?? "").trim();
 
   const type =
-    String(raw?.type ?? raw?.aircraftType ?? raw?.aircraft?.model?.code ?? "").trim();
+    String(raw?.type ?? raw?.aircraftType ?? "").trim();
 
   const altitude =
+    raw?.alt ??
     raw?.altitude ??
     raw?.alt_baro ??
     raw?.alt_geom ??
-    raw?.barometricAltitude ??
     null;
 
   const groundSpeed =
+    raw?.gspeed ??
     raw?.groundSpeed ??
     raw?.gs ??
-    raw?.speed ??
     null;
 
   const verticalSpeed =
+    raw?.vspeed ??
     raw?.verticalSpeed ??
     raw?.vert_rate ??
     raw?.baro_rate ??
@@ -107,7 +105,7 @@ function normalizeFr24Aircraft(raw) {
     callsign,
     lat,
     lon,
-    track: Number(raw?.track ?? raw?.heading ?? raw?.trueTrack ?? 0),
+    track: Number(raw?.track ?? raw?.heading ?? 0),
     alt_baro: altitude,
     alt_geom: altitude,
     gs: groundSpeed,
