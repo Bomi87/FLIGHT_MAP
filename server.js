@@ -22,20 +22,7 @@ const MAX_REGS_PER_REQUEST = 10;
 const aircraftCache = new Map();
 
 /* ------------------ FIXED HEX MAP ------------------ */
-/*
-  사용자가 준 기준 데이터
 
-  HL8550 현대(G650) 71C550
-  HL8290 현대(BBJ) 71C290
-  HL8299 LG(G650) 71C299
-  HL7227 한화(BBJ) 71BA27
-  HL8080 SK(ACJ) 71C080
-  HL8372 SK(G650) 71C372
-  HL8508 삼성(B788) 71C508
-  HL8230 KE(GLEX) 71C230
-  HL8068 KE(G650) 71C068
-  HL8222 KE(BBJ) 71C222
-*/
 
 const HEX_TO_REG_MAP = {
   "71c550": "HL8550",
