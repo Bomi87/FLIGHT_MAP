@@ -13,8 +13,10 @@ const PORT = process.env.PORT || 3000;
 const FR24_API_KEY = process.env.FR24_API_KEY || "";
 
 /*
-  FR24 live positions는 geographic bounds 기반 조회 흐름으로 사용.
-  중국 보완을 위해 3단계 bounds로 탐색:
+  FR24 live flight positions
+  bounds 순서: north,south,west,east
+
+  중국 보완용 3단계 bounds:
   1) 중국 중심
   2) 동아시아 확장
   3) 아시아 광역
@@ -25,17 +27,19 @@ const FR24_BOUNDS_LIST = [
   "70,-10,40,170"
 ];
 
+/* ------------------ FR24 FETCH ------------------ */
+
 async function fetchFr24LiveByBounds(bounds) {
   const url =
     `https://fr24api.flightradar24.com/api/live/flight-positions/full?bounds=${encodeURIComponent(bounds)}`;
 
- const res = await fetch(url, {
-  headers: {
-    Accept: "application/json",
-    "Accept-Version": "v1",
-    Authorization: `Bearer ${FR24_API_KEY}`
-  }
-});
+  const res = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "Accept-Version": "v1",
+      Authorization: `Bearer ${FR24_API_KEY}`
+    }
+  });
 
   if (!res.ok) {
     throw new Error(`FR24 HTTP ${res.status}`);
@@ -58,6 +62,8 @@ function normalizeFr24Aircraft(raw) {
       raw?.hex ??
       raw?.aircraftHex ??
       raw?.transponder ??
+      raw?.icao24 ??
+      raw?.icao ??
       ""
     ).trim().toLowerCase();
 
@@ -71,25 +77,42 @@ function normalizeFr24Aircraft(raw) {
   }
 
   const flight =
-    String(raw?.flight ?? raw?.callsign ?? "").trim();
+    String(
+      raw?.flight ??
+      raw?.callsign ??
+      raw?.identification?.callsign ??
+      ""
+    ).trim();
 
   const callsign =
-    String(raw?.callsign ?? raw?.flight ?? "").trim();
+    String(
+      raw?.callsign ??
+      raw?.flight ??
+      raw?.identification?.callsign ??
+      ""
+    ).trim();
 
   const type =
-    String(raw?.type ?? raw?.aircraftType ?? "").trim();
+    String(
+      raw?.type ??
+      raw?.aircraftType ??
+      raw?.aircraft?.model?.code ??
+      ""
+    ).trim();
 
   const altitude =
     raw?.alt ??
     raw?.altitude ??
     raw?.alt_baro ??
     raw?.alt_geom ??
+    raw?.barometricAltitude ??
     null;
 
   const groundSpeed =
     raw?.gspeed ??
     raw?.groundSpeed ??
     raw?.gs ??
+    raw?.speed ??
     null;
 
   const verticalSpeed =
@@ -105,7 +128,7 @@ function normalizeFr24Aircraft(raw) {
     callsign,
     lat,
     lon,
-    track: Number(raw?.track ?? raw?.heading ?? 0),
+    track: Number(raw?.track ?? raw?.heading ?? raw?.trueTrack ?? 0),
     alt_baro: altitude,
     alt_geom: altitude,
     gs: groundSpeed,
@@ -124,36 +147,25 @@ async function getFr24AircraftByHex(hex) {
 
   for (const bounds of FR24_BOUNDS_LIST) {
     try {
-    const data = await fetchFr24LiveByBounds(bounds);
-console.log("FR24 RAW bounds:", bounds);
-console.log(JSON.stringify(data).slice(0, 3000));
+      const data = await fetchFr24LiveByBounds(bounds);
+      const list = pickArrayFromFr24Response(data);
 
-const list = pickArrayFromFr24Response(data);
-console.log("FR24 list length:", list.length);
-
-if (list.length > 0) {
-  console.log("FR24 first item:", JSON.stringify(list[0], null, 2));
-}
       if (!list.length) {
         continue;
       }
 
-    const found = list.find(item => {
-  const itemHex = String(
-    item?.hex ??
-    item?.aircraftHex ??
-    item?.transponder ??
-    item?.icao24 ??
-    item?.icao ??
-    ""
-  ).trim().toLowerCase();
+      const found = list.find(item => {
+        const itemHex = String(
+          item?.hex ??
+          item?.aircraftHex ??
+          item?.transponder ??
+          item?.icao24 ??
+          item?.icao ??
+          ""
+        ).trim().toLowerCase();
 
-  if (itemHex) {
-    console.log("COMPARE:", itemHex, "vs", targetHex);
-  }
-
-  return itemHex === targetHex;
-});
+        return itemHex === targetHex;
+      });
 
       if (found) {
         return normalizeFr24Aircraft(found);
@@ -165,6 +177,8 @@ if (list.length > 0) {
 
   return null;
 }
+
+/* ------------------ API ROUTES ------------------ */
 
 app.get("/api/fr24-fallback", async (req, res) => {
   try {
@@ -196,15 +210,18 @@ app.get("/api/fr24-fallback", async (req, res) => {
     return res.status(500).json({ aircraft: [] });
   }
 });
+
 app.get("/api/fr24-debug", async (req, res) => {
   try {
-    const bounds = req.query.bounds || "18,55,73,135";
+    const bounds = req.query.bounds || "55,18,73,135";
     const data = await fetchFr24LiveByBounds(bounds);
     return res.json(data);
   } catch (err) {
     return res.status(500).json({ error: String(err.message || err) });
   }
 });
+
+/* ------------------ START ------------------ */
 
 app.listen(PORT, () => {
   console.log(`FR24 proxy server running on port ${PORT}`);
