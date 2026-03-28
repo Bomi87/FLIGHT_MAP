@@ -12,7 +12,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const FR24_API_KEY = process.env.FR24_API_KEY || "";
 
-// 너무 많이 쪼개지 말고, 작동했던 중국 중심 6개만 유지
+// 마지막에 실제로 잡히던 중국 중심 bounds
 const FR24_BOUNDS_LIST = [
   "45,35,105,125", // 중국 북부/베이징
   "40,28,112,124", // 동부/상하이
@@ -21,9 +21,6 @@ const FR24_BOUNDS_LIST = [
   "50,35,85,110",  // 서북부
   "55,15,73,135"   // 중국+주변 fallback
 ];
-
-const CACHE_TTL_MS = 60000; // 60초
-const aircraftCache = new Map();
 
 async function fetchFr24LiveByBounds(bounds) {
   const url =
@@ -53,15 +50,14 @@ function pickArrayFromFr24Response(data) {
 }
 
 function normalizeFr24Aircraft(raw) {
-  const hex =
-    String(
-      raw?.hex ??
-      raw?.aircraftHex ??
-      raw?.transponder ??
-      raw?.icao24 ??
-      raw?.icao ??
-      ""
-    ).trim().toLowerCase();
+  const hex = String(
+    raw?.hex ??
+    raw?.aircraftHex ??
+    raw?.transponder ??
+    raw?.icao24 ??
+    raw?.icao ??
+    ""
+  ).trim().toLowerCase();
 
   if (!hex) return null;
 
@@ -72,29 +68,26 @@ function normalizeFr24Aircraft(raw) {
     return null;
   }
 
-  const flight =
-    String(
-      raw?.flight ??
-      raw?.callsign ??
-      raw?.identification?.callsign ??
-      ""
-    ).trim();
+  const flight = String(
+    raw?.flight ??
+    raw?.callsign ??
+    raw?.identification?.callsign ??
+    ""
+  ).trim();
 
-  const callsign =
-    String(
-      raw?.callsign ??
-      raw?.flight ??
-      raw?.identification?.callsign ??
-      ""
-    ).trim();
+  const callsign = String(
+    raw?.callsign ??
+    raw?.flight ??
+    raw?.identification?.callsign ??
+    ""
+  ).trim();
 
-  const type =
-    String(
-      raw?.type ??
-      raw?.aircraftType ??
-      raw?.aircraft?.model?.code ??
-      ""
-    ).trim();
+  const type = String(
+    raw?.type ??
+    raw?.aircraftType ??
+    raw?.aircraft?.model?.code ??
+    ""
+  ).trim();
 
   const altitude =
     raw?.alt ??
@@ -133,93 +126,55 @@ function normalizeFr24Aircraft(raw) {
     vert_rate: verticalSpeed,
     baro_rate: verticalSpeed,
     t: type,
-    type,
-    source: "fr24",
-    updatedAt: new Date().toISOString()
+    type
   };
 }
 
-function getCachedAircraft(hex) {
-  const key = String(hex || "").trim().toLowerCase();
-  if (!key) return null;
+async function getFr24AircraftByHex(hex) {
+  const targetHex = String(hex || "").trim().toLowerCase();
+  if (!targetHex || !FR24_API_KEY) return null;
 
-  const cached = aircraftCache.get(key);
-  if (!cached) return null;
+  console.log(`search hex=${targetHex}`);
 
-  const age = Date.now() - cached.savedAt;
-  if (age > CACHE_TTL_MS) {
-    aircraftCache.delete(key);
-    return null;
-  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    for (const bounds of FR24_BOUNDS_LIST) {
+      try {
+        const data = await fetchFr24LiveByBounds(bounds);
+        const list = pickArrayFromFr24Response(data);
 
-  return {
-    ...cached.data,
-    source: "cache",
-    cacheAgeMs: age
-  };
-}
+        console.log(
+          `attempt=${attempt + 1}, bounds=${bounds}, list.length=${list.length}`
+        );
 
-function setCachedAircraft(aircraft) {
-  if (!aircraft?.hex) return;
+        const found = list.find(item => {
+          const itemHex = String(
+            item?.hex ??
+            item?.aircraftHex ??
+            item?.transponder ??
+            item?.icao24 ??
+            item?.icao ??
+            ""
+          ).trim().toLowerCase();
 
-  aircraftCache.set(aircraft.hex, {
-    savedAt: Date.now(),
-    data: aircraft
-  });
-}
+          return itemHex === targetHex;
+        });
 
-function cleanupCache() {
-  const now = Date.now();
-  for (const [hex, entry] of aircraftCache.entries()) {
-    if (now - entry.savedAt > CACHE_TTL_MS) {
-      aircraftCache.delete(hex);
-    }
-  }
-}
-
-console.log(`search hex=${targetHex}`);
-
-for (let attempt = 0; attempt < 3; attempt++) {
-  for (const bounds of FR24_BOUNDS_LIST) {
-    try {
-      const data = await fetchFr24LiveByBounds(bounds);
-      const list = pickArrayFromFr24Response(data);
-
-      console.log(
-        `attempt=${attempt + 1}, bounds=${bounds}, list.length=${list.length}`
-      );
-
-      const found = list.find(item => {
-        const itemHex = String(
-          item?.hex ??
-          item?.aircraftHex ??
-          item?.transponder ??
-          item?.icao24 ??
-          item?.icao ??
-          ""
-        ).trim().toLowerCase();
-
-        return itemHex === targetHex;
-      });
-
-      if (found) {
-        console.log(`found ${targetHex} in bounds=${bounds}`);
-        return normalizeFr24Aircraft(found);
+        if (found) {
+          console.log(`found ${targetHex} in bounds=${bounds}`);
+          return normalizeFr24Aircraft(found);
+        }
+      } catch (err) {
+        console.error(`FR24 bounds fetch failed (${bounds}):`, err.message);
       }
-    } catch (err) {
-      console.error(`FR24 bounds fetch failed (${bounds}):`, err.message);
     }
   }
-}
 
-console.log(`not found: ${targetHex}`);
-return null;
+  console.log(`not found: ${targetHex}`);
+  return null;
 }
 
 app.get("/api/fr24-fallback", async (req, res) => {
   try {
-    cleanupCache();
-
     const hexes = String(req.query.hexes || "")
       .split(",")
       .map(x => x.trim().toLowerCase())
@@ -233,26 +188,12 @@ app.get("/api/fr24-fallback", async (req, res) => {
 
     for (const hex of hexes) {
       try {
-        const live = await getFr24AircraftByHex(hex);
-
-        if (live) {
-          results.push(live);
-          continue;
-        }
-
-        const cached = getCachedAircraft(hex);
-        if (cached) {
-          console.log(`cache hit: ${hex}`);
-          results.push(cached);
+        const ac = await getFr24AircraftByHex(hex);
+        if (ac) {
+          results.push(ac);
         }
       } catch (innerErr) {
-        console.error(`FR24 fetch failed for ${hex}:`, innerErr);
-
-        const cached = getCachedAircraft(hex);
-        if (cached) {
-          console.log(`cache fallback after error: ${hex}`);
-          results.push(cached);
-        }
+        console.error(`FR24 fetch failed for ${hex}:`, innerErr.message || innerErr);
       }
     }
 
@@ -271,6 +212,10 @@ app.get("/api/fr24-debug", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: String(err.message || err) });
   }
+});
+
+app.get("/", (req, res) => {
+  res.send("FR24 proxy server is running");
 });
 
 app.listen(PORT, () => {
