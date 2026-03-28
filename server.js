@@ -20,21 +20,22 @@ const FR24_API_KEY = process.env.FR24_API_KEY || "";
   3) 아시아 광역
 */
 const FR24_BOUNDS_LIST = [
-  "18,55,73,135",
-  "5,60,60,150",
-  "-10,70,40,170"
+  "55,18,73,135",
+  "60,5,60,150",
+  "70,-10,40,170"
 ];
 
 async function fetchFr24LiveByBounds(bounds) {
   const url =
     `https://fr24api.flightradar24.com/api/live/flight-positions/full?bounds=${encodeURIComponent(bounds)}`;
 
-  const res = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${FR24_API_KEY}`
-    }
-  });
+ const res = await fetch(url, {
+  headers: {
+    Accept: "application/json",
+    "Accept-Version": "v1",
+    Authorization: `Bearer ${FR24_API_KEY}`
+  }
+});
 
   if (!res.ok) {
     throw new Error(`FR24 HTTP ${res.status}`);
