@@ -227,3 +227,4 @@ app.get("/api/fr24-debug", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`FR24 proxy server running on port ${PORT}`);
 });
+console.log("FR24 raw list length:", list.length);
