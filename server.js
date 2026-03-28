@@ -13,12 +13,22 @@ const PORT = process.env.PORT || 3000;
 const FR24_API_KEY = process.env.FR24_API_KEY || "";
 
 const FR24_BOUNDS_LIST = [
-  "45,35,105,125", // 중국 북부/베이징
-  "40,28,112,124", // 동부/상하이
-  "32,20,105,122", // 남부/광저우-선전
-  "35,22,95,112",  // 내륙/청두-충칭
-  "50,35,85,110",  // 서북부
-  "55,15,73,135"   // 중국+주변 fallback
+  "46,38,116,129", // 동북 1
+  "44,36,124,132", // 동북 2 / 랴오닝-동해안
+  "42,34,112,121", // 화북
+  "40,32,118,126", // 베이징-보하이-산둥 북부
+  "38,30,108,118", // 산시-허난
+  "36,28,118,123", // 산둥-장쑤 북부
+  "34,26,112,121", // 중동부
+  "32,24,118,123", // 상하이-저장-동중국해
+  "30,22,110,118", // 화중-장시
+  "28,20,110,117", // 화남 내륙
+  "26,18,108,116", // 광시-광둥 서부
+  "25,19,116,123", // 푸젠-광둥 동부-대만해협
+  "36,26,98,110",  // 쓰촨-충칭-후베이 서부
+  "40,30,90,105",  // 서북 1
+  "45,35,80,98",   // 서북 2 / 신장 일부
+  "50,20,73,135"   // 마지막 fallback
 ];
 
 async function fetchFr24LiveByBounds(bounds) {
@@ -139,7 +149,7 @@ async function getFr24AircraftByHex(hex) {
 
   console.log(`search hex=${targetHex}`);
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     for (const bounds of FR24_BOUNDS_LIST) {
       try {
         const data = await fetchFr24LiveByBounds(bounds);
