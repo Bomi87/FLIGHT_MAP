@@ -457,35 +457,49 @@ app.get("/api/fr24-fallback", async (req, res) => {
     }
 
     const results = [];
+    const needLiveHexes = [];
     let foundMap = new Map();
     let unknownHexes = [];
 
-    // 1) 무조건 live 먼저 조회
-    try {
-      const liveResult = await getFr24AircraftByHexes(hexes);
-      foundMap = liveResult.foundMap;
-      unknownHexes = liveResult.unknownHexes;
-    } catch (err) {
-      console.error("FR24 live lookup failed:", err.message || err);
+    // -----------------------------
+    // 1) fresh cache 먼저 체크
+    // -----------------------------
+    for (const hex of hexes) {
+      const fresh = getFreshCachedAircraft(hex);
+
+      if (fresh) {
+        results.push({
+          ...fresh,
+          mode: "fresh-cache"
+        });
+      } else {
+        needLiveHexes.push(hex);
+      }
     }
 
-    // 2) live 결과 우선 반영, 없으면 cache fallback
-    for (const hex of hexes) {
+    // -----------------------------
+    // 2) 필요한 것만 live 조회
+    // -----------------------------
+    if (needLiveHexes.length > 0) {
+      try {
+        const liveResult = await getFr24AircraftByHexes(needLiveHexes);
+        foundMap = liveResult.foundMap;
+        unknownHexes = liveResult.unknownHexes;
+      } catch (err) {
+        console.error("FR24 live lookup failed:", err.message || err);
+      }
+    }
+
+    // -----------------------------
+    // 3) live → stale cache fallback
+    // -----------------------------
+    for (const hex of needLiveHexes) {
       const live = foundMap.get(hex);
 
       if (live) {
         results.push({
           ...live,
           mode: "live"
-        });
-        continue;
-      }
-
-      const fresh = getFreshCachedAircraft(hex);
-      if (fresh) {
-        results.push({
-          ...fresh,
-          mode: "fresh-cache"
         });
         continue;
       }
@@ -499,7 +513,9 @@ app.get("/api/fr24-fallback", async (req, res) => {
       }
     }
 
-    // 3) 입력한 순서대로 정렬
+    // -----------------------------
+    // 4) 입력 순서 정렬
+    // -----------------------------
     const orderMap = new Map(hexes.map((hex, idx) => [hex, idx]));
     results.sort((a, b) => {
       return (orderMap.get(a.hex) ?? 9999) - (orderMap.get(b.hex) ?? 9999);
@@ -510,6 +526,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
       aircraft: results,
       unknown_hexes: unknownHexes
     });
+
   } catch (err) {
     console.error(err);
 
