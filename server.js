@@ -121,23 +121,36 @@ async function getFr24AircraftByHex(hex) {
 
   for (const bounds of FR24_BOUNDS_LIST) {
     try {
-      const data = await fetchFr24LiveByBounds(bounds);
-      const list = pickArrayFromFr24Response(data);
+    const data = await fetchFr24LiveByBounds(bounds);
+console.log("FR24 RAW bounds:", bounds);
+console.log(JSON.stringify(data).slice(0, 3000));
 
+const list = pickArrayFromFr24Response(data);
+console.log("FR24 list length:", list.length);
+
+if (list.length > 0) {
+  console.log("FR24 first item:", JSON.stringify(list[0], null, 2));
+}
       if (!list.length) {
         continue;
       }
 
-      const found = list.find(item => {
-        const itemHex = String(
-          item?.hex ??
-          item?.aircraftHex ??
-          item?.transponder ??
-          ""
-        ).trim().toLowerCase();
+    const found = list.find(item => {
+  const itemHex = String(
+    item?.hex ??
+    item?.aircraftHex ??
+    item?.transponder ??
+    item?.icao24 ??
+    item?.icao ??
+    ""
+  ).trim().toLowerCase();
 
-        return itemHex === targetHex;
-      });
+  if (itemHex) {
+    console.log("COMPARE:", itemHex, "vs", targetHex);
+  }
+
+  return itemHex === targetHex;
+});
 
       if (found) {
         return normalizeFr24Aircraft(found);
@@ -183,4 +196,13 @@ app.get("/api/fr24-fallback", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`FR24 proxy server running on port ${PORT}`);
+});
+app.get("/api/fr24-debug", async (req, res) => {
+  try {
+    const bounds = req.query.bounds || "18,55,73,135";
+    const data = await fetchFr24LiveByBounds(bounds);
+    return res.json(data);
+  } catch (err) {
+    return res.status(500).json({ error: String(err.message || err) });
+  }
 });
