@@ -13,23 +13,26 @@ const PORT = process.env.PORT || 3000;
 const FR24_API_KEY = process.env.FR24_API_KEY || "";
 
 const FR24_BOUNDS_LIST = [
-  "46,38,116,129", // 동북 1
-  "44,36,124,132", // 동북 2 / 랴오닝-동해안
-  "42,34,112,121", // 화북
-  "40,32,118,126", // 베이징-보하이-산둥 북부
-  "38,30,108,118", // 산시-허난
-  "36,28,118,123", // 산둥-장쑤 북부
-  "34,26,112,121", // 중동부
-  "32,24,118,123", // 상하이-저장-동중국해
-  "30,22,110,118", // 화중-장시
-  "28,20,110,117", // 화남 내륙
-  "26,18,108,116", // 광시-광둥 서부
-  "25,19,116,123", // 푸젠-광둥 동부-대만해협
-  "36,26,98,110",  // 쓰촨-충칭-후베이 서부
-  "40,30,90,105",  // 서북 1
-  "45,35,80,98",   // 서북 2 / 신장 일부
-  "50,20,73,135"   // 마지막 fallback
+  "46,38,116,129",
+  "44,36,124,132",
+  "42,34,112,121",
+  "40,32,118,126",
+  "38,30,108,118",
+  "36,28,118,123",
+  "34,26,112,121",
+  "32,24,118,123",
+  "30,22,110,118",
+  "28,20,110,117",
+  "26,18,108,116",
+  "25,19,116,123",
+  "36,26,98,110",
+  "40,30,90,105",
+  "45,35,80,98",
+  "50,20,73,135"
 ];
+
+const CACHE_TTL_MS = 60000; // 60초
+const aircraftCache = new Map();
 
 async function fetchFr24LiveByBounds(bounds) {
   const url =
@@ -59,15 +62,14 @@ function pickArrayFromFr24Response(data) {
 }
 
 function normalizeFr24Aircraft(raw) {
-  const hex =
-    String(
-      raw?.hex ??
-      raw?.aircraftHex ??
-      raw?.transponder ??
-      raw?.icao24 ??
-      raw?.icao ??
-      ""
-    ).trim().toLowerCase();
+  const hex = String(
+    raw?.hex ??
+    raw?.aircraftHex ??
+    raw?.transponder ??
+    raw?.icao24 ??
+    raw?.icao ??
+    ""
+  ).trim().toLowerCase();
 
   if (!hex) return null;
 
@@ -78,29 +80,26 @@ function normalizeFr24Aircraft(raw) {
     return null;
   }
 
-  const flight =
-    String(
-      raw?.flight ??
-      raw?.callsign ??
-      raw?.identification?.callsign ??
-      ""
-    ).trim();
+  const flight = String(
+    raw?.flight ??
+    raw?.callsign ??
+    raw?.identification?.callsign ??
+    ""
+  ).trim();
 
-  const callsign =
-    String(
-      raw?.callsign ??
-      raw?.flight ??
-      raw?.identification?.callsign ??
-      ""
-    ).trim();
+  const callsign = String(
+    raw?.callsign ??
+    raw?.flight ??
+    raw?.identification?.callsign ??
+    ""
+  ).trim();
 
-  const type =
-    String(
-      raw?.type ??
-      raw?.aircraftType ??
-      raw?.aircraft?.model?.code ??
-      ""
-    ).trim();
+  const type = String(
+    raw?.type ??
+    raw?.aircraftType ??
+    raw?.aircraft?.model?.code ??
+    ""
+  ).trim();
 
   const altitude =
     raw?.alt ??
@@ -139,8 +138,48 @@ function normalizeFr24Aircraft(raw) {
     vert_rate: verticalSpeed,
     baro_rate: verticalSpeed,
     t: type,
-    type
+    type,
+    source: "fr24",
+    updatedAt: new Date().toISOString()
   };
+}
+
+function getCachedAircraft(hex) {
+  const key = String(hex || "").trim().toLowerCase();
+  if (!key) return null;
+
+  const cached = aircraftCache.get(key);
+  if (!cached) return null;
+
+  const age = Date.now() - cached.savedAt;
+  if (age > CACHE_TTL_MS) {
+    aircraftCache.delete(key);
+    return null;
+  }
+
+  return {
+    ...cached.data,
+    source: "cache",
+    cacheAgeMs: age
+  };
+}
+
+function setCachedAircraft(aircraft) {
+  if (!aircraft?.hex) return;
+
+  aircraftCache.set(aircraft.hex, {
+    savedAt: Date.now(),
+    data: aircraft
+  });
+}
+
+function cleanupCache() {
+  const now = Date.now();
+  for (const [hex, entry] of aircraftCache.entries()) {
+    if (now - entry.savedAt > CACHE_TTL_MS) {
+      aircraftCache.delete(hex);
+    }
+  }
 }
 
 async function getFr24AircraftByHex(hex) {
@@ -174,7 +213,11 @@ async function getFr24AircraftByHex(hex) {
 
         if (found) {
           console.log(`found ${targetHex} in bounds=${bounds}`);
-          return normalizeFr24Aircraft(found);
+          const normalized = normalizeFr24Aircraft(found);
+          if (normalized) {
+            setCachedAircraft(normalized);
+          }
+          return normalized;
         }
       } catch (err) {
         console.error(`FR24 bounds fetch failed (${bounds}):`, err.message);
@@ -182,12 +225,14 @@ async function getFr24AircraftByHex(hex) {
     }
   }
 
-  console.log(`not found: ${targetHex}`);
+  console.log(`not found in FR24: ${targetHex}`);
   return null;
 }
 
 app.get("/api/fr24-fallback", async (req, res) => {
   try {
+    cleanupCache();
+
     const hexes = String(req.query.hexes || "")
       .split(",")
       .map(x => x.trim().toLowerCase())
@@ -201,12 +246,26 @@ app.get("/api/fr24-fallback", async (req, res) => {
 
     for (const hex of hexes) {
       try {
-        const ac = await getFr24AircraftByHex(hex);
-        if (ac) {
-          results.push(ac);
+        const live = await getFr24AircraftByHex(hex);
+
+        if (live) {
+          results.push(live);
+          continue;
+        }
+
+        const cached = getCachedAircraft(hex);
+        if (cached) {
+          console.log(`cache hit: ${hex}`);
+          results.push(cached);
         }
       } catch (innerErr) {
         console.error(`FR24 fetch failed for ${hex}:`, innerErr);
+
+        const cached = getCachedAircraft(hex);
+        if (cached) {
+          console.log(`cache fallback after error: ${hex}`);
+          results.push(cached);
+        }
       }
     }
 
@@ -219,7 +278,7 @@ app.get("/api/fr24-fallback", async (req, res) => {
 
 app.get("/api/fr24-debug", async (req, res) => {
   try {
-    const bounds = req.query.bounds || "55,15,73,135";
+    const bounds = req.query.bounds || "50,20,73,135";
     const data = await fetchFr24LiveByBounds(bounds);
     return res.json(data);
   } catch (err) {
