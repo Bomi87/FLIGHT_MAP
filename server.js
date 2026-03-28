@@ -149,7 +149,7 @@ async function getFr24AircraftByHex(hex) {
 
   console.log(`search hex=${targetHex}`);
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     for (const bounds of FR24_BOUNDS_LIST) {
       try {
         const data = await fetchFr24LiveByBounds(bounds);
