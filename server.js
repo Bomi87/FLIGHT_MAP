@@ -22,7 +22,7 @@ const FR24_API_KEY = process.env.FR24_API_KEY || "";
   3) 아시아 광역
 */
 const FR24_BOUNDS_LIST = [
- "80,-20,20,180"
+  "85,-30,-20,180"
 ];
 
 /* ------------------ FR24 FETCH ------------------ */
