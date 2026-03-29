@@ -5980,6 +5980,28 @@
 		</IconStyle>
 	</Style>
 	<Placemark>
+		<name>SIGMET SEV TURB (FL230/320)</name>
+		<styleUrl>#stylemap_id0</styleUrl>
+		<Style>
+			<IconStyle>
+				<scale>1</scale>
+				<Icon>
+					<href>https://maps.google.com/mapfiles/kml/pal4/icon52.png</href>
+				</Icon>
+			</IconStyle>
+			<LabelStyle>
+				<color>ff00ff00</color>
+				<scale>1.2</scale>
+			</LabelStyle>
+		</Style>
+		<Point>
+			<extrude>1</extrude>
+			<altitudeMode>relativeToGround</altitudeMode>
+			<coordinates>124.833333333333,38.0166666666667,160000</coordinates>
+		</Point>
+		<gx:balloonVisibility>1</gx:balloonVisibility>
+	</Placemark>
+	<Placemark>
 		<name>ntm7</name>
 		<Style>
 			<PolyStyle>
