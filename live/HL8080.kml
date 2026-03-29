@@ -5497,6 +5497,18 @@
 			</Icon>
 		</IconStyle>
 	</Style>
+	<Style id="style_4101">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+			<scale>1.4</scale>
+		</LabelStyle>
+	</Style>
 	<Style id="style_410">
 		<IconStyle>
 			<scale>1.1</scale>
@@ -5505,10 +5517,20 @@
 			</Icon>
 		</IconStyle>
 		<LabelStyle>
-			<color>ff0000ff</color>
+			<color>ff00ff00</color>
 			<scale>1.4</scale>
 		</LabelStyle>
 	</Style>
+	<StyleMap id="style_4100">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#style_410</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#style_4101</styleUrl>
+		</Pair>
+	</StyleMap>
 	<Style id="style_42">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -5765,14 +5787,6 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Style id="style_70">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
-			</Icon>
-		</IconStyle>
-	</Style>
 	<Style id="style_700">
 		<IconStyle>
 			<scale>1.1</scale>
@@ -5784,6 +5798,14 @@
 			<color>ff00ff00</color>
 			<scale>1.4</scale>
 		</LabelStyle>
+	</Style>
+	<Style id="style_70">
+		<IconStyle>
+			<scale>1.2</scale>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
+			</Icon>
+		</IconStyle>
 	</Style>
 	<Style id="style_71">
 		<IconStyle>
@@ -6032,7 +6054,7 @@
 		<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">24hr 
 -A1, L642, M771 및 N892  : Not required
 -A202  : Required</font></span>]]></description>
-		<styleUrl>#style_410</styleUrl>
+		<styleUrl>#style_4100</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
