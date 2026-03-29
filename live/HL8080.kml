@@ -5958,6 +5958,26 @@
 		</IconStyle>
 	</Style>
 	<Placemark>
+		<name>ntm7</name>
+		<Style>
+			<PolyStyle>
+				<color>7f00ff00</color>
+				<outline>1</outline>
+			</PolyStyle>
+		</Style>
+		<Polygon>
+			<extrude>1</extrude>
+			<altitudeMode>relativeToGround</altitudeMode>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						124.833333333333,38.0166666666667,152400 126.45,37.0166666666667,152400 130.35,35.6166666666667,152400 129.216666666667,34.65,152400 127.916666666667,33.1,152400 125.933333333333,34.8,152400 123.966666666667,35.2666666666667,152400 123.983333333333,37.9833333333333,152400 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark>
 		<name>라오스(VLVT)</name>
 		<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">3 Working days</font></span>]]></description>
 		<styleUrl>#style_210</styleUrl>
