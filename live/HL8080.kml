@@ -5357,27 +5357,11 @@
 			<scale>1.4</scale>
 		</LabelStyle>
 	</Style>
-	<Style id="style_22">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href>
-			</Icon>
-		</IconStyle>
-	</Style>
 	<Style id="style_23">
 		<IconStyle>
 			<scale>1.2</scale>
 			<Icon>
 				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
-			</Icon>
-		</IconStyle>
-	</Style>
-	<Style id="style_24">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href>
 			</Icon>
 		</IconStyle>
 	</Style>
@@ -5413,14 +5397,6 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Style id="style_29">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href>
-			</Icon>
-		</IconStyle>
-	</Style>
 	<Style id="style_3">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -5434,14 +5410,6 @@
 			<scale>1.2</scale>
 			<Icon>
 				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
-			</Icon>
-		</IconStyle>
-	</Style>
-	<Style id="style_31">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href>
 			</Icon>
 		</IconStyle>
 	</Style>
@@ -5481,14 +5449,6 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Style id="style_35">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href>
-			</Icon>
-		</IconStyle>
-	</Style>
 	<Style id="style_36">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -5502,14 +5462,6 @@
 			<scale>1.2</scale>
 			<Icon>
 				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
-			</Icon>
-		</IconStyle>
-	</Style>
-	<Style id="style_38">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href>
 			</Icon>
 		</IconStyle>
 	</Style>
@@ -5545,18 +5497,16 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Style id="style_410">
-		<IconStyle>
-			<scale>1.1</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
-			</Icon>
-		</IconStyle>
-		<LabelStyle>
-			<color>ff00ff00</color>
-			<scale>1.4</scale>
-		</LabelStyle>
-	</Style>
+	<StyleMap id="style_4100">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#style_410</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#style_4101</styleUrl>
+		</Pair>
+	</StyleMap>
 	<Style id="style_4101">
 		<IconStyle>
 			<scale>1.1</scale>
@@ -5569,16 +5519,18 @@
 			<scale>1.4</scale>
 		</LabelStyle>
 	</Style>
-	<StyleMap id="style_4100">
-		<Pair>
-			<key>normal</key>
-			<styleUrl>#style_410</styleUrl>
-		</Pair>
-		<Pair>
-			<key>highlight</key>
-			<styleUrl>#style_4101</styleUrl>
-		</Pair>
-	</StyleMap>
+	<Style id="style_410">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+			<scale>1.4</scale>
+		</LabelStyle>
+	</Style>
 	<Style id="style_42">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -5703,14 +5655,6 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Style id="style_55">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href>
-			</Icon>
-		</IconStyle>
-	</Style>
 	<Style id="style_56">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -5732,14 +5676,6 @@
 			<scale>1.2</scale>
 			<Icon>
 				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
-			</Icon>
-		</IconStyle>
-	</Style>
-	<Style id="style_59">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href>
 			</Icon>
 		</IconStyle>
 	</Style>
@@ -5791,6 +5727,14 @@
 			</Icon>
 		</IconStyle>
 	</Style>
+	<Style id="style_650">
+		<IconStyle>
+			<scale>1.2</scale>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
+			</Icon>
+		</IconStyle>
+	</Style>
 	<Style id="style_65">
 		<IconStyle>
 			<scale>1.1</scale>
@@ -5802,14 +5746,6 @@
 			<color>ff0000ff</color>
 			<scale>1.4</scale>
 		</LabelStyle>
-	</Style>
-	<Style id="style_650">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
-			</Icon>
-		</IconStyle>
 	</Style>
 	<Style id="style_66">
 		<IconStyle>
@@ -5851,6 +5787,14 @@
 			</Icon>
 		</IconStyle>
 	</Style>
+	<Style id="style_70">
+		<IconStyle>
+			<scale>1.2</scale>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
+			</Icon>
+		</IconStyle>
+	</Style>
 	<Style id="style_700">
 		<IconStyle>
 			<scale>1.1</scale>
@@ -5862,14 +5806,6 @@
 			<color>ff00ff00</color>
 			<scale>1.4</scale>
 		</LabelStyle>
-	</Style>
-	<Style id="style_70">
-		<IconStyle>
-			<scale>1.2</scale>
-			<Icon>
-				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
-			</Icon>
-		</IconStyle>
 	</Style>
 	<Style id="style_71">
 		<IconStyle>
@@ -6747,29 +6683,9 @@
 		</Point>
 	</Placemark>
 	<Placemark>
-		<name>*VLVT</name>
-		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>-</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>130106 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>16359 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>2759 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>26596lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 00:59</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>07:41Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 41KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>10500 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_22</styleUrl>
-		<Point>
-			<extrude>1</extrude>
-			<altitudeMode>absolute</altitudeMode>
-			<coordinates>107.183333,15.766667,11887.2</coordinates>
-		</Point>
-	</Placemark>
-	<Placemark>
 		<name>TANNA</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>A1</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>129829 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>16531 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>2931 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>26319lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 01:02</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>07:44Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 44KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>10500 ft</font></span><br><br>]]></description>
 		<styleUrl>#style_23</styleUrl>
-		<Point>
-			<extrude>1</extrude>
-			<altitudeMode>absolute</altitudeMode>
-			<coordinates>107.658333,15.903333,11887.2</coordinates>
-		</Point>
-	</Placemark>
-	<Placemark>
-		<name>*VVHM</name>
-		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>-</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>129829 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>16531 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>2931 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>26319lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 01:02</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>07:44Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 44KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>10500 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_24</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
@@ -6817,29 +6733,9 @@
 		</Point>
 	</Placemark>
 	<Placemark>
-		<name>*VVHN</name>
-		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>-</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>128966 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>17569 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>3969 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>25456lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 01:13</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>07:55Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 39KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>5500 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_29</styleUrl>
-		<Point>
-			<extrude>1</extrude>
-			<altitudeMode>absolute</altitudeMode>
-			<coordinates>108.973333,16.56,11887.2</coordinates>
-		</Point>
-	</Placemark>
-	<Placemark>
 		<name>BUNTA</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>A1</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>128678 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>17857 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>4257 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>25168lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 01:17</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>07:59Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 39KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>5500 ft</font></span><br><br>]]></description>
 		<styleUrl>#style_30</styleUrl>
-		<Point>
-			<extrude>1</extrude>
-			<altitudeMode>absolute</altitudeMode>
-			<coordinates>109.395,16.833333,11887.2</coordinates>
-		</Point>
-	</Placemark>
-	<Placemark>
-		<name>*ZJSA</name>
-		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>-</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>128678 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>17857 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>4257 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>25168lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 01:17</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>07:59Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 39KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>5500 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_31</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
@@ -6877,16 +6773,6 @@
 		</Point>
 	</Placemark>
 	<Placemark>
-		<name>*VHHK</name>
-		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>-</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>125540 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>20190 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>6590 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>22030lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 01:57</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>08:39Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 62KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1100 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_35</styleUrl>
-		<Point>
-			<extrude>1</extrude>
-			<altitudeMode>absolute</altitudeMode>
-			<coordinates>114.385,19.71,11887.2</coordinates>
-		</Point>
-	</Placemark>
-	<Placemark>
 		<name>NOBAD</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>124884 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>20881 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>7281 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>21374lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 02:05</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>08:47Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 61KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1100 ft</font></span><br><br>]]></description>
 		<styleUrl>#style_36</styleUrl>
@@ -6900,16 +6786,6 @@
 		<name>KAPLI</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>G86</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>123746 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>21879 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>8279 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>20236lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 02:19</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>09:01Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 65KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1100 ft</font></span><br><br>]]></description>
 		<styleUrl>#style_37</styleUrl>
-		<Point>
-			<extrude>1</extrude>
-			<altitudeMode>absolute</altitudeMode>
-			<coordinates>117.5,21.166667,11887.2</coordinates>
-		</Point>
-	</Placemark>
-	<Placemark>
-		<name>*RCAA</name>
-		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>-</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>123746 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>21879 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>8279 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>20236lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 02:19</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>09:01Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 65KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1100 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_38</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
@@ -7077,16 +6953,6 @@
 		</Point>
 	</Placemark>
 	<Placemark>
-		<name>*RJJJ</name>
-		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>-</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>118380 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>26825 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>13225 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>14870lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-54</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>455</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-27</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 03:28</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>10:10Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 77KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1100 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_55</styleUrl>
-		<Point>
-			<extrude>1</extrude>
-			<altitudeMode>absolute</altitudeMode>
-			<coordinates>124,27.991667,11887.2</coordinates>
-		</Point>
-	</Placemark>
-	<Placemark>
 		<name>BOLUT</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>Y741</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>117850 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>27355 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>13755 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>14340lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-54</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>455</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-27</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 03:35</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>10:17Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 77KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>5</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1100 ft</font></span><br><br>]]></description>
 		<styleUrl>#style_56</styleUrl>
@@ -7110,16 +6976,6 @@
 		<name>TESIM</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>Y722</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>116145 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>30320 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>16720 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>12635lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-58</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>451</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-31</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 03:58</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>10:40Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 41KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>8</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1100 ft</font></span><br><br>]]></description>
 		<styleUrl>#style_58</styleUrl>
-		<Point>
-			<extrude>1</extrude>
-			<altitudeMode>absolute</altitudeMode>
-			<coordinates>125.858333,31.59,11887.2</coordinates>
-		</Point>
-	</Placemark>
-	<Placemark>
-		<name>*RKRR</name>
-		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>-</font></span><br><br><span style='white-space: nowrap;'>-<b>ALTITUDE :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>WEIGHT :</b> <font color='blue'>116145 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>30320 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>16720 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel Remaining :</b> <font color='blue'>12635lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-58</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>451</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-31</font></span><br><br><span style='white-space: nowrap;'>-<b>출발기준 :</b> <font color='blue'>T/O + 03:58</font></span><br><br><span style='white-space: nowrap;'>-<b>이륙시간반영 :</b> <font color='blue'>10:40Z, 9 </font></span><br><br><span style='white-space: nowrap;'>-<b>Wind Factor :</b> <font color='blue'>T.W 41KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>8</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1100 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_59</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
