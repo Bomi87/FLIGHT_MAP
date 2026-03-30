@@ -1395,11 +1395,7 @@ function getShapeCodeLabel(name) {
       const skipRouteBounds = !!options.skipRouteBounds;
       const skipNdbLabel = !!options.skipNdbLabel;
 
-     if (isAirspaceLabel) {
-  if (map.getZoom() < ROUTE_LABEL_MIN_ZOOM) {
-    return;
-  }
-
+if (isAirspaceLabel) {
   const cleanedName = cleanLabelText(feature.name);
   if (!cleanedName) return;
 
