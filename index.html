@@ -265,7 +265,6 @@
     const NDB_BOUNDS_PAD_RATIO = 0.20;
     const NDB_REDRAW_DELAY_MS = 80;
     const WAYPOINT_LABEL_DISTANCE = 22;
-    const WAYPOINT_LABEL_EXTRA_DOWN_PX = 8;
     const WAYPOINT_LABEL_MIN_ZOOM = 5;
     const WAYPOINT_LABEL_COLLISION_PAD = 2;
 
@@ -776,42 +775,22 @@
       return Math.atan2(dy, dx) * 180 / Math.PI;
     }
 
-    function normalizeLabelAngle(angle) {
+    function normalizeAngle180(angle) {
       let a = angle;
-
       while (a > 180) a -= 360;
-      while (a < -180) a += 360;
-
-      if (a > 90) a -= 180;
-      if (a < -90) a += 180;
-
+      while (a <= -180) a += 360;
       return a;
     }
 
-    function getRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext) {
-      if (prevPoint && nextPoint) {
-        const a1 = getSegmentAngleDeg(prevPoint, currPoint, renderContext);
-        const a2 = getSegmentAngleDeg(currPoint, nextPoint, renderContext);
-
-        const r1 = a1 * Math.PI / 180;
-        const r2 = a2 * Math.PI / 180;
-
-        const x = Math.cos(r1) + Math.cos(r2);
-        const y = Math.sin(r1) + Math.sin(r2);
-
-        if (Math.abs(x) > 0.000001 || Math.abs(y) > 0.000001) {
-          return normalizeLabelAngle(Math.atan2(y, x) * 180 / Math.PI);
-        }
-      }
-
-      if (nextPoint) {
-        return normalizeLabelAngle(
+    function getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext) {
+      if (currPoint && nextPoint) {
+        return normalizeAngle180(
           getSegmentAngleDeg(currPoint, nextPoint, renderContext)
         );
       }
 
-      if (prevPoint) {
-        return normalizeLabelAngle(
+      if (prevPoint && currPoint) {
+        return normalizeAngle180(
           getSegmentAngleDeg(prevPoint, currPoint, renderContext)
         );
       }
@@ -819,28 +798,20 @@
       return 0;
     }
 
-    function getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance = WAYPOINT_LABEL_DISTANCE) {
-      const routeAngle = getRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
+    function getRightSideLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance = WAYPOINT_LABEL_DISTANCE) {
+      const routeAngle = getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
 
-      let labelAngle = normalizeLabelAngle(routeAngle + 90);
-      let rad = labelAngle * Math.PI / 180;
+      const labelAngle = normalizeAngle180(routeAngle + 90);
+      const rad = labelAngle * Math.PI / 180;
 
-      let dx = Math.cos(rad);
-      let dy = Math.sin(rad);
-
-      /* 항상 화면 아래쪽으로 */
-      if (dy < 0) {
-        dx = -dx;
-        dy = -dy;
-        labelAngle = normalizeLabelAngle(labelAngle + 180);
-        rad = labelAngle * Math.PI / 180;
-      }
+      const dx = Math.cos(rad);
+      const dy = Math.sin(rad);
 
       return {
         angle: labelAngle,
         offset: [
           Math.round(dx * distance),
-          Math.round(dy * distance + WAYPOINT_LABEL_EXTRA_DOWN_PX)
+          Math.round(dy * distance)
         ],
         direction: "center"
       };
@@ -929,7 +900,7 @@
         };
 
         if (item.currPoint) {
-          placement = getPerpendicularLabelPlacement(
+          placement = getRightSideLabelPlacement(
             item.prevPoint,
             item.currPoint,
             item.nextPoint,
