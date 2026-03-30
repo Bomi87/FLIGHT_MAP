@@ -417,6 +417,20 @@
       return s.trim();
     }
 
+    function normalizeSpecialLabelName(name) {
+      return String(name || "")
+        .replace(/&amp;#x2F;/gi, "/")
+        .replace(/&#x2F;/gi, "/")
+        .replace(/&amp;#47;/gi, "/")
+        .replace(/&#47;/gi, "/")
+        .trim();
+    }
+
+    function getShapeCodeLabel(name) {
+      const s = normalizeSpecialLabelName(name);
+      return s.split("/")[0].trim();
+    }
+
     function buildPopupHtml(title, descriptionHtml, extraRows = []) {
       let html = `<div class="popup-body">`;
 
@@ -684,7 +698,8 @@
         pointFeatures.filter(f =>
           !isAirspaceLabelFeature(f) &&
           !isTriangleShapePoint(f) &&
-          !isIcon52ShapePoint(f)
+          !isIcon52ShapePoint(f) &&
+          !isHorizontalPinkShapeLabel(f)
         )
       );
 
@@ -718,6 +733,7 @@
     function isWaypointLabelFeature(feature) {
       if (!feature || feature.type !== "Point") return false;
       if (isAirspaceLabelFeature(feature)) return false;
+      if (isHorizontalPinkShapeLabel(feature)) return false;
       if (!feature.name || !String(feature.name).trim()) return false;
       return true;
     }
@@ -754,14 +770,28 @@
       return triangleIcon;
     }
 
+    function isHorizontalPinkShapeLabel(feature) {
+      if (!feature || feature.type !== "Point") return false;
+      if (isAirspaceLabelFeature(feature)) return false;
+
+      const code = getShapeCodeLabel(feature.name);
+      if (!code) return false;
+
+      return (
+        isTriangleShapePoint(feature) ||
+        isIcon52ShapePoint(feature) ||
+        /^[A-Z]{1,3}\d{2,5}$/i.test(code)
+      );
+    }
+
     function isAlwaysVisibleShapePointLabel(feature) {
-      return isIcon52ShapePoint(feature) || isTriangleShapePoint(feature);
+      return isHorizontalPinkShapeLabel(feature);
     }
 
     function bindPermanentHorizontalTriangleLabel(layer, feature) {
       if (!layer || !feature || !feature.name) return;
 
-      const cleanedName = cleanLabelText(feature.name);
+      const cleanedName = getShapeCodeLabel(feature.name);
       if (!cleanedName) return;
 
       const labelHtml = `<span class="triangle-label-text">${escapeHtml(cleanedName)}</span>`;
@@ -1479,9 +1509,7 @@
           marker.bindPopup(popupHtml, POPUP_OPTIONS);
         }
 
-        if (isTriangleShapePoint(feature)) {
-          bindPermanentHorizontalTriangleLabel(marker, feature);
-        } else if (isIcon52ShapePoint(feature)) {
+        if (isHorizontalPinkShapeLabel(feature)) {
           bindPermanentHorizontalTriangleLabel(marker, feature);
         } else if (isNdbFile(sourceName)) {
           if (!skipNdbLabel) {
@@ -1709,7 +1737,7 @@
           buildPopupHtml(
             destFeature.name || "",
             destFeature.description || "",
-            destFeature.extraRows || []
+            depFeature?.extraRows || destFeature.extraRows || []
           ),
           POPUP_OPTIONS
         );
@@ -1722,6 +1750,7 @@
       return pointFeatures.filter(f =>
         !isTriangleShapePoint(f) &&
         !isIcon52ShapePoint(f) &&
+        !isHorizontalPinkShapeLabel(f) &&
         !isEndpointPointFeature(f, routeEndpoints)
       );
     }
