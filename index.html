@@ -103,8 +103,7 @@
       font-weight: 700;
       color: #ffffff;
       font-size: 10px;
-      transform: rotate(-90deg);
-      transform-origin: top right;
+      transform-origin: center center;
       text-align: left;
       text-shadow:
         -1px -1px 0 #000,
@@ -581,7 +580,6 @@
       return rings.map(ring => unwrapRingSequence(ring, renderContext?.referenceLon));
     }
 
-    /* 전역 공유: aircraft.js가 KML과 같은 기준을 쓰도록 */
     window.__wrapLon180 = wrapLon180;
     window.__shiftLonNearReference = shiftLonNearReference;
     window.__ROUTE_RENDER_REFERENCE_LON = null;
@@ -654,34 +652,34 @@
       return result;
     }
 
-  function getRouteEndpoints(pointFeatures) {
-  const endpointCandidates = compressConsecutiveByName(
-    pointFeatures.filter(f =>
-      !isAirspaceLabelFeature(f) &&
-      !isTriangleShapePoint(f) &&
-      !isIcon52ShapePoint(f)
-    )
-  );
+    function getRouteEndpoints(pointFeatures) {
+      const endpointCandidates = compressConsecutiveByName(
+        pointFeatures.filter(f =>
+          !isAirspaceLabelFeature(f) &&
+          !isTriangleShapePoint(f) &&
+          !isIcon52ShapePoint(f)
+        )
+      );
 
-  if (endpointCandidates.length >= 2) {
-    const depFeature = endpointCandidates[0];
-    const destFeature = endpointCandidates[endpointCandidates.length - 1];
+      if (endpointCandidates.length >= 2) {
+        const depFeature = endpointCandidates[0];
+        const destFeature = endpointCandidates[endpointCandidates.length - 1];
 
-    return {
-      departureFeature: depFeature,
-      destinationFeature: destFeature,
-      departureCoord: depFeature.coords,
-      destinationCoord: destFeature.coords
-    };
-  }
+        return {
+          departureFeature: depFeature,
+          destinationFeature: destFeature,
+          departureCoord: depFeature.coords,
+          destinationCoord: destFeature.coords
+        };
+      }
 
-  return {
-    departureFeature: null,
-    destinationFeature: null,
-    departureCoord: null,
-    destinationCoord: null
-  };
-}
+      return {
+        departureFeature: null,
+        destinationFeature: null,
+        departureCoord: null,
+        destinationCoord: null
+      };
+    }
 
     function isEndpointPointFeature(feature, routeEndpoints) {
       return (
@@ -754,6 +752,49 @@
       }
     }
 
+    function getSegmentAngleDeg(p1, p2) {
+      if (!p1 || !p2) return 0;
+
+      const dx = p2.lon - p1.lon;
+      const dy = p2.lat - p1.lat;
+
+      return Math.atan2(dy, dx) * 180 / Math.PI;
+    }
+
+    function normalizeLabelAngle(angle) {
+      let a = angle;
+
+      while (a > 180) a -= 360;
+      while (a < -180) a += 360;
+
+      if (a > 90) a -= 180;
+      if (a < -90) a += 180;
+
+      return a;
+    }
+
+    function getSmartLabelAngle(prevPoint, currPoint, nextPoint) {
+      let angle = 0;
+
+      if (prevPoint && nextPoint) {
+        const a1 = getSegmentAngleDeg(prevPoint, currPoint);
+        const a2 = getSegmentAngleDeg(currPoint, nextPoint);
+        angle = (a1 + a2) / 2;
+      } else if (prevPoint) {
+        angle = getSegmentAngleDeg(prevPoint, currPoint);
+      } else if (nextPoint) {
+        angle = getSegmentAngleDeg(currPoint, nextPoint);
+      }
+
+      angle = normalizeLabelAngle(angle);
+
+      const abs = Math.abs(angle);
+
+      if (abs <= 25) return 0;
+      if (abs >= 65) return -90;
+      return angle > 0 ? 45 : -45;
+    }
+
     function registerWaypointZoomLabel(layer, feature, options = {}) {
       if (!layer || !feature || !feature.name) return;
       if (!isWaypointLabelFeature(feature)) return;
@@ -761,7 +802,14 @@
       const cleanedName = cleanLabelText(feature.name);
       if (!cleanedName) return;
 
-      const labelHtml = `<span class="waypoint-label-text">${escapeHtml(cleanedName)}</span>`;
+      const angle = Number.isFinite(options.angle) ? options.angle : 0;
+
+      const labelHtml = `
+        <span class="waypoint-label-text"
+              style="transform: rotate(${angle}deg); display:inline-block;">
+          ${escapeHtml(cleanedName)}
+        </span>
+      `;
 
       waypointZoomLabelRegistry.push({
         layer,
@@ -919,10 +967,21 @@
 
         marker.bindPopup(popupHtml, POPUP_OPTIONS);
 
+        const prevPoint = i > 0 ? points[i - 1] : null;
+        const currPoint = points[i];
+        const nextPoint = i < points.length - 1 ? points[i + 1] : null;
+        const labelAngle = getSmartLabelAngle(prevPoint, currPoint, nextPoint);
+
         registerWaypointZoomLabel(marker, {
           type: "Point",
           name: p.name || "",
           description: p.description || ""
+        }, {
+          minZoom: 5,
+          direction: "bottom",
+          offset: [-20, 10],
+          className: "waypoint-label",
+          angle: labelAngle
         });
 
         addToRouteBounds(marker, sourceName);
@@ -1219,7 +1278,8 @@
             minZoom: 5,
             direction: "bottom",
             offset: [-20, 10],
-            className: "waypoint-label"
+            className: "waypoint-label",
+            angle: options.labelAngle ?? 0
           });
         }
 
@@ -1254,7 +1314,8 @@
           minZoom: 5,
           direction: "bottom",
           offset: [-20, 10],
-          className: "waypoint-label"
+          className: "waypoint-label",
+          angle: options.labelAngle ?? 0
         });
       }
 
@@ -1327,7 +1388,7 @@
       }, NDB_REDRAW_DELAY_MS);
     }
 
-    function drawKMLPoint(feature, targetLayer, sourceName, renderContext) {
+    function drawKMLPoint(feature, targetLayer, sourceName, renderContext, options = {}) {
       const popupHtml = buildPopupHtml(
         feature.name || "Waypoint",
         feature.description || "",
@@ -1341,7 +1402,8 @@
         feature,
         targetLayer,
         sourceName,
-        popupHtml
+        popupHtml,
+        options
       );
     }
 
@@ -1446,7 +1508,7 @@
         destMarker.bindPopup(
           buildPopupHtml(
             destFeature.name || "",
-            depFeature?.description || "",
+            destFeature.description || "",
             destFeature.extraRows || []
           ),
           POPUP_OPTIONS
@@ -1476,6 +1538,13 @@
       const polygonFeatures = features.filter(f => f.type === "Polygon");
       const routeEndpoints = getRouteEndpoints(pointFeatures);
 
+      const waypointOnlyPoints = pointFeatures.filter(f =>
+        !isAirspaceLabelFeature(f) &&
+        !isTriangleShapePoint(f) &&
+        !isIcon52ShapePoint(f) &&
+        !isEndpointPointFeature(f, routeEndpoints)
+      );
+
       lineFeatures.forEach(f => drawKMLLine(f, targetLayer, sourceName, renderContext));
       polygonFeatures.forEach(f => drawKMLPolygon(f, targetLayer, sourceName, renderContext));
 
@@ -1494,12 +1563,29 @@
           }
 
           lastAirspaceLabelName = currentName;
-          drawKMLPoint(f, targetLayer, sourceName, renderContext);
+
+          drawKMLPoint(f, targetLayer, sourceName, renderContext, {
+            labelAngle: 0
+          });
           return;
         }
 
         lastAirspaceLabelName = "";
-        drawKMLPoint(f, targetLayer, sourceName, renderContext);
+
+        let labelAngle = 0;
+
+        const idx = waypointOnlyPoints.indexOf(f);
+        if (idx >= 0) {
+          const prevPoint = idx > 0 ? waypointOnlyPoints[idx - 1].coords : null;
+          const currPoint = waypointOnlyPoints[idx].coords;
+          const nextPoint = idx < waypointOnlyPoints.length - 1 ? waypointOnlyPoints[idx + 1].coords : null;
+
+          labelAngle = getSmartLabelAngle(prevPoint, currPoint, nextPoint);
+        }
+
+        drawKMLPoint(f, targetLayer, sourceName, renderContext, {
+          labelAngle
+        });
       });
 
       drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName, renderContext);
