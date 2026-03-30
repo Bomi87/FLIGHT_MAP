@@ -794,59 +794,66 @@ function getShapeCodeLabel(name) {
   return true;
 }
 
-function getAirspaceAnchorPoints(pointFeatures, currentIndex) {
-  const anchorIndices = [];
+function getDistanceSquared(a, b) {
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const dx = Number(a.lon) - Number(b.lon);
+  const dy = Number(a.lat) - Number(b.lat);
+  return dx * dx + dy * dy;
+}
+
+function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
+  const anchors = [];
 
   for (let i = 0; i < pointFeatures.length; i++) {
     if (isRouteAngleAnchorPoint(pointFeatures[i])) {
-      anchorIndices.push(i);
+      anchors.push({
+        index: i,
+        coords: pointFeatures[i].coords
+      });
     }
   }
 
-  if (!anchorIndices.length) {
+  if (!anchors.length) {
     return {
       prevPoint: null,
-      currPoint: null,
+      currPoint: airspaceFeature?.coords || null,
       nextPoint: null,
       sequence: 999999
     };
   }
 
-  let currIdx = -1;
+  if (anchors.length === 1) {
+    return {
+      prevPoint: null,
+      currPoint: airspaceFeature?.coords || anchors[0].coords,
+      nextPoint: anchors[0].coords,
+      sequence: anchors[0].index
+    };
+  }
 
-  for (let i = anchorIndices.length - 1; i >= 0; i--) {
-    if (anchorIndices[i] < currentIndex) {
-      currIdx = anchorIndices[i];
-      break;
+  let bestSegIdx = 0;
+  let bestDist = Number.POSITIVE_INFINITY;
+  const target = airspaceFeature?.coords || null;
+
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const a = anchors[i].coords;
+    const b = anchors[i + 1].coords;
+    const dist = Math.min(getDistanceSquared(target, a), getDistanceSquared(target, b));
+
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestSegIdx = i;
     }
   }
 
-  if (currIdx < 0) {
-    currIdx = anchorIndices[0];
-  }
-
-  let prevIdx = -1;
-  let nextIdx = -1;
-
-  for (let i = anchorIndices.length - 1; i >= 0; i--) {
-    if (anchorIndices[i] < currIdx) {
-      prevIdx = anchorIndices[i];
-      break;
-    }
-  }
-
-  for (let i = 0; i < anchorIndices.length; i++) {
-    if (anchorIndices[i] > currIdx) {
-      nextIdx = anchorIndices[i];
-      break;
-    }
-  }
+  const prevAnchor = anchors[bestSegIdx];
+  const nextAnchor = anchors[bestSegIdx + 1];
 
   return {
-    prevPoint: prevIdx >= 0 ? pointFeatures[prevIdx].coords : null,
-    currPoint: currIdx >= 0 ? pointFeatures[currIdx].coords : null,
-    nextPoint: nextIdx >= 0 ? pointFeatures[nextIdx].coords : null,
-    sequence: currIdx >= 0 ? currIdx : 999999
+    prevPoint: prevAnchor ? prevAnchor.coords : null,
+    currPoint: target || (prevAnchor ? prevAnchor.coords : null),
+    nextPoint: nextAnchor ? nextAnchor.coords : null,
+    sequence: prevAnchor ? prevAnchor.index : 999999
   };
 }
     function isAlwaysVisibleShapePointLabel(feature) {
@@ -1860,7 +1867,7 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex) {
 
           lastAirspaceLabelName = currentName;
 
-          const anchor = getAirspaceAnchorPoints(pointFeatures, pointIndex);
+          const anchor = getAirspaceAnchorPoints(pointFeatures, pointIndex, f);
 
           drawKMLPoint(f, targetLayer, sourceName, renderContext, {
             prevPoint: anchor.prevPoint,
