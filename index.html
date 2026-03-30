@@ -82,14 +82,19 @@
       display: none !important;
     }
 
+    .route-text-marker {
+      background: transparent !important;
+      border: none !important;
+    }
+
     .waypoint-label-text {
       display: inline-block;
       white-space: nowrap;
       font-weight: 700;
       color: #ffffff;
       font-size: 10px;
-      transform-origin: center center;
-      text-align: center;
+      transform-origin: left center;
+      text-align: left;
       line-height: 1;
       text-shadow:
         -1px -1px 0 #000,
@@ -99,11 +104,6 @@
          0 0 4px rgba(0, 0, 0, 0.65);
       pointer-events: none;
       user-select: none;
-    }
-
-    .airspace-label-marker {
-      background: transparent !important;
-      border: none !important;
     }
 
     .airspace-label-text {
@@ -176,6 +176,7 @@
 
     @media (min-width: 768px) {
       .waypoint-label-text,
+      .airspace-label-text,
       .triangle-label-text,
       .ndb-label-text {
         font-size: 13px;
@@ -256,14 +257,14 @@
     const drawn = L.featureGroup().addTo(map);
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
-    const waypointZoomLabelRegistry = [];
+
+    const waypointLabelRegistry = [];
     const airspaceLabelRegistry = [];
 
     let ndbRawData = [];
     let ndbVisible = false;
     let ndbRedrawTimer = null;
-    let waypointLabelUpdateTimer = null;
-    let airspaceLabelUpdateTimer = null;
+    let routeLabelUpdateTimer = null;
 
     const POPUP_OPTIONS = {
       maxWidth: 260,
@@ -274,12 +275,10 @@
     const NDB_BOUNDS_PAD_RATIO = 0.20;
     const NDB_REDRAW_DELAY_MS = 80;
 
-    const WAYPOINT_LABEL_DISTANCE = 38;
-    const AIRSPACE_LABEL_DISTANCE = 92;
-
-    const WAYPOINT_LABEL_MIN_ZOOM = 5;
+    const ROUTE_LABEL_MIN_ZOOM = 5;
+    const WAYPOINT_LABEL_DISTANCE = 40;
+    const AIRSPACE_LABEL_DISTANCE = 112;
     const WAYPOINT_LABEL_COLLISION_PAD = 2;
-    const AIRSPACE_LABEL_MIN_ZOOM = 4;
 
     /* -----------------------------
        영공 국가 리스트
@@ -811,7 +810,7 @@
       return 0;
     }
 
-    function getRightSideLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance = WAYPOINT_LABEL_DISTANCE) {
+    function getRightSideLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance) {
       const routeAngle = getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
       const labelAngle = normalizeAngle180(routeAngle + 90);
       const rad = labelAngle * Math.PI / 180;
@@ -821,15 +820,43 @@
         offset: [
           Math.round(Math.cos(rad) * distance),
           Math.round(Math.sin(rad) * distance)
-        ],
-        direction: "center"
+        ]
       };
+    }
+
+    function getOffsetLatLngFromPoint(currPoint, placement, renderContext) {
+      if (!currPoint) return null;
+
+      const baseLatLng = toRenderLatLng(currPoint.lat, currPoint.lon, renderContext);
+      const basePt = map.latLngToLayerPoint(baseLatLng);
+
+      const labelPt = L.point(
+        basePt.x + placement.offset[0],
+        basePt.y + placement.offset[1]
+      );
+
+      return map.layerPointToLatLng(labelPt);
+    }
+
+    function createTextMarker(latlng, html, targetLayer) {
+      const icon = L.divIcon({
+        className: "route-text-marker",
+        html: html,
+        iconSize: null
+      });
+
+      return L.marker(latlng, {
+        icon,
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: 3000
+      }).addTo(targetLayer);
     }
 
     function getWaypointLabelHtml(name, angle) {
       return `
         <span class="waypoint-label-text"
-              style="transform: rotate(${angle}deg); display:inline-block;">
+              style="transform: rotate(${angle}deg);">
           ${escapeHtml(name)}
         </span>
       `;
@@ -844,16 +871,15 @@
       `;
     }
 
-    function clearAllWaypointTooltips() {
-      waypointZoomLabelRegistry.forEach(item => {
-        if (item.layer && item.layer.unbindTooltip) {
-          item.layer.unbindTooltip();
+    function clearAllRouteTextMarkers() {
+      waypointLabelRegistry.forEach(item => {
+        if (item.labelMarker && item.targetLayer && item.targetLayer.hasLayer(item.labelMarker)) {
+          item.targetLayer.removeLayer(item.labelMarker);
         }
+        item.labelMarker = null;
         item.visible = false;
       });
-    }
 
-    function clearAllAirspaceTooltips() {
       airspaceLabelRegistry.forEach(item => {
         if (item.labelMarker && item.targetLayer && item.targetLayer.hasLayer(item.labelMarker)) {
           item.targetLayer.removeLayer(item.labelMarker);
@@ -863,9 +889,8 @@
       });
     }
 
-    function getTooltipRect(layer) {
-      const tooltip = layer?.getTooltip ? layer.getTooltip() : null;
-      const el = tooltip?.getElement ? tooltip.getElement() : null;
+    function getMarkerRect(marker) {
+      const el = marker?.getElement ? marker.getElement() : null;
       if (!el) return null;
 
       const rect = el.getBoundingClientRect();
@@ -887,54 +912,26 @@
       );
     }
 
-    function getOffsetLatLngFromPoint(currPoint, placement, renderContext) {
-      if (!currPoint) return null;
-
-      const baseLatLng = toRenderLatLng(currPoint.lat, currPoint.lon, renderContext);
-      const basePt = map.latLngToLayerPoint(baseLatLng);
-
-      const labelPt = L.point(
-        basePt.x + placement.offset[0],
-        basePt.y + placement.offset[1]
-      );
-
-      return map.layerPointToLatLng(labelPt);
-    }
-
-    function createAirspaceLabelMarker(latlng, html, targetLayer) {
-      const icon = L.divIcon({
-        className: "airspace-label-marker",
-        html: html,
-        iconSize: null
-      });
-
-      return L.marker(latlng, {
-        icon,
-        interactive: false,
-        keyboard: false,
-        zIndexOffset: 3000
-      }).addTo(targetLayer);
-    }
-
-    function registerWaypointZoomLabel(layer, feature, options = {}) {
+    function registerWaypointLabel(layer, feature, options = {}) {
       if (!layer || !feature || !feature.name) return;
       if (!isWaypointLabelFeature(feature)) return;
 
       const cleanedName = cleanLabelText(feature.name);
       if (!cleanedName) return;
 
-      waypointZoomLabelRegistry.push({
+      waypointLabelRegistry.push({
         layer,
+        targetLayer: options.targetLayer || drawn,
         featureName: cleanedName,
-        minZoom: options.minZoom ?? WAYPOINT_LABEL_MIN_ZOOM,
-        className: options.className || "waypoint-label",
-        visible: false,
+        feature,
+        minZoom: options.minZoom ?? ROUTE_LABEL_MIN_ZOOM,
         prevPoint: options.prevPoint || null,
         currPoint: options.currPoint || null,
         nextPoint: options.nextPoint || null,
         renderContext: options.renderContext || null,
-        fallbackOffset: options.offset || [0, WAYPOINT_LABEL_DISTANCE],
-        sequence: Number.isFinite(options.sequence) ? options.sequence : waypointZoomLabelRegistry.length
+        sequence: Number.isFinite(options.sequence) ? options.sequence : waypointLabelRegistry.length,
+        labelMarker: null,
+        visible: false
       });
     }
 
@@ -949,7 +946,7 @@
         targetLayer: options.targetLayer || drawn,
         featureName: cleanedName,
         feature,
-        minZoom: options.minZoom ?? AIRSPACE_LABEL_MIN_ZOOM,
+        minZoom: options.minZoom ?? ROUTE_LABEL_MIN_ZOOM,
         prevPoint: options.prevPoint || null,
         currPoint: options.currPoint || null,
         nextPoint: options.nextPoint || null,
@@ -960,102 +957,27 @@
       });
     }
 
-    function updateWaypointZoomLabels() {
+    function updateRouteTextMarkers() {
       const zoom = map.getZoom();
 
-      clearAllWaypointTooltips();
+      clearAllRouteTextMarkers();
 
       const placedRects = [];
 
-      const candidates = waypointZoomLabelRegistry
+      const waypointCandidates = waypointLabelRegistry
         .filter(item => zoom >= item.minZoom && item.layer)
         .sort((a, b) => a.sequence - b.sequence);
 
-      candidates.forEach(item => {
-        let placement = {
-          angle: 0,
-          offset: item.fallbackOffset || [0, WAYPOINT_LABEL_DISTANCE],
-          direction: "center"
-        };
+      waypointCandidates.forEach(item => {
+        if (!item.currPoint) return;
 
-        if (item.currPoint) {
-          placement = getRightSideLabelPlacement(
-            item.prevPoint,
-            item.currPoint,
-            item.nextPoint,
-            item.renderContext,
-            WAYPOINT_LABEL_DISTANCE
-          );
-        }
-
-        const labelHtml = getWaypointLabelHtml(item.featureName, placement.angle);
-
-        item.layer.bindTooltip(labelHtml, {
-          permanent: true,
-          direction: "center",
-          offset: placement.offset,
-          className: item.className,
-          opacity: 1
-        });
-
-        if (item.layer.openTooltip) {
-          item.layer.openTooltip();
-        }
-
-        const rect = getTooltipRect(item.layer);
-
-        if (!rect) {
-          item.visible = true;
-          return;
-        }
-
-        const hit = placedRects.some(r => rectsOverlap(rect, r));
-
-        if (hit) {
-          if (item.layer.unbindTooltip) {
-            item.layer.unbindTooltip();
-          }
-          item.visible = false;
-          return;
-        }
-
-        placedRects.push(rect);
-        item.visible = true;
-      });
-    }
-
-    function updateAirspaceLabels() {
-      const zoom = map.getZoom();
-
-      clearAllAirspaceTooltips();
-
-      const candidates = airspaceLabelRegistry
-        .filter(item => zoom >= item.minZoom && item.layer)
-        .sort((a, b) => a.sequence - b.sequence);
-
-      candidates.forEach(item => {
-        const labelStyle = getLabelStyle(item.feature.style);
-        const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
-
-        const fontSize = isDesktopView()
-          ? Math.max(8, Math.round(10 * labelStyle.scale))
-          : Math.max(6, Math.round(7 * labelStyle.scale));
-
-        let placement = {
-          angle: 0,
-          offset: [0, 0],
-          direction: "center"
-        };
-
-        if (item.currPoint) {
-          placement = getRightSideLabelPlacement(
-            item.prevPoint,
-            item.currPoint,
-            item.nextPoint,
-            item.renderContext,
-            AIRSPACE_LABEL_DISTANCE
-          );
-        }
+        const placement = getRightSideLabelPlacement(
+          item.prevPoint,
+          item.currPoint,
+          item.nextPoint,
+          item.renderContext,
+          WAYPOINT_LABEL_DISTANCE
+        );
 
         const labelLatLng = getOffsetLatLngFromPoint(
           item.currPoint,
@@ -1065,6 +987,62 @@
 
         if (!labelLatLng) return;
 
+        const labelHtml = getWaypointLabelHtml(item.featureName, placement.angle);
+
+        const marker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
+        const rect = getMarkerRect(marker);
+
+        if (!rect) {
+          item.labelMarker = marker;
+          item.visible = true;
+          return;
+        }
+
+        const hit = placedRects.some(r => rectsOverlap(rect, r));
+
+        if (hit) {
+          if (item.targetLayer.hasLayer(marker)) {
+            item.targetLayer.removeLayer(marker);
+          }
+          item.visible = false;
+          return;
+        }
+
+        placedRects.push(rect);
+        item.labelMarker = marker;
+        item.visible = true;
+      });
+
+      const airspaceCandidates = airspaceLabelRegistry
+        .filter(item => zoom >= item.minZoom && item.layer)
+        .sort((a, b) => a.sequence - b.sequence);
+
+      airspaceCandidates.forEach(item => {
+        if (!item.currPoint) return;
+
+        const placement = getRightSideLabelPlacement(
+          item.prevPoint,
+          item.currPoint,
+          item.nextPoint,
+          item.renderContext,
+          AIRSPACE_LABEL_DISTANCE
+        );
+
+        const labelLatLng = getOffsetLatLngFromPoint(
+          item.currPoint,
+          placement,
+          item.renderContext
+        );
+
+        if (!labelLatLng) return;
+
+        const labelStyle = getLabelStyle(item.feature.style);
+        const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
+
+        const fontSize = isDesktopView()
+          ? Math.max(8, Math.round(10 * labelStyle.scale))
+          : Math.max(6, Math.round(7 * labelStyle.scale));
+
         const labelHtml = getAirspaceLabelHtml(
           item.featureName,
           labelColor,
@@ -1073,27 +1051,15 @@
           placement.angle
         );
 
-        item.labelMarker = createAirspaceLabelMarker(
-          labelLatLng,
-          labelHtml,
-          item.targetLayer
-        );
-
+        item.labelMarker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
         item.visible = true;
       });
     }
 
-    function scheduleWaypointLabelUpdate(delay = 0) {
-      clearTimeout(waypointLabelUpdateTimer);
-      waypointLabelUpdateTimer = setTimeout(() => {
-        updateWaypointZoomLabels();
-      }, delay);
-    }
-
-    function scheduleAirspaceLabelUpdate(delay = 0) {
-      clearTimeout(airspaceLabelUpdateTimer);
-      airspaceLabelUpdateTimer = setTimeout(() => {
-        updateAirspaceLabels();
+    function scheduleRouteTextUpdate(delay = 0) {
+      clearTimeout(routeLabelUpdateTimer);
+      routeLabelUpdateTimer = setTimeout(() => {
+        updateRouteTextMarkers();
       }, delay);
     }
 
@@ -1215,18 +1181,18 @@
         const currPoint = points[i];
         const nextPoint = i < points.length - 1 ? points[i + 1] : null;
 
-        registerWaypointZoomLabel(marker, {
+        registerWaypointLabel(marker, {
           type: "Point",
           name: p.name || "",
           description: p.description || ""
         }, {
-          minZoom: WAYPOINT_LABEL_MIN_ZOOM,
-          className: "waypoint-label",
+          minZoom: ROUTE_LABEL_MIN_ZOOM,
           prevPoint,
           currPoint,
           nextPoint,
           renderContext,
-          sequence: i
+          sequence: i,
+          targetLayer
         });
 
         addToRouteBounds(marker, sourceName);
@@ -1466,13 +1432,13 @@
         }
 
         registerAirspaceLabel(labelOnlyMarker, feature, {
-          minZoom: AIRSPACE_LABEL_MIN_ZOOM,
+          minZoom: ROUTE_LABEL_MIN_ZOOM,
           prevPoint: options.prevPoint || null,
           currPoint: options.currPoint || null,
           nextPoint: options.nextPoint || null,
           renderContext: options.renderContext || null,
           sequence: options.sequence,
-          targetLayer: targetLayer
+          targetLayer
         });
 
         if (!skipRouteBounds) addToRouteBounds(labelOnlyMarker, sourceName);
@@ -1509,14 +1475,14 @@
             bindNdbHorizontalLabel(marker, feature);
           }
         } else {
-          registerWaypointZoomLabel(marker, feature, {
-            minZoom: WAYPOINT_LABEL_MIN_ZOOM,
-            className: "waypoint-label",
+          registerWaypointLabel(marker, feature, {
+            minZoom: ROUTE_LABEL_MIN_ZOOM,
             prevPoint: options.prevPoint || null,
             currPoint: options.currPoint || null,
             nextPoint: options.nextPoint || null,
             renderContext: options.renderContext || null,
-            sequence: options.sequence
+            sequence: options.sequence,
+            targetLayer
           });
         }
 
@@ -1547,14 +1513,14 @@
           bindNdbHorizontalLabel(marker, feature);
         }
       } else {
-        registerWaypointZoomLabel(marker, feature, {
-          minZoom: WAYPOINT_LABEL_MIN_ZOOM,
-          className: "waypoint-label",
+        registerWaypointLabel(marker, feature, {
+          minZoom: ROUTE_LABEL_MIN_ZOOM,
           prevPoint: options.prevPoint || null,
           currPoint: options.currPoint || null,
           nextPoint: options.nextPoint || null,
           renderContext: options.renderContext || null,
-          sequence: options.sequence
+          sequence: options.sequence,
+          targetLayer
         });
       }
 
@@ -1901,7 +1867,7 @@
 
     async function init() {
       try {
-        waypointZoomLabelRegistry.length = 0;
+        waypointLabelRegistry.length = 0;
         airspaceLabelRegistry.length = 0;
 
         const requestedFiles = getRequestedFiles();
@@ -1923,8 +1889,7 @@
 
         setTimeout(() => {
           refreshMapSize();
-          scheduleWaypointLabelUpdate(20);
-          scheduleAirspaceLabelUpdate(20);
+          scheduleRouteTextUpdate(20);
         }, 80);
 
       } catch (err) {
@@ -1935,8 +1900,7 @@
 
     window.addEventListener("resize", () => {
       refreshMapSize();
-      scheduleWaypointLabelUpdate(60);
-      scheduleAirspaceLabelUpdate(60);
+      scheduleRouteTextUpdate(60);
       scheduleRedrawNDB();
     });
 
@@ -1944,8 +1908,7 @@
     window.addEventListener("pageshow", refreshMapSize);
 
     map.on("moveend zoomend", function () {
-      scheduleWaypointLabelUpdate(20);
-      scheduleAirspaceLabelUpdate(20);
+      scheduleRouteTextUpdate(20);
       scheduleRedrawNDB();
     });
 
