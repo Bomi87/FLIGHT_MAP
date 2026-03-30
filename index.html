@@ -94,6 +94,8 @@
         -1px  1px 0 #000,
          1px  1px 0 #000,
          0 0 4px rgba(0, 0, 0, 0.65);
+      pointer-events: none;
+      user-select: none;
     }
 
     .waypoint-label-text {
@@ -169,8 +171,7 @@
     @media (min-width: 768px) {
       .waypoint-label-text,
       .triangle-label-text,
-      .ndb-label-text,
-      .kml-label-text {
+      .ndb-label-text {
         font-size: 13px;
       }
     }
@@ -267,8 +268,8 @@
     const NDB_BOUNDS_PAD_RATIO = 0.20;
     const NDB_REDRAW_DELAY_MS = 80;
 
-    const WAYPOINT_LABEL_DISTANCE = 30;
-    const AIRSPACE_LABEL_DISTANCE = 38;
+    const WAYPOINT_LABEL_DISTANCE = 34;
+    const AIRSPACE_LABEL_DISTANCE = 72;
 
     const WAYPOINT_LABEL_MIN_ZOOM = 5;
     const WAYPOINT_LABEL_COLLISION_PAD = 2;
@@ -819,21 +820,6 @@
       };
     }
 
-    function getLeftSideLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance = AIRSPACE_LABEL_DISTANCE) {
-      const routeAngle = getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
-      const labelAngle = normalizeAngle180(routeAngle - 90);
-      const rad = labelAngle * Math.PI / 180;
-
-      return {
-        angle: labelAngle,
-        offset: [
-          Math.round(Math.cos(rad) * distance),
-          Math.round(Math.sin(rad) * distance)
-        ],
-        direction: "center"
-      };
-    }
-
     function getWaypointLabelHtml(name, angle) {
       return `
         <span class="waypoint-label-text"
@@ -958,7 +944,8 @@
             item.prevPoint,
             item.currPoint,
             item.nextPoint,
-            item.renderContext
+            item.renderContext,
+            WAYPOINT_LABEL_DISTANCE
           );
         }
 
@@ -1010,9 +997,10 @@
       candidates.forEach(item => {
         const labelStyle = getLabelStyle(item.feature.style);
         const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
+
         const fontSize = isDesktopView()
-          ? Math.max(10, Math.round(13 * labelStyle.scale))
-          : Math.max(7, Math.round(9 * labelStyle.scale));
+          ? Math.max(9, Math.round(11 * labelStyle.scale))
+          : Math.max(7, Math.round(8 * labelStyle.scale));
 
         let placement = {
           angle: 0,
@@ -1021,11 +1009,12 @@
         };
 
         if (item.currPoint) {
-          placement = getLeftSideLabelPlacement(
+          placement = getRightSideLabelPlacement(
             item.prevPoint,
             item.currPoint,
             item.nextPoint,
-            item.renderContext
+            item.renderContext,
+            AIRSPACE_LABEL_DISTANCE
           );
         }
 
@@ -1420,7 +1409,6 @@
     }
 
     function addPointMarkerInstance(latlng, feature, targetLayer, sourceName, popupHtml, options = {}) {
-      const labelStyle = getLabelStyle(feature.style);
       const iconStyle = getIconStyle(feature.style);
       const isAirspaceLabel = isAirspaceLabelFeature(feature);
       const skipRouteBounds = !!options.skipRouteBounds;
@@ -1700,7 +1688,7 @@
           buildPopupHtml(
             destFeature.name || "",
             destFeature.description || "",
-            destFeature.extraRows || []
+            depFeature?.extraRows || []
           ),
           POPUP_OPTIONS
         );
