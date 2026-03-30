@@ -773,27 +773,32 @@
       return a;
     }
 
-    function getSmartLabelAngle(prevPoint, currPoint, nextPoint) {
-      let angle = 0;
+   function getSmartLabelAngle(prevPoint, currPoint, nextPoint) {
+  let angle = 0;
 
-      if (prevPoint && nextPoint) {
-        const a1 = getSegmentAngleDeg(prevPoint, currPoint);
-        const a2 = getSegmentAngleDeg(currPoint, nextPoint);
-        angle = (a1 + a2) / 2;
-      } else if (prevPoint) {
-        angle = getSegmentAngleDeg(prevPoint, currPoint);
-      } else if (nextPoint) {
-        angle = getSegmentAngleDeg(currPoint, nextPoint);
-      }
+  if (prevPoint && nextPoint) {
+    const a1 = getSegmentAngleDeg(prevPoint, currPoint);
+    const a2 = getSegmentAngleDeg(currPoint, nextPoint);
+    angle = (a1 + a2) / 2;
+  } else if (prevPoint) {
+    angle = getSegmentAngleDeg(prevPoint, currPoint);
+  } else if (nextPoint) {
+    angle = getSegmentAngleDeg(currPoint, nextPoint);
+  }
 
-      angle = normalizeLabelAngle(angle);
+  angle = normalizeLabelAngle(angle);
 
-      const abs = Math.abs(angle);
+  const abs = Math.abs(angle);
 
-      if (abs <= 25) return 0;
-      if (abs >= 65) return -90;
-      return angle > 0 ? 45 : -45;
-    }
+  // 루트가 거의 수평 -> 라벨 세로
+  if (abs <= 25) return -90;
+
+  // 루트가 거의 수직 -> 라벨 가로
+  if (abs >= 65) return 0;
+
+  // 중간 대각 구간도 루트와 반대 느낌으로 보정
+  return angle > 0 ? -45 : 45;
+}
 
     function registerWaypointZoomLabel(layer, feature, options = {}) {
       if (!layer || !feature || !feature.name) return;
@@ -978,8 +983,8 @@
           description: p.description || ""
         }, {
           minZoom: 5,
-          direction: "bottom",
-          offset: [-20, 10],
+       direction: "bottom",
+offset: [0, 20],
           className: "waypoint-label",
           angle: labelAngle
         });
@@ -1276,8 +1281,8 @@
         } else {
           registerWaypointZoomLabel(marker, feature, {
             minZoom: 5,
-            direction: "bottom",
-            offset: [-20, 10],
+        direction: "bottom",
+offset: [0, 20],
             className: "waypoint-label",
             angle: options.labelAngle ?? 0
           });
@@ -1312,8 +1317,8 @@
       } else {
         registerWaypointZoomLabel(marker, feature, {
           minZoom: 5,
-          direction: "bottom",
-          offset: [-20, 10],
+     direction: "bottom",
+offset: [0, 20],
           className: "waypoint-label",
           angle: options.labelAngle ?? 0
         });
