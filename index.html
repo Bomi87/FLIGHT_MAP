@@ -1405,8 +1405,8 @@ function getShapeCodeLabel(name) {
 
   const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
   const fontSize = isDesktopView()
-    ? Math.max(8, Math.round(9 * labelStyle.scale))
-    : Math.max(6, Math.round(7 * labelStyle.scale));
+    ? Math.max(7, Math.round(8 * labelStyle.scale))
+    : Math.max(5, Math.round(6 * labelStyle.scale));
 
   const labelHtml =
     `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
