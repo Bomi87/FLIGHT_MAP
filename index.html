@@ -82,12 +82,15 @@
       display: none !important;
     }
 
-    .kml-label-text {
+    .waypoint-label-text {
       display: inline-block;
       white-space: nowrap;
       font-weight: 700;
-      text-align: center;
+      color: #ffffff;
+      font-size: 10px;
       transform-origin: center center;
+      text-align: center;
+      line-height: 1;
       text-shadow:
         -1px -1px 0 #000,
          1px -1px 0 #000,
@@ -98,14 +101,17 @@
       user-select: none;
     }
 
-    .waypoint-label-text {
+    .airspace-label-marker {
+      background: transparent !important;
+      border: none !important;
+    }
+
+    .airspace-label-text {
       display: inline-block;
       white-space: nowrap;
       font-weight: 700;
-      color: #ffffff;
-      font-size: 10px;
-      transform-origin: center center;
-      text-align: center;
+      transform-origin: left center;
+      text-align: left;
       line-height: 1;
       text-shadow:
         -1px -1px 0 #000,
@@ -268,8 +274,8 @@
     const NDB_BOUNDS_PAD_RATIO = 0.20;
     const NDB_REDRAW_DELAY_MS = 80;
 
-    const WAYPOINT_LABEL_DISTANCE = 34;
-    const AIRSPACE_LABEL_DISTANCE = 72;
+    const WAYPOINT_LABEL_DISTANCE = 38;
+    const AIRSPACE_LABEL_DISTANCE = 92;
 
     const WAYPOINT_LABEL_MIN_ZOOM = 5;
     const WAYPOINT_LABEL_COLLISION_PAD = 2;
@@ -831,8 +837,8 @@
 
     function getAirspaceLabelHtml(name, color, opacity, fontSize, angle) {
       return `
-        <span class="kml-label-text"
-              style="color:${color}; opacity:${opacity}; font-size:${fontSize}px; transform: rotate(${angle}deg); display:inline-block;">
+        <span class="airspace-label-text"
+              style="color:${color}; opacity:${opacity}; font-size:${fontSize}px; transform: rotate(${angle}deg);">
           ${escapeHtml(name)}
         </span>
       `;
@@ -849,9 +855,10 @@
 
     function clearAllAirspaceTooltips() {
       airspaceLabelRegistry.forEach(item => {
-        if (item.layer && item.layer.unbindTooltip) {
-          item.layer.unbindTooltip();
+        if (item.labelMarker && item.targetLayer && item.targetLayer.hasLayer(item.labelMarker)) {
+          item.targetLayer.removeLayer(item.labelMarker);
         }
+        item.labelMarker = null;
         item.visible = false;
       });
     }
@@ -878,6 +885,35 @@
         a.bottom < b.top ||
         a.top > b.bottom
       );
+    }
+
+    function getOffsetLatLngFromPoint(currPoint, placement, renderContext) {
+      if (!currPoint) return null;
+
+      const baseLatLng = toRenderLatLng(currPoint.lat, currPoint.lon, renderContext);
+      const basePt = map.latLngToLayerPoint(baseLatLng);
+
+      const labelPt = L.point(
+        basePt.x + placement.offset[0],
+        basePt.y + placement.offset[1]
+      );
+
+      return map.layerPointToLatLng(labelPt);
+    }
+
+    function createAirspaceLabelMarker(latlng, html, targetLayer) {
+      const icon = L.divIcon({
+        className: "airspace-label-marker",
+        html: html,
+        iconSize: null
+      });
+
+      return L.marker(latlng, {
+        icon,
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: 3000
+      }).addTo(targetLayer);
     }
 
     function registerWaypointZoomLabel(layer, feature, options = {}) {
@@ -910,6 +946,7 @@
 
       airspaceLabelRegistry.push({
         layer,
+        targetLayer: options.targetLayer || drawn,
         featureName: cleanedName,
         feature,
         minZoom: options.minZoom ?? AIRSPACE_LABEL_MIN_ZOOM,
@@ -917,7 +954,9 @@
         currPoint: options.currPoint || null,
         nextPoint: options.nextPoint || null,
         renderContext: options.renderContext || null,
-        sequence: Number.isFinite(options.sequence) ? options.sequence : airspaceLabelRegistry.length
+        sequence: Number.isFinite(options.sequence) ? options.sequence : airspaceLabelRegistry.length,
+        labelMarker: null,
+        visible: false
       });
     }
 
@@ -999,8 +1038,8 @@
         const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
 
         const fontSize = isDesktopView()
-          ? Math.max(9, Math.round(11 * labelStyle.scale))
-          : Math.max(7, Math.round(8 * labelStyle.scale));
+          ? Math.max(8, Math.round(10 * labelStyle.scale))
+          : Math.max(6, Math.round(7 * labelStyle.scale));
 
         let placement = {
           angle: 0,
@@ -1018,6 +1057,14 @@
           );
         }
 
+        const labelLatLng = getOffsetLatLngFromPoint(
+          item.currPoint,
+          placement,
+          item.renderContext
+        );
+
+        if (!labelLatLng) return;
+
         const labelHtml = getAirspaceLabelHtml(
           item.featureName,
           labelColor,
@@ -1026,17 +1073,11 @@
           placement.angle
         );
 
-        item.layer.bindTooltip(labelHtml, {
-          permanent: true,
-          direction: "center",
-          offset: placement.offset,
-          className: "kml-label",
-          opacity: 1
-        });
-
-        if (item.layer.openTooltip) {
-          item.layer.openTooltip();
-        }
+        item.labelMarker = createAirspaceLabelMarker(
+          labelLatLng,
+          labelHtml,
+          item.targetLayer
+        );
 
         item.visible = true;
       });
@@ -1430,7 +1471,8 @@
           currPoint: options.currPoint || null,
           nextPoint: options.nextPoint || null,
           renderContext: options.renderContext || null,
-          sequence: options.sequence
+          sequence: options.sequence,
+          targetLayer: targetLayer
         });
 
         if (!skipRouteBounds) addToRouteBounds(labelOnlyMarker, sourceName);
@@ -1688,7 +1730,7 @@
           buildPopupHtml(
             destFeature.name || "",
             destFeature.description || "",
-            depFeature?.extraRows || []
+            destFeature.extraRows || []
           ),
           POPUP_OPTIONS
         );
