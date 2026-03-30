@@ -97,21 +97,22 @@
          0 0 4px rgba(0, 0, 0, 0.65);
     }
 
-    .waypoint-label-text {
-      display: inline-block;
-      white-space: nowrap;
-      font-weight: 700;
-      color: #ffffff;
-      font-size: 10px;
-      transform-origin: center center;
-      text-align: center;
-      text-shadow:
-        -1px -1px 0 #000,
-         1px -1px 0 #000,
-        -1px  1px 0 #000,
-         1px  1px 0 #000,
-         0 0 4px rgba(0, 0, 0, 0.65);
-    }
+  .waypoint-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 10px;
+  transform-origin: center center;
+  text-align: center;
+  line-height: 1;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0, 0, 0, 0.65);
+}
 
     .triangle-label-text,
     .ndb-label-text {
@@ -260,7 +261,7 @@
     const NDB_LABEL_MIN_ZOOM = 5;
     const NDB_BOUNDS_PAD_RATIO = 0.20;
     const NDB_REDRAW_DELAY_MS = 80;
-    const WAYPOINT_LABEL_DISTANCE = 18;
+    const WAYPOINT_LABEL_DISTANCE = 22;
 
     /* -----------------------------
        영공 국가 리스트
@@ -783,45 +784,32 @@ function getSegmentAngleDeg(p1, p2, renderContext) {
 
 function getRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext) {
   if (nextPoint) {
-    return normalizeLabelAngle(getSegmentAngleDeg(currPoint, nextPoint, renderContext));
+    return normalizeLabelAngle(
+      getSegmentAngleDeg(currPoint, nextPoint, renderContext)
+    );
   }
+
   if (prevPoint) {
-    return normalizeLabelAngle(getSegmentAngleDeg(prevPoint, currPoint, renderContext));
+    return normalizeLabelAngle(
+      getSegmentAngleDeg(prevPoint, currPoint, renderContext)
+    );
   }
+
   return 0;
 }
-
 function getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance = WAYPOINT_LABEL_DISTANCE) {
   const routeAngle = getRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
 
-  let labelAngle = normalizeLabelAngle(routeAngle + 90);
-
-  const rad1 = (routeAngle + 90) * Math.PI / 180;
-  const rad2 = (routeAngle - 90) * Math.PI / 180;
-
-  const v1 = {
-    x: Math.cos(rad1) * distance,
-    y: Math.sin(rad1) * distance
-  };
-
-  const v2 = {
-    x: Math.cos(rad2) * distance,
-    y: Math.sin(rad2) * distance
-  };
-
-  const chosen = (v1.y >= v2.y) ? v1 : v2;
-
-  let chosenAngle = labelAngle;
-  const chosenRad = Math.atan2(chosen.y, chosen.x) * 180 / Math.PI;
-  const altAngle = normalizeLabelAngle(routeAngle - 90);
-
-  if (Math.abs(normalizeLabelAngle(chosenAngle - chosenRad)) > 100) {
-    chosenAngle = altAngle;
-  }
+  // route 진행방향 기준 오른쪽 90도
+  const labelAngle = normalizeLabelAngle(routeAngle + 90);
+  const rad = labelAngle * Math.PI / 180;
 
   return {
-    angle: chosenAngle,
-    offset: [Math.round(chosen.x), Math.round(chosen.y)],
+    angle: labelAngle,
+    offset: [
+      Math.round(Math.cos(rad) * distance),
+      Math.round(Math.sin(rad) * distance)
+    ],
     direction: "center"
   };
 }
