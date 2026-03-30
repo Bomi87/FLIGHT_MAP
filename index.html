@@ -295,8 +295,8 @@
     const NDB_REDRAW_DELAY_MS = 80;
 
     const ROUTE_LABEL_MIN_ZOOM = 5;
-    const WAYPOINT_LABEL_DISTANCE = 40;
-    const AIRSPACE_LABEL_DISTANCE = 112;
+const WAYPOINT_LABEL_DISTANCE = 24;
+const AIRSPACE_LABEL_DISTANCE = 78;
     const WAYPOINT_LABEL_COLLISION_PAD = 2;
 
     /* -----------------------------
@@ -846,14 +846,24 @@ function getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext)
 
 function getUnifiedRightPlacement(prevPoint, currPoint, nextPoint, renderContext, distance) {
   const routeAngle = getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
-  const labelAngle = normalizeAngle180(routeAngle + 90);
-  const rad = labelAngle * Math.PI / 180;
 
-  return {
-    angle: labelAngle,
-    offsetX: Math.cos(rad) * distance,
-    offsetY: Math.sin(rad) * distance
+  const rad1 = (routeAngle + 90) * Math.PI / 180;
+  const rad2 = (routeAngle - 90) * Math.PI / 180;
+
+  const candidate1 = {
+    angle: normalizeAngle180(routeAngle + 90),
+    offsetX: Math.cos(rad1) * distance,
+    offsetY: Math.sin(rad1) * distance
   };
+
+  const candidate2 = {
+    angle: normalizeAngle180(routeAngle - 90),
+    offsetX: Math.cos(rad2) * distance,
+    offsetY: Math.sin(rad2) * distance
+  };
+
+  // 화면상 더 아래쪽(Y가 더 큰 쪽)으로 고정
+  return candidate1.offsetY >= candidate2.offsetY ? candidate1 : candidate2;
 }
 
 function getOffsetLatLngFromCurrPoint(currPoint, placement, renderContext) {
@@ -1065,7 +1075,7 @@ const airspaceCandidates = airspaceLabelRegistry
 airspaceCandidates.forEach(item => {
   if (!item.currPoint) return;
 
-  const placement = getHorizontalAirspacePlacement(
+  const placement = getUnifiedRightPlacement(
     item.prevPoint,
     item.currPoint,
     item.nextPoint,
@@ -1092,7 +1102,8 @@ airspaceCandidates.forEach(item => {
     item.featureName,
     labelColor,
     labelStyle.opacity,
-    fontSize
+    fontSize,
+    placement.angle
   );
 
   item.labelMarker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
