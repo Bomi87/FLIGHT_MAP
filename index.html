@@ -795,30 +795,50 @@ function getShapeCodeLabel(name) {
 }
 
 function getAirspaceAnchorPoints(pointFeatures, currentIndex) {
+  const anchorIndices = [];
+
+  for (let i = 0; i < pointFeatures.length; i++) {
+    if (isRouteAngleAnchorPoint(pointFeatures[i])) {
+      anchorIndices.push(i);
+    }
+  }
+
+  if (!anchorIndices.length) {
+    return {
+      prevPoint: null,
+      currPoint: null,
+      nextPoint: null,
+      sequence: 999999
+    };
+  }
+
   let currIdx = -1;
-  let nextIdx = -1;
+
+  for (let i = anchorIndices.length - 1; i >= 0; i--) {
+    if (anchorIndices[i] < currentIndex) {
+      currIdx = anchorIndices[i];
+      break;
+    }
+  }
+
+  if (currIdx < 0) {
+    currIdx = anchorIndices[0];
+  }
+
   let prevIdx = -1;
+  let nextIdx = -1;
 
-  for (let i = currentIndex - 1; i >= 0; i--) {
-    if (isRouteAngleAnchorPoint(pointFeatures[i])) {
-      currIdx = i;
+  for (let i = anchorIndices.length - 1; i >= 0; i--) {
+    if (anchorIndices[i] < currIdx) {
+      prevIdx = anchorIndices[i];
       break;
     }
   }
 
-  for (let i = currentIndex + 1; i < pointFeatures.length; i++) {
-    if (isRouteAngleAnchorPoint(pointFeatures[i])) {
-      nextIdx = i;
+  for (let i = 0; i < anchorIndices.length; i++) {
+    if (anchorIndices[i] > currIdx) {
+      nextIdx = anchorIndices[i];
       break;
-    }
-  }
-
-  if (currIdx > 0) {
-    for (let i = currIdx - 1; i >= 0; i--) {
-      if (isRouteAngleAnchorPoint(pointFeatures[i])) {
-        prevIdx = i;
-        break;
-      }
     }
   }
 
