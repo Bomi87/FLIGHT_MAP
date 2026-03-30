@@ -10,7 +10,7 @@
 
   <title>Flight Route Viewer</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflaet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
@@ -794,66 +794,50 @@ function getShapeCodeLabel(name) {
   return true;
 }
 
-function getDistanceSquared(a, b) {
-  if (!a || !b) return Number.POSITIVE_INFINITY;
-  const dx = Number(a.lon) - Number(b.lon);
-  const dy = Number(a.lat) - Number(b.lat);
-  return dx * dx + dy * dy;
-}
-
-function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
-  const anchors = [];
+function getAirspaceAnchorPoints(pointFeatures, currentIndex) {
+  const anchorIndices = [];
 
   for (let i = 0; i < pointFeatures.length; i++) {
     if (isRouteAngleAnchorPoint(pointFeatures[i])) {
-      anchors.push({
-        index: i,
-        coords: pointFeatures[i].coords
-      });
+      anchorIndices.push(i);
     }
   }
 
-  if (!anchors.length) {
+  if (!anchorIndices.length) {
     return {
       prevPoint: null,
-      currPoint: airspaceFeature?.coords || null,
+      currPoint: null,
       nextPoint: null,
       sequence: 999999
     };
   }
 
-  if (anchors.length === 1) {
-    return {
-      prevPoint: null,
-      currPoint: airspaceFeature?.coords || anchors[0].coords,
-      nextPoint: anchors[0].coords,
-      sequence: anchors[0].index
-    };
-  }
+  let currIdx = -1;
 
-  let bestSegIdx = 0;
-  let bestDist = Number.POSITIVE_INFINITY;
-  const target = airspaceFeature?.coords || null;
-
-  for (let i = 0; i < anchors.length - 1; i++) {
-    const a = anchors[i].coords;
-    const b = anchors[i + 1].coords;
-    const dist = Math.min(getDistanceSquared(target, a), getDistanceSquared(target, b));
-
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestSegIdx = i;
+  for (let i = anchorIndices.length - 1; i >= 0; i--) {
+    if (anchorIndices[i] < currentIndex) {
+      currIdx = anchorIndices[i];
+      break;
     }
   }
 
-  const prevAnchor = anchors[bestSegIdx];
-  const nextAnchor = anchors[bestSegIdx + 1];
+  if (currIdx < 0) {
+    currIdx = anchorIndices[0];
+  }
+
+  let anchorPos = anchorIndices.indexOf(currIdx);
+  if (anchorPos < 0) {
+    anchorPos = 0;
+  }
+
+  const prevIdx = anchorPos > 0 ? anchorIndices[anchorPos - 1] : -1;
+  const nextIdx = anchorPos < anchorIndices.length - 1 ? anchorIndices[anchorPos + 1] : -1;
 
   return {
-    prevPoint: prevAnchor ? prevAnchor.coords : null,
-    currPoint: target || (prevAnchor ? prevAnchor.coords : null),
-    nextPoint: nextAnchor ? nextAnchor.coords : null,
-    sequence: prevAnchor ? prevAnchor.index : 999999
+    prevPoint: prevIdx >= 0 ? pointFeatures[prevIdx].coords : null,
+    currPoint: currIdx >= 0 ? pointFeatures[currIdx].coords : null,
+    nextPoint: nextIdx >= 0 ? pointFeatures[nextIdx].coords : null,
+    sequence: currIdx >= 0 ? currIdx : 999999
   };
 }
     function isAlwaysVisibleShapePointLabel(feature) {
@@ -1066,6 +1050,7 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
         prevPoint: options.prevPoint || null,
         currPoint: options.currPoint || null,
         nextPoint: options.nextPoint || null,
+        basePoint: options.basePoint || feature.coords || null,
         renderContext: options.renderContext || null,
         sequence: Number.isFinite(options.sequence) ? options.sequence : airspaceLabelRegistry.length,
         labelMarker: null,
@@ -1144,7 +1129,7 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
         );
 
         const labelLatLng = getOffsetLatLngFromCurrPoint(
-          item.currPoint,
+          item.basePoint || item.currPoint,
           placement,
           item.renderContext
         );
@@ -1551,6 +1536,7 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
           prevPoint: options.prevPoint || null,
           currPoint: options.currPoint || null,
           nextPoint: options.nextPoint || null,
+          basePoint: options.basePoint || feature.coords || null,
           renderContext: options.renderContext || null,
           sequence: options.sequence,
           targetLayer
@@ -1858,6 +1844,11 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
           return;
         }
 
+        const idx = routeSequence.indexOf(f);
+        const prevPoint = idx > 0 ? routeSequence[idx - 1].coords : null;
+        const currPoint = idx >= 0 ? routeSequence[idx].coords : null;
+        const nextPoint = idx >= 0 && idx < routeSequence.length - 1 ? routeSequence[idx + 1].coords : null;
+
         if (isAirspaceLabelFeature(f)) {
           const currentName = String(f.name || "").trim();
 
@@ -1867,12 +1858,13 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
 
           lastAirspaceLabelName = currentName;
 
-          const anchor = getAirspaceAnchorPoints(pointFeatures, pointIndex, f);
+          const anchor = getAirspaceAnchorPoints(pointFeatures, pointIndex);
 
           drawKMLPoint(f, targetLayer, sourceName, renderContext, {
             prevPoint: anchor.prevPoint,
             currPoint: anchor.currPoint,
             nextPoint: anchor.nextPoint,
+            basePoint: f.coords,
             renderContext,
             sequence: anchor.sequence
           });
@@ -1880,11 +1872,6 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
         }
 
         lastAirspaceLabelName = "";
-
-        const idx = routeSequence.indexOf(f);
-        const prevPoint = idx > 0 ? routeSequence[idx - 1].coords : null;
-        const currPoint = idx >= 0 ? routeSequence[idx].coords : null;
-        const nextPoint = idx >= 0 && idx < routeSequence.length - 1 ? routeSequence[idx + 1].coords : null;
 
         drawKMLPoint(f, targetLayer, sourceName, renderContext, {
           prevPoint,
@@ -2031,6 +2018,6 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
     init();
   </script>
 
-  <script src="aircraft.js?v=5"></script>
+  <script src="aircraft.js?v=4"></script>
 </body>
 </html>
