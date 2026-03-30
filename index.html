@@ -783,6 +783,52 @@ function getShapeCodeLabel(name) {
     /^(D|R|P)\d{2,5}(\/\d+)?$/i.test(code)
   );
 }
+
+    function isRouteAngleAnchorPoint(feature) {
+  if (!feature || feature.type !== "Point") return false;
+  if (isAirspaceLabelFeature(feature)) return false;
+  if (isHorizontalPinkShapeLabel(feature)) return false;
+  if (isTriangleShapePoint(feature)) return false;
+  if (isIcon52ShapePoint(feature)) return false;
+  if (!feature.name || !String(feature.name).trim()) return false;
+  return true;
+}
+
+function getAirspaceAnchorPoints(pointFeatures, currentIndex) {
+  let currIdx = -1;
+  let nextIdx = -1;
+  let prevIdx = -1;
+
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    if (isRouteAngleAnchorPoint(pointFeatures[i])) {
+      currIdx = i;
+      break;
+    }
+  }
+
+  for (let i = currentIndex + 1; i < pointFeatures.length; i++) {
+    if (isRouteAngleAnchorPoint(pointFeatures[i])) {
+      nextIdx = i;
+      break;
+    }
+  }
+
+  if (currIdx > 0) {
+    for (let i = currIdx - 1; i >= 0; i--) {
+      if (isRouteAngleAnchorPoint(pointFeatures[i])) {
+        prevIdx = i;
+        break;
+      }
+    }
+  }
+
+  return {
+    prevPoint: prevIdx >= 0 ? pointFeatures[prevIdx].coords : null,
+    currPoint: currIdx >= 0 ? pointFeatures[currIdx].coords : null,
+    nextPoint: nextIdx >= 0 ? pointFeatures[nextIdx].coords : null,
+    sequence: currIdx >= 0 ? currIdx : 999999
+  };
+}
     function isAlwaysVisibleShapePointLabel(feature) {
       return isHorizontalPinkShapeLabel(feature);
     }
@@ -1780,15 +1826,10 @@ function getShapeCodeLabel(name) {
 
       let lastAirspaceLabelName = "";
 
-      pointFeatures.forEach(f => {
+      pointFeatures.forEach((f, pointIndex) => {
         if (isEndpointPointFeature(f, routeEndpoints)) {
           return;
         }
-
-        const idx = routeSequence.indexOf(f);
-        const prevPoint = idx > 0 ? routeSequence[idx - 1].coords : null;
-        const currPoint = idx >= 0 ? routeSequence[idx].coords : null;
-        const nextPoint = idx >= 0 && idx < routeSequence.length - 1 ? routeSequence[idx + 1].coords : null;
 
         if (isAirspaceLabelFeature(f)) {
           const currentName = String(f.name || "").trim();
@@ -1799,17 +1840,24 @@ function getShapeCodeLabel(name) {
 
           lastAirspaceLabelName = currentName;
 
+          const anchor = getAirspaceAnchorPoints(pointFeatures, pointIndex);
+
           drawKMLPoint(f, targetLayer, sourceName, renderContext, {
-            prevPoint,
-            currPoint,
-            nextPoint,
+            prevPoint: anchor.prevPoint,
+            currPoint: anchor.currPoint,
+            nextPoint: anchor.nextPoint,
             renderContext,
-            sequence: idx >= 0 ? idx : 999999
+            sequence: anchor.sequence
           });
           return;
         }
 
         lastAirspaceLabelName = "";
+
+        const idx = routeSequence.indexOf(f);
+        const prevPoint = idx > 0 ? routeSequence[idx - 1].coords : null;
+        const currPoint = idx >= 0 ? routeSequence[idx].coords : null;
+        const nextPoint = idx >= 0 && idx < routeSequence.length - 1 ? routeSequence[idx + 1].coords : null;
 
         drawKMLPoint(f, targetLayer, sourceName, renderContext, {
           prevPoint,
