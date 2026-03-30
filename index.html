@@ -794,102 +794,39 @@ function getShapeCodeLabel(name) {
   return true;
 }
 
-function getDistancePointToSegmentSq(p, a, b) {
-  if (!p || !a || !b) return Number.POSITIVE_INFINITY;
+function getAirspaceAnchorPoints(pointFeatures, currentIndex) {
+  let currIdx = -1;
+  let nextIdx = -1;
+  let prevIdx = -1;
 
-  const px = Number(p.lon);
-  const py = Number(p.lat);
-  const ax = Number(a.lon);
-  const ay = Number(a.lat);
-  const bx = Number(b.lon);
-  const by = Number(b.lat);
-
-  const abx = bx - ax;
-  const aby = by - ay;
-  const apx = px - ax;
-  const apy = py - ay;
-  const abLenSq = abx * abx + aby * aby;
-
-  if (abLenSq <= 0) {
-    const dx = px - ax;
-    const dy = py - ay;
-    return dx * dx + dy * dy;
-  }
-
-  let t = (apx * abx + apy * aby) / abLenSq;
-  if (t < 0) t = 0;
-  if (t > 1) t = 1;
-
-  const cx = ax + abx * t;
-  const cy = ay + aby * t;
-  const dx = px - cx;
-  const dy = py - cy;
-
-  return dx * dx + dy * dy;
-}
-
-function getRouteAngleAnchors(pointFeatures) {
-  const anchors = [];
-
-  for (let i = 0; i < pointFeatures.length; i++) {
+  for (let i = currentIndex - 1; i >= 0; i--) {
     if (isRouteAngleAnchorPoint(pointFeatures[i])) {
-      anchors.push({
-        index: i,
-        coords: pointFeatures[i].coords
-      });
+      currIdx = i;
+      break;
     }
   }
 
-  return anchors;
-}
-
-function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
-  const anchors = getRouteAngleAnchors(pointFeatures);
-  const target = airspaceFeature?.coords || null;
-
-  if (!target || !anchors.length) {
-    return {
-      prevPoint: null,
-      currPoint: null,
-      nextPoint: null,
-      basePoint: target,
-      sequence: 999999
-    };
-  }
-
-  if (anchors.length === 1) {
-    return {
-      prevPoint: null,
-      currPoint: anchors[0].coords,
-      nextPoint: null,
-      basePoint: target,
-      sequence: anchors[0].index
-    };
-  }
-
-  let bestIdx = 0;
-  let bestDist = Number.POSITIVE_INFINITY;
-
-  for (let i = 0; i < anchors.length - 1; i++) {
-    const a = anchors[i].coords;
-    const b = anchors[i + 1].coords;
-    const dist = getDistancePointToSegmentSq(target, a, b);
-
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestIdx = i;
+  for (let i = currentIndex + 1; i < pointFeatures.length; i++) {
+    if (isRouteAngleAnchorPoint(pointFeatures[i])) {
+      nextIdx = i;
+      break;
     }
   }
 
-  const prevAnchor = anchors[bestIdx];
-  const nextAnchor = anchors[bestIdx + 1];
+  if (currIdx > 0) {
+    for (let i = currIdx - 1; i >= 0; i--) {
+      if (isRouteAngleAnchorPoint(pointFeatures[i])) {
+        prevIdx = i;
+        break;
+      }
+    }
+  }
 
   return {
-    prevPoint: prevAnchor ? prevAnchor.coords : null,
-    currPoint: prevAnchor ? prevAnchor.coords : null,
-    nextPoint: nextAnchor ? nextAnchor.coords : null,
-    basePoint: target,
-    sequence: prevAnchor ? prevAnchor.index : 999999
+    prevPoint: prevIdx >= 0 ? pointFeatures[prevIdx].coords : null,
+    currPoint: currIdx >= 0 ? pointFeatures[currIdx].coords : null,
+    nextPoint: nextIdx >= 0 ? pointFeatures[nextIdx].coords : null,
+    sequence: currIdx >= 0 ? currIdx : 999999
   };
 }
     function isAlwaysVisibleShapePointLabel(feature) {
@@ -1102,7 +1039,6 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
         prevPoint: options.prevPoint || null,
         currPoint: options.currPoint || null,
         nextPoint: options.nextPoint || null,
-        basePoint: options.basePoint || feature.coords || null,
         renderContext: options.renderContext || null,
         sequence: Number.isFinite(options.sequence) ? options.sequence : airspaceLabelRegistry.length,
         labelMarker: null,
@@ -1133,7 +1069,7 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
         );
 
         const labelLatLng = getOffsetLatLngFromCurrPoint(
-          item.basePoint || item.currPoint,
+          item.currPoint,
           placement,
           item.renderContext
         );
@@ -1588,7 +1524,6 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
           prevPoint: options.prevPoint || null,
           currPoint: options.currPoint || null,
           nextPoint: options.nextPoint || null,
-          basePoint: options.basePoint || feature.coords || null,
           renderContext: options.renderContext || null,
           sequence: options.sequence,
           targetLayer
@@ -1891,10 +1826,15 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
 
       let lastAirspaceLabelName = "";
 
-      pointFeatures.forEach((f, pointIndex) => {
+      pointFeatures.forEach(f => {
         if (isEndpointPointFeature(f, routeEndpoints)) {
           return;
         }
+
+        const idx = routeSequence.indexOf(f);
+        const prevPoint = idx > 0 ? routeSequence[idx - 1].coords : null;
+        const currPoint = idx >= 0 ? routeSequence[idx].coords : null;
+        const nextPoint = idx >= 0 && idx < routeSequence.length - 1 ? routeSequence[idx + 1].coords : null;
 
         if (isAirspaceLabelFeature(f)) {
           const currentName = String(f.name || "").trim();
@@ -1905,34 +1845,13 @@ function getAirspaceAnchorPoints(pointFeatures, currentIndex, airspaceFeature) {
 
           lastAirspaceLabelName = currentName;
 
-          const anchor = getAirspaceAnchorPoints(pointFeatures, pointIndex, f);
-
           drawKMLPoint(f, targetLayer, sourceName, renderContext, {
-            prevPoint: anchor.prevPoint,
-            currPoint: anchor.currPoint,
-            nextPoint: anchor.nextPoint,
-            basePoint: anchor.basePoint,
+            prevPoint,
+            currPoint,
+            nextPoint,
             renderContext,
-            sequence: anchor.sequence
+            sequence: idx >= 0 ? idx : 999999
           });
-          return;
-        }
-
-        lastAirspaceLabelName = "";
-
-        const idx = routeSequence.indexOf(f);
-        const prevPoint = idx > 0 ? routeSequence[idx - 1].coords : null;
-        const currPoint = idx >= 0 ? routeSequence[idx].coords : null;
-        const nextPoint = idx >= 0 && idx < routeSequence.length - 1 ? routeSequence[idx + 1].coords : null;
-
-        drawKMLPoint(f, targetLayer, sourceName, renderContext, {
-          prevPoint,
-          currPoint,
-          nextPoint,
-          renderContext,
-          sequence: idx >= 0 ? idx : 999999
-        });
-      });
           return;
         }
 
