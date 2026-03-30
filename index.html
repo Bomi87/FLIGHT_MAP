@@ -787,56 +787,69 @@
       return Math.atan2(dy, dx) * 180 / Math.PI;
     }
 
-    function normalizeAngle180(angle) {
-      let a = angle;
-      while (a > 180) a -= 360;
-      while (a <= -180) a += 360;
-      return a;
-    }
+function normalizeAngle180(angle) {
+  let a = angle;
+  while (a > 180) a -= 360;
+  while (a <= -180) a += 360;
+  return a;
+}
 
-    function getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext) {
-      if (currPoint && nextPoint) {
-        return normalizeAngle180(
-          getSegmentAngleDeg(currPoint, nextPoint, renderContext)
-        );
-      }
+function getSegmentAngleDeg(p1, p2, renderContext) {
+  if (!p1 || !p2) return 0;
 
-      if (prevPoint && currPoint) {
-        return normalizeAngle180(
-          getSegmentAngleDeg(prevPoint, currPoint, renderContext)
-        );
-      }
+  const latlng1 = toRenderLatLng(p1.lat, p1.lon, renderContext);
+  const latlng2 = toRenderLatLng(p2.lat, p2.lon, renderContext);
 
-      return 0;
-    }
+  const pt1 = map.latLngToLayerPoint(latlng1);
+  const pt2 = map.latLngToLayerPoint(latlng2);
 
-    function getRightSideLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance) {
-      const routeAngle = getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
-      const labelAngle = normalizeAngle180(routeAngle + 90);
-      const rad = labelAngle * Math.PI / 180;
+  const dx = pt2.x - pt1.x;
+  const dy = pt2.y - pt1.y;
 
-      return {
-        angle: labelAngle,
-        offset: [
-          Math.round(Math.cos(rad) * distance),
-          Math.round(Math.sin(rad) * distance)
-        ]
-      };
-    }
+  return Math.atan2(dy, dx) * 180 / Math.PI;
+}
 
-    function getOffsetLatLngFromPoint(currPoint, placement, renderContext) {
-      if (!currPoint) return null;
+function getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext) {
+  if (currPoint && nextPoint) {
+    return normalizeAngle180(
+      getSegmentAngleDeg(currPoint, nextPoint, renderContext)
+    );
+  }
 
-      const baseLatLng = toRenderLatLng(currPoint.lat, currPoint.lon, renderContext);
-      const basePt = map.latLngToLayerPoint(baseLatLng);
+  if (prevPoint && currPoint) {
+    return normalizeAngle180(
+      getSegmentAngleDeg(prevPoint, currPoint, renderContext)
+    );
+  }
 
-      const labelPt = L.point(
-        basePt.x + placement.offset[0],
-        basePt.y + placement.offset[1]
-      );
+  return 0;
+}
 
-      return map.layerPointToLatLng(labelPt);
-    }
+function getUnifiedRightPlacement(prevPoint, currPoint, nextPoint, renderContext, distance) {
+  const routeAngle = getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
+  const labelAngle = normalizeAngle180(routeAngle + 90);
+  const rad = labelAngle * Math.PI / 180;
+
+  return {
+    angle: labelAngle,
+    offsetX: Math.cos(rad) * distance,
+    offsetY: Math.sin(rad) * distance
+  };
+}
+
+function getOffsetLatLngFromCurrPoint(currPoint, placement, renderContext) {
+  if (!currPoint) return null;
+
+  const baseLatLng = toRenderLatLng(currPoint.lat, currPoint.lon, renderContext);
+  const basePt = map.latLngToLayerPoint(baseLatLng);
+
+  const labelPt = L.point(
+    basePt.x + placement.offsetX,
+    basePt.y + placement.offsetY
+  );
+
+  return map.layerPointToLatLng(labelPt);
+}
 
     function createTextMarker(latlng, html, targetLayer) {
       const icon = L.divIcon({
@@ -957,104 +970,104 @@
       });
     }
 
-    function updateRouteTextMarkers() {
-      const zoom = map.getZoom();
+function updateRouteTextMarkers() {
+  const zoom = map.getZoom();
 
-      clearAllRouteTextMarkers();
+  clearAllRouteTextMarkers();
 
-      const placedRects = [];
+  const placedRects = [];
 
-      const waypointCandidates = waypointLabelRegistry
-        .filter(item => zoom >= item.minZoom && item.layer)
-        .sort((a, b) => a.sequence - b.sequence);
+  const waypointCandidates = waypointLabelRegistry
+    .filter(item => zoom >= item.minZoom && item.layer)
+    .sort((a, b) => a.sequence - b.sequence);
 
-      waypointCandidates.forEach(item => {
-        if (!item.currPoint) return;
+  waypointCandidates.forEach(item => {
+    if (!item.currPoint) return;
 
-        const placement = getRightSideLabelPlacement(
-          item.prevPoint,
-          item.currPoint,
-          item.nextPoint,
-          item.renderContext,
-          WAYPOINT_LABEL_DISTANCE
-        );
+    const placement = getUnifiedRightPlacement(
+      item.prevPoint,
+      item.currPoint,
+      item.nextPoint,
+      item.renderContext,
+      WAYPOINT_LABEL_DISTANCE
+    );
 
-        const labelLatLng = getOffsetLatLngFromPoint(
-          item.currPoint,
-          placement,
-          item.renderContext
-        );
+    const labelLatLng = getOffsetLatLngFromCurrPoint(
+      item.currPoint,
+      placement,
+      item.renderContext
+    );
 
-        if (!labelLatLng) return;
+    if (!labelLatLng) return;
 
-        const labelHtml = getWaypointLabelHtml(item.featureName, placement.angle);
+    const labelHtml = getWaypointLabelHtml(item.featureName, placement.angle);
+    const marker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
+    const rect = getMarkerRect(marker);
 
-        const marker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
-        const rect = getMarkerRect(marker);
-
-        if (!rect) {
-          item.labelMarker = marker;
-          item.visible = true;
-          return;
-        }
-
-        const hit = placedRects.some(r => rectsOverlap(rect, r));
-
-        if (hit) {
-          if (item.targetLayer.hasLayer(marker)) {
-            item.targetLayer.removeLayer(marker);
-          }
-          item.visible = false;
-          return;
-        }
-
-        placedRects.push(rect);
-        item.labelMarker = marker;
-        item.visible = true;
-      });
-
-      const airspaceCandidates = airspaceLabelRegistry
-        .filter(item => zoom >= item.minZoom && item.layer)
-        .sort((a, b) => a.sequence - b.sequence);
-
-      airspaceCandidates.forEach(item => {
-        if (!item.currPoint) return;
-
-        const placement = getRightSideLabelPlacement(
-          item.prevPoint,
-          item.currPoint,
-          item.nextPoint,
-          item.renderContext,
-          AIRSPACE_LABEL_DISTANCE
-        );
-
-        const labelLatLng = getOffsetLatLngFromPoint(
-          item.currPoint,
-          placement,
-          item.renderContext
-        );
-
-        if (!labelLatLng) return;
-
-        const labelStyle = getLabelStyle(item.feature.style);
-        const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
-
-        const fontSize = isDesktopView()
-          ? Math.max(8, Math.round(10 * labelStyle.scale))
-          : Math.max(6, Math.round(7 * labelStyle.scale));
-
-        const labelHtml = getAirspaceLabelHtml(
-          item.featureName,
-          labelColor,
-          labelStyle.opacity,
-          fontSize,
-          placement.angle
-        );
-
-        item.labelMarker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
-        item.visible = true;
-      });
+    if (!rect) {
+      item.labelMarker = marker;
+      item.visible = true;
+      return;
     }
+
+    const hit = placedRects.some(r => rectsOverlap(rect, r));
+
+    if (hit) {
+      if (item.targetLayer.hasLayer(marker)) {
+        item.targetLayer.removeLayer(marker);
+      }
+      item.visible = false;
+      return;
+    }
+
+    placedRects.push(rect);
+    item.labelMarker = marker;
+    item.visible = true;
+  });
+
+  const airspaceCandidates = airspaceLabelRegistry
+    .filter(item => zoom >= item.minZoom && item.layer)
+    .sort((a, b) => a.sequence - b.sequence);
+
+  airspaceCandidates.forEach(item => {
+    if (!item.currPoint) return;
+
+    // ✅ waypoint와 완전히 같은 방향/기준점
+    const placement = getUnifiedRightPlacement(
+      item.prevPoint,
+      item.currPoint,
+      item.nextPoint,
+      item.renderContext,
+      AIRSPACE_LABEL_DISTANCE
+    );
+
+    const labelLatLng = getOffsetLatLngFromCurrPoint(
+      item.currPoint,
+      placement,
+      item.renderContext
+    );
+
+    if (!labelLatLng) return;
+
+    const labelStyle = getLabelStyle(item.feature.style);
+    const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
+
+    const fontSize = isDesktopView()
+      ? Math.max(8, Math.round(10 * labelStyle.scale))
+      : Math.max(6, Math.round(7 * labelStyle.scale));
+
+    const labelHtml = getAirspaceLabelHtml(
+      item.featureName,
+      labelColor,
+      labelStyle.opacity,
+      fontSize,
+      placement.angle
+    );
+
+    item.labelMarker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
+    item.visible = true;
+  });
+}
 
     function scheduleRouteTextUpdate(delay = 0) {
       clearTimeout(routeLabelUpdateTimer);
