@@ -86,9 +86,8 @@
       display: inline-block;
       white-space: nowrap;
       font-weight: 700;
-      text-align: left;
-      transform-origin: left bottom;
-      transform: translate(40px, -2px) rotate(-90deg);
+      text-align: center;
+      transform-origin: center center;
       text-shadow:
         -1px -1px 0 #000,
          1px -1px 0 #000,
@@ -170,7 +169,8 @@
     @media (min-width: 768px) {
       .waypoint-label-text,
       .triangle-label-text,
-      .ndb-label-text {
+      .ndb-label-text,
+      .kml-label-text {
         font-size: 13px;
       }
     }
@@ -250,11 +250,13 @@
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
     const waypointZoomLabelRegistry = [];
+    const airspaceLabelRegistry = [];
 
     let ndbRawData = [];
     let ndbVisible = false;
     let ndbRedrawTimer = null;
     let waypointLabelUpdateTimer = null;
+    let airspaceLabelUpdateTimer = null;
 
     const POPUP_OPTIONS = {
       maxWidth: 260,
@@ -264,9 +266,13 @@
     const NDB_LABEL_MIN_ZOOM = 5;
     const NDB_BOUNDS_PAD_RATIO = 0.20;
     const NDB_REDRAW_DELAY_MS = 80;
-    const WAYPOINT_LABEL_DISTANCE = 22;
+
+    const WAYPOINT_LABEL_DISTANCE = 30;
+    const AIRSPACE_LABEL_DISTANCE = 38;
+
     const WAYPOINT_LABEL_MIN_ZOOM = 5;
     const WAYPOINT_LABEL_COLLISION_PAD = 2;
+    const AIRSPACE_LABEL_MIN_ZOOM = 4;
 
     /* -----------------------------
        영공 국가 리스트
@@ -800,18 +806,29 @@
 
     function getRightSideLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance = WAYPOINT_LABEL_DISTANCE) {
       const routeAngle = getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
-
       const labelAngle = normalizeAngle180(routeAngle + 90);
       const rad = labelAngle * Math.PI / 180;
-
-      const dx = Math.cos(rad);
-      const dy = Math.sin(rad);
 
       return {
         angle: labelAngle,
         offset: [
-          Math.round(dx * distance),
-          Math.round(dy * distance)
+          Math.round(Math.cos(rad) * distance),
+          Math.round(Math.sin(rad) * distance)
+        ],
+        direction: "center"
+      };
+    }
+
+    function getLeftSideLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance = AIRSPACE_LABEL_DISTANCE) {
+      const routeAngle = getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
+      const labelAngle = normalizeAngle180(routeAngle - 90);
+      const rad = labelAngle * Math.PI / 180;
+
+      return {
+        angle: labelAngle,
+        offset: [
+          Math.round(Math.cos(rad) * distance),
+          Math.round(Math.sin(rad) * distance)
         ],
         direction: "center"
       };
@@ -826,8 +843,26 @@
       `;
     }
 
+    function getAirspaceLabelHtml(name, color, opacity, fontSize, angle) {
+      return `
+        <span class="kml-label-text"
+              style="color:${color}; opacity:${opacity}; font-size:${fontSize}px; transform: rotate(${angle}deg); display:inline-block;">
+          ${escapeHtml(name)}
+        </span>
+      `;
+    }
+
     function clearAllWaypointTooltips() {
       waypointZoomLabelRegistry.forEach(item => {
+        if (item.layer && item.layer.unbindTooltip) {
+          item.layer.unbindTooltip();
+        }
+        item.visible = false;
+      });
+    }
+
+    function clearAllAirspaceTooltips() {
+      airspaceLabelRegistry.forEach(item => {
         if (item.layer && item.layer.unbindTooltip) {
           item.layer.unbindTooltip();
         }
@@ -878,6 +913,25 @@
         renderContext: options.renderContext || null,
         fallbackOffset: options.offset || [0, WAYPOINT_LABEL_DISTANCE],
         sequence: Number.isFinite(options.sequence) ? options.sequence : waypointZoomLabelRegistry.length
+      });
+    }
+
+    function registerAirspaceLabel(layer, feature, options = {}) {
+      if (!layer || !feature || !feature.name) return;
+
+      const cleanedName = cleanLabelText(feature.name);
+      if (!cleanedName) return;
+
+      airspaceLabelRegistry.push({
+        layer,
+        featureName: cleanedName,
+        feature,
+        minZoom: options.minZoom ?? AIRSPACE_LABEL_MIN_ZOOM,
+        prevPoint: options.prevPoint || null,
+        currPoint: options.currPoint || null,
+        nextPoint: options.nextPoint || null,
+        renderContext: options.renderContext || null,
+        sequence: Number.isFinite(options.sequence) ? options.sequence : airspaceLabelRegistry.length
       });
     }
 
@@ -944,10 +998,72 @@
       });
     }
 
+    function updateAirspaceLabels() {
+      const zoom = map.getZoom();
+
+      clearAllAirspaceTooltips();
+
+      const candidates = airspaceLabelRegistry
+        .filter(item => zoom >= item.minZoom && item.layer)
+        .sort((a, b) => a.sequence - b.sequence);
+
+      candidates.forEach(item => {
+        const labelStyle = getLabelStyle(item.feature.style);
+        const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
+        const fontSize = isDesktopView()
+          ? Math.max(10, Math.round(13 * labelStyle.scale))
+          : Math.max(7, Math.round(9 * labelStyle.scale));
+
+        let placement = {
+          angle: 0,
+          offset: [0, 0],
+          direction: "center"
+        };
+
+        if (item.currPoint) {
+          placement = getLeftSideLabelPlacement(
+            item.prevPoint,
+            item.currPoint,
+            item.nextPoint,
+            item.renderContext
+          );
+        }
+
+        const labelHtml = getAirspaceLabelHtml(
+          item.featureName,
+          labelColor,
+          labelStyle.opacity,
+          fontSize,
+          placement.angle
+        );
+
+        item.layer.bindTooltip(labelHtml, {
+          permanent: true,
+          direction: "center",
+          offset: placement.offset,
+          className: "kml-label",
+          opacity: 1
+        });
+
+        if (item.layer.openTooltip) {
+          item.layer.openTooltip();
+        }
+
+        item.visible = true;
+      });
+    }
+
     function scheduleWaypointLabelUpdate(delay = 0) {
       clearTimeout(waypointLabelUpdateTimer);
       waypointLabelUpdateTimer = setTimeout(() => {
         updateWaypointZoomLabels();
+      }, delay);
+    }
+
+    function scheduleAirspaceLabelUpdate(delay = 0) {
+      clearTimeout(airspaceLabelUpdateTimer);
+      airspaceLabelUpdateTimer = setTimeout(() => {
+        updateAirspaceLabels();
       }, delay);
     }
 
@@ -1311,17 +1427,6 @@
       const skipNdbLabel = !!options.skipNdbLabel;
 
       if (isAirspaceLabel) {
-        const cleanedName = cleanLabelText(feature.name);
-        if (!cleanedName) return;
-
-        const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
-        const fontSize = isDesktopView()
-          ? Math.max(10, Math.round(13 * labelStyle.scale))
-          : Math.max(7, Math.round(9 * labelStyle.scale));
-
-        const labelHtml =
-          `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
-
         const labelOnlyMarker = L.marker(latlng, {
           opacity: 0,
           keyboard: false
@@ -1331,12 +1436,13 @@
           labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
         }
 
-        labelOnlyMarker.bindTooltip(labelHtml, {
-          permanent: true,
-          direction: "top",
-          offset: [0, 0],
-          className: "kml-label",
-          opacity: 1
+        registerAirspaceLabel(labelOnlyMarker, feature, {
+          minZoom: AIRSPACE_LABEL_MIN_ZOOM,
+          prevPoint: options.prevPoint || null,
+          currPoint: options.currPoint || null,
+          nextPoint: options.nextPoint || null,
+          renderContext: options.renderContext || null,
+          sequence: options.sequence
         });
 
         if (!skipRouteBounds) addToRouteBounds(labelOnlyMarker, sourceName);
@@ -1603,6 +1709,14 @@
       }
     }
 
+    function buildRouteSequence(pointFeatures, routeEndpoints) {
+      return pointFeatures.filter(f =>
+        !isTriangleShapePoint(f) &&
+        !isIcon52ShapePoint(f) &&
+        !isEndpointPointFeature(f, routeEndpoints)
+      );
+    }
+
     function drawKMLFeatures(features, sourceName, targetLayer) {
       if (!features.length) {
         throw new Error("No valid features in KML");
@@ -1622,13 +1736,7 @@
       const lineFeatures = features.filter(f => f.type === "LineString");
       const polygonFeatures = features.filter(f => f.type === "Polygon");
       const routeEndpoints = getRouteEndpoints(pointFeatures);
-
-      const waypointOnlyPoints = pointFeatures.filter(f =>
-        !isAirspaceLabelFeature(f) &&
-        !isTriangleShapePoint(f) &&
-        !isIcon52ShapePoint(f) &&
-        !isEndpointPointFeature(f, routeEndpoints)
-      );
+      const routeSequence = buildRouteSequence(pointFeatures, routeEndpoints);
 
       lineFeatures.forEach(f => drawKMLLine(f, targetLayer, sourceName, renderContext));
       polygonFeatures.forEach(f => drawKMLPolygon(f, targetLayer, sourceName, renderContext));
@@ -1640,6 +1748,11 @@
           return;
         }
 
+        const idx = routeSequence.indexOf(f);
+        const prevPoint = idx > 0 ? routeSequence[idx - 1].coords : null;
+        const currPoint = idx >= 0 ? routeSequence[idx].coords : f.coords;
+        const nextPoint = idx >= 0 && idx < routeSequence.length - 1 ? routeSequence[idx + 1].coords : null;
+
         if (isAirspaceLabelFeature(f)) {
           const currentName = String(f.name || "").trim();
 
@@ -1649,16 +1762,17 @@
 
           lastAirspaceLabelName = currentName;
 
-          drawKMLPoint(f, targetLayer, sourceName, renderContext, {});
+          drawKMLPoint(f, targetLayer, sourceName, renderContext, {
+            prevPoint,
+            currPoint,
+            nextPoint,
+            renderContext,
+            sequence: idx >= 0 ? idx : 999999
+          });
           return;
         }
 
         lastAirspaceLabelName = "";
-
-        const idx = waypointOnlyPoints.indexOf(f);
-        const prevPoint = idx > 0 ? waypointOnlyPoints[idx - 1].coords : null;
-        const currPoint = idx >= 0 ? waypointOnlyPoints[idx].coords : f.coords;
-        const nextPoint = idx >= 0 && idx < waypointOnlyPoints.length - 1 ? waypointOnlyPoints[idx + 1].coords : null;
 
         drawKMLPoint(f, targetLayer, sourceName, renderContext, {
           prevPoint,
@@ -1758,6 +1872,7 @@
     async function init() {
       try {
         waypointZoomLabelRegistry.length = 0;
+        airspaceLabelRegistry.length = 0;
 
         const requestedFiles = getRequestedFiles();
 
@@ -1779,6 +1894,7 @@
         setTimeout(() => {
           refreshMapSize();
           scheduleWaypointLabelUpdate(20);
+          scheduleAirspaceLabelUpdate(20);
         }, 80);
 
       } catch (err) {
@@ -1790,6 +1906,7 @@
     window.addEventListener("resize", () => {
       refreshMapSize();
       scheduleWaypointLabelUpdate(60);
+      scheduleAirspaceLabelUpdate(60);
       scheduleRedrawNDB();
     });
 
@@ -1798,6 +1915,7 @@
 
     map.on("moveend zoomend", function () {
       scheduleWaypointLabelUpdate(20);
+      scheduleAirspaceLabelUpdate(20);
       scheduleRedrawNDB();
     });
 
