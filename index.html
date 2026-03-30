@@ -427,7 +427,8 @@
     }
 
 function getShapeCodeLabel(name) {
-  return normalizeSpecialLabelName(name).trim();
+  const s = normalizeSpecialLabelName(name);
+  return s.split("/")[0].trim();
 }
 
     function buildPopupHtml(title, descriptionHtml, extraRows = []) {
