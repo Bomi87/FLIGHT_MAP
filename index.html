@@ -104,12 +104,13 @@
       color: #ffffff;
       font-size: 10px;
       transform-origin: center center;
-      text-align: left;
+      text-align: center;
       text-shadow:
         -1px -1px 0 #000,
          1px -1px 0 #000,
         -1px  1px 0 #000,
-         1px  1px 0 #000;
+         1px  1px 0 #000,
+         0 0 4px rgba(0, 0, 0, 0.65);
     }
 
     .triangle-label-text,
@@ -259,6 +260,7 @@
     const NDB_LABEL_MIN_ZOOM = 5;
     const NDB_BOUNDS_PAD_RATIO = 0.20;
     const NDB_REDRAW_DELAY_MS = 80;
+    const WAYPOINT_LABEL_DISTANCE = 18;
 
     /* -----------------------------
        영공 국가 리스트
@@ -773,32 +775,56 @@
       return a;
     }
 
-   function getSmartLabelAngle(prevPoint, currPoint, nextPoint) {
-  let angle = 0;
+    function getRouteAngleDeg(prevPoint, currPoint, nextPoint) {
+      let angle = 0;
 
-  if (prevPoint && nextPoint) {
-    const a1 = getSegmentAngleDeg(prevPoint, currPoint);
-    const a2 = getSegmentAngleDeg(currPoint, nextPoint);
-    angle = (a1 + a2) / 2;
-  } else if (prevPoint) {
-    angle = getSegmentAngleDeg(prevPoint, currPoint);
-  } else if (nextPoint) {
-    angle = getSegmentAngleDeg(currPoint, nextPoint);
-  }
+      if (prevPoint && nextPoint) {
+        const a1 = getSegmentAngleDeg(prevPoint, currPoint);
+        const a2 = getSegmentAngleDeg(currPoint, nextPoint);
+        angle = (a1 + a2) / 2;
+      } else if (prevPoint) {
+        angle = getSegmentAngleDeg(prevPoint, currPoint);
+      } else if (nextPoint) {
+        angle = getSegmentAngleDeg(currPoint, nextPoint);
+      }
 
-  angle = normalizeLabelAngle(angle);
+      return normalizeLabelAngle(angle);
+    }
 
-  const abs = Math.abs(angle);
+    function getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint, distance = WAYPOINT_LABEL_DISTANCE) {
+      const routeAngle = getRouteAngleDeg(prevPoint, currPoint, nextPoint);
 
-  // 루트가 거의 수평 -> 라벨 세로
-  if (abs <= 25) return -90;
+      let labelAngle = normalizeLabelAngle(routeAngle + 90);
 
-  // 루트가 거의 수직 -> 라벨 가로
-  if (abs >= 65) return 0;
+      const rad1 = (routeAngle + 90) * Math.PI / 180;
+      const rad2 = (routeAngle - 90) * Math.PI / 180;
 
-  // 중간 대각 구간도 루트와 반대 느낌으로 보정
-  return angle > 0 ? -45 : 45;
-}
+      const v1 = {
+        x: Math.cos(rad1) * distance,
+        y: Math.sin(rad1) * distance
+      };
+
+      const v2 = {
+        x: Math.cos(rad2) * distance,
+        y: Math.sin(rad2) * distance
+      };
+
+      const chosen = (v1.y >= v2.y) ? v1 : v2;
+
+      let chosenAngle = labelAngle;
+      const chosenRad = Math.atan2(chosen.y, chosen.x) * 180 / Math.PI;
+      const altAngle = normalizeLabelAngle(routeAngle - 90);
+
+      if (Math.abs(normalizeLabelAngle(chosenAngle - chosenRad)) > 100) {
+        chosenAngle = altAngle;
+      }
+
+      return {
+        angle: chosenAngle,
+        offset: [Math.round(chosen.x), Math.round(chosen.y)],
+        direction: "center"
+      };
+    }
 
     function registerWaypointZoomLabel(layer, feature, options = {}) {
       if (!layer || !feature || !feature.name) return;
@@ -820,8 +846,8 @@
         layer,
         labelHtml,
         minZoom: options.minZoom ?? 5,
-        direction: options.direction || "bottom",
-        offset: options.offset || [-20, 10],
+        direction: options.direction || "center",
+        offset: options.offset || [0, 18],
         className: options.className || "waypoint-label",
         visible: false
       });
@@ -975,7 +1001,7 @@
         const prevPoint = i > 0 ? points[i - 1] : null;
         const currPoint = points[i];
         const nextPoint = i < points.length - 1 ? points[i + 1] : null;
-        const labelAngle = getSmartLabelAngle(prevPoint, currPoint, nextPoint);
+        const placement = getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint);
 
         registerWaypointZoomLabel(marker, {
           type: "Point",
@@ -983,10 +1009,10 @@
           description: p.description || ""
         }, {
           minZoom: 5,
-       direction: "bottom",
-offset: [0, 20],
+          direction: placement.direction,
+          offset: placement.offset,
           className: "waypoint-label",
-          angle: labelAngle
+          angle: placement.angle
         });
 
         addToRouteBounds(marker, sourceName);
@@ -1281,8 +1307,8 @@ offset: [0, 20],
         } else {
           registerWaypointZoomLabel(marker, feature, {
             minZoom: 5,
-        direction: "bottom",
-offset: [0, 20],
+            direction: options.labelDirection || "center",
+            offset: options.labelOffset || [0, WAYPOINT_LABEL_DISTANCE],
             className: "waypoint-label",
             angle: options.labelAngle ?? 0
           });
@@ -1317,32 +1343,14 @@ offset: [0, 20],
       } else {
         registerWaypointZoomLabel(marker, feature, {
           minZoom: 5,
-     direction: "bottom",
-offset: [0, 20],
+          direction: options.labelDirection || "center",
+          offset: options.labelOffset || [0, WAYPOINT_LABEL_DISTANCE],
           className: "waypoint-label",
           angle: options.labelAngle ?? 0
         });
       }
 
       if (!skipRouteBounds) addToRouteBounds(marker, sourceName);
-    }
-
-    function getNearestWorldCopyLon(lon) {
-      const centerLon = map.getCenter().lng;
-      const options = [lon - 360, lon, lon + 360];
-
-      let bestLon = options[0];
-      let minDiff = Math.abs(centerLon - bestLon);
-
-      for (let i = 1; i < options.length; i++) {
-        const diff = Math.abs(centerLon - options[i]);
-        if (diff < minDiff) {
-          minDiff = diff;
-          bestLon = options[i];
-        }
-      }
-
-      return bestLon;
     }
 
     function redrawNDB() {
@@ -1570,14 +1578,20 @@ offset: [0, 20],
           lastAirspaceLabelName = currentName;
 
           drawKMLPoint(f, targetLayer, sourceName, renderContext, {
-            labelAngle: 0
+            labelAngle: 0,
+            labelOffset: [0, 0],
+            labelDirection: "top"
           });
           return;
         }
 
         lastAirspaceLabelName = "";
 
-        let labelAngle = 0;
+        let placement = {
+          angle: 0,
+          offset: [0, WAYPOINT_LABEL_DISTANCE],
+          direction: "center"
+        };
 
         const idx = waypointOnlyPoints.indexOf(f);
         if (idx >= 0) {
@@ -1585,11 +1599,13 @@ offset: [0, 20],
           const currPoint = waypointOnlyPoints[idx].coords;
           const nextPoint = idx < waypointOnlyPoints.length - 1 ? waypointOnlyPoints[idx + 1].coords : null;
 
-          labelAngle = getSmartLabelAngle(prevPoint, currPoint, nextPoint);
+          placement = getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint);
         }
 
         drawKMLPoint(f, targetLayer, sourceName, renderContext, {
-          labelAngle
+          labelAngle: placement.angle,
+          labelOffset: placement.offset,
+          labelDirection: placement.direction
         });
       });
 
