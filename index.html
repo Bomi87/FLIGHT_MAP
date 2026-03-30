@@ -92,7 +92,7 @@
       white-space: nowrap;
       font-weight: 700;
       color: #ffffff;
-      font-size: 10px;
+      font-size: 9px;
       transform-origin: left center;
       text-align: left;
       line-height: 1;
@@ -426,10 +426,9 @@
         .trim();
     }
 
-    function getShapeCodeLabel(name) {
-      const s = normalizeSpecialLabelName(name);
-      return s.split("/")[0].trim();
-    }
+function getShapeCodeLabel(name) {
+  return normalizeSpecialLabelName(name).trim();
+}
 
     function buildPopupHtml(title, descriptionHtml, extraRows = []) {
       let html = `<div class="popup-body">`;
