@@ -284,7 +284,7 @@
 
     const ROUTE_LABEL_MIN_ZOOM = 5;
     const WAYPOINT_LABEL_DISTANCE = 5;
-    const AIRSPACE_LABEL_DISTANCE = 78;
+    const AIRSPACE_LABEL_DISTANCE = 58;
     const WAYPOINT_LABEL_COLLISION_PAD = 2;
 
     /* -----------------------------
@@ -770,20 +770,19 @@ function getShapeCodeLabel(name) {
       return triangleIcon;
     }
 
-    function isHorizontalPinkShapeLabel(feature) {
-      if (!feature || feature.type !== "Point") return false;
-      if (isAirspaceLabelFeature(feature)) return false;
+   function isHorizontalPinkShapeLabel(feature) {
+  if (!feature || feature.type !== "Point") return false;
+  if (isAirspaceLabelFeature(feature)) return false;
 
-      const code = getShapeCodeLabel(feature.name);
-      if (!code) return false;
+  const code = getShapeCodeLabel(feature.name).toUpperCase();
+  if (!code) return false;
 
-      return (
-        isTriangleShapePoint(feature) ||
-        isIcon52ShapePoint(feature) ||
-        /^[A-Z]{1,3}\d{2,5}$/i.test(code)
-      );
-    }
-
+  return (
+    isTriangleShapePoint(feature) ||
+    isIcon52ShapePoint(feature) ||
+    /^(D|R|P)\d{2,5}(\/\d+)?$/i.test(code)
+  );
+}
     function isAlwaysVisibleShapePointLabel(feature) {
       return isHorizontalPinkShapeLabel(feature);
     }
