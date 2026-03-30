@@ -754,14 +754,20 @@
       }
     }
 
-    function getSegmentAngleDeg(p1, p2) {
-      if (!p1 || !p2) return 0;
+function getSegmentAngleDeg(p1, p2, renderContext) {
+  if (!p1 || !p2) return 0;
 
-      const dx = p2.lon - p1.lon;
-      const dy = p2.lat - p1.lat;
+  const latlng1 = toRenderLatLng(p1.lat, p1.lon, renderContext);
+  const latlng2 = toRenderLatLng(p2.lat, p2.lon, renderContext);
 
-      return Math.atan2(dy, dx) * 180 / Math.PI;
-    }
+  const pt1 = map.latLngToLayerPoint(latlng1);
+  const pt2 = map.latLngToLayerPoint(latlng2);
+
+  const dx = pt2.x - pt1.x;
+  const dy = pt2.y - pt1.y;
+
+  return Math.atan2(dy, dx) * 180 / Math.PI;
+}
 
     function normalizeLabelAngle(angle) {
       let a = angle;
@@ -775,56 +781,50 @@
       return a;
     }
 
-    function getRouteAngleDeg(prevPoint, currPoint, nextPoint) {
-      let angle = 0;
+function getRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext) {
+  if (nextPoint) {
+    return normalizeLabelAngle(getSegmentAngleDeg(currPoint, nextPoint, renderContext));
+  }
+  if (prevPoint) {
+    return normalizeLabelAngle(getSegmentAngleDeg(prevPoint, currPoint, renderContext));
+  }
+  return 0;
+}
 
-      if (prevPoint && nextPoint) {
-        const a1 = getSegmentAngleDeg(prevPoint, currPoint);
-        const a2 = getSegmentAngleDeg(currPoint, nextPoint);
-        angle = (a1 + a2) / 2;
-      } else if (prevPoint) {
-        angle = getSegmentAngleDeg(prevPoint, currPoint);
-      } else if (nextPoint) {
-        angle = getSegmentAngleDeg(currPoint, nextPoint);
-      }
+function getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint, renderContext, distance = WAYPOINT_LABEL_DISTANCE) {
+  const routeAngle = getRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
 
-      return normalizeLabelAngle(angle);
-    }
+  let labelAngle = normalizeLabelAngle(routeAngle + 90);
 
-    function getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint, distance = WAYPOINT_LABEL_DISTANCE) {
-      const routeAngle = getRouteAngleDeg(prevPoint, currPoint, nextPoint);
+  const rad1 = (routeAngle + 90) * Math.PI / 180;
+  const rad2 = (routeAngle - 90) * Math.PI / 180;
 
-      let labelAngle = normalizeLabelAngle(routeAngle + 90);
+  const v1 = {
+    x: Math.cos(rad1) * distance,
+    y: Math.sin(rad1) * distance
+  };
 
-      const rad1 = (routeAngle + 90) * Math.PI / 180;
-      const rad2 = (routeAngle - 90) * Math.PI / 180;
+  const v2 = {
+    x: Math.cos(rad2) * distance,
+    y: Math.sin(rad2) * distance
+  };
 
-      const v1 = {
-        x: Math.cos(rad1) * distance,
-        y: Math.sin(rad1) * distance
-      };
+  const chosen = (v1.y >= v2.y) ? v1 : v2;
 
-      const v2 = {
-        x: Math.cos(rad2) * distance,
-        y: Math.sin(rad2) * distance
-      };
+  let chosenAngle = labelAngle;
+  const chosenRad = Math.atan2(chosen.y, chosen.x) * 180 / Math.PI;
+  const altAngle = normalizeLabelAngle(routeAngle - 90);
 
-      const chosen = (v1.y >= v2.y) ? v1 : v2;
+  if (Math.abs(normalizeLabelAngle(chosenAngle - chosenRad)) > 100) {
+    chosenAngle = altAngle;
+  }
 
-      let chosenAngle = labelAngle;
-      const chosenRad = Math.atan2(chosen.y, chosen.x) * 180 / Math.PI;
-      const altAngle = normalizeLabelAngle(routeAngle - 90);
-
-      if (Math.abs(normalizeLabelAngle(chosenAngle - chosenRad)) > 100) {
-        chosenAngle = altAngle;
-      }
-
-      return {
-        angle: chosenAngle,
-        offset: [Math.round(chosen.x), Math.round(chosen.y)],
-        direction: "center"
-      };
-    }
+  return {
+    angle: chosenAngle,
+    offset: [Math.round(chosen.x), Math.round(chosen.y)],
+    direction: "center"
+  };
+}
 
     function registerWaypointZoomLabel(layer, feature, options = {}) {
       if (!layer || !feature || !feature.name) return;
@@ -1001,7 +1001,7 @@
         const prevPoint = i > 0 ? points[i - 1] : null;
         const currPoint = points[i];
         const nextPoint = i < points.length - 1 ? points[i + 1] : null;
-        const placement = getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint);
+      const placement = getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint, renderContext);
 
         registerWaypointZoomLabel(marker, {
           type: "Point",
@@ -1599,7 +1599,7 @@
           const currPoint = waypointOnlyPoints[idx].coords;
           const nextPoint = idx < waypointOnlyPoints.length - 1 ? waypointOnlyPoints[idx + 1].coords : null;
 
-          placement = getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint);
+       placement = getPerpendicularLabelPlacement(prevPoint, currPoint, nextPoint, renderContext);
         }
 
         drawKMLPoint(f, targetLayer, sourceName, renderContext, {
