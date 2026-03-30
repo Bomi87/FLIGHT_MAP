@@ -280,7 +280,7 @@
     const NDB_BOUNDS_PAD_RATIO = 0.20;
     const NDB_REDRAW_DELAY_MS = 80;
 
-    const ROUTE_LABEL_MIN_ZOOM = 5;
+    const ROUTE_LABEL_MIN_ZOOM = 4;
     const WAYPOINT_LABEL_DISTANCE = 5;
     const AIRSPACE_LABEL_DISTANCE = 68;
     const WAYPOINT_LABEL_COLLISION_PAD = 2;
@@ -1395,38 +1395,42 @@ function getShapeCodeLabel(name) {
       const skipRouteBounds = !!options.skipRouteBounds;
       const skipNdbLabel = !!options.skipNdbLabel;
 
-      if (isAirspaceLabel) {
-        const cleanedName = cleanLabelText(feature.name);
-        if (!cleanedName) return;
+     if (isAirspaceLabel) {
+  if (map.getZoom() < ROUTE_LABEL_MIN_ZOOM) {
+    return;
+  }
 
-        const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
-        const fontSize = isDesktopView()
-          ? Math.max(9, Math.round(10 * labelStyle.scale))
-          : Math.max(7, Math.round(8 * labelStyle.scale));
+  const cleanedName = cleanLabelText(feature.name);
+  if (!cleanedName) return;
 
-        const labelHtml =
-          `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
+  const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
+  const fontSize = isDesktopView()
+    ? Math.max(8, Math.round(9 * labelStyle.scale))
+    : Math.max(6, Math.round(7 * labelStyle.scale));
 
-        const labelOnlyMarker = L.marker(latlng, {
-          opacity: 0,
-          keyboard: false
-        }).addTo(targetLayer);
+  const labelHtml =
+    `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
 
-        if (popupHtml) {
-          labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
-        }
+  const labelOnlyMarker = L.marker(latlng, {
+    opacity: 0,
+    keyboard: false
+  }).addTo(targetLayer);
 
-        labelOnlyMarker.bindTooltip(labelHtml, {
-          permanent: true,
-          direction: "top",
-          offset: [0, 0],
-          className: "kml-label",
-          opacity: 1
-        });
+  if (popupHtml) {
+    labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
+  }
 
-        if (!skipRouteBounds) addToRouteBounds(labelOnlyMarker, sourceName);
-        return;
-      }
+  labelOnlyMarker.bindTooltip(labelHtml, {
+    permanent: true,
+    direction: "top",
+    offset: [0, 0],
+    className: "kml-label",
+    opacity: 1
+  });
+
+  if (!skipRouteBounds) addToRouteBounds(labelOnlyMarker, sourceName);
+  return;
+}
 
       if (iconStyle.href) {
         const iconSize = isDesktopView()
