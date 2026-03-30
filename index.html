@@ -106,12 +106,14 @@
       user-select: none;
     }
 
+
+
     .airspace-label-text {
       display: inline-block;
       white-space: nowrap;
       font-weight: 700;
-      transform-origin: left center;
-      text-align: left;
+      transform-origin: center center;
+      text-align: center;
       line-height: 1;
       text-shadow:
         -1px -1px 0 #000,
@@ -128,7 +130,6 @@
       display: inline-block;
       white-space: nowrap;
       font-weight: 700;
-      color: #ffffff;
       font-size: 10px;
       text-align: left;
       text-shadow:
@@ -138,6 +139,16 @@
          1px  1px 0 #000,
          0 0 4px rgba(0, 0, 0, 0.65);
     }
+
+    .triangle-label-text {
+      color: #ff69b4;
+    }
+
+    .ndb-label-text {
+      color: #ffffff;
+    }
+
+
 
     .leaflet-control-layers {
       font-size: 12px;
@@ -875,14 +886,14 @@ function getOffsetLatLngFromCurrPoint(currPoint, placement, renderContext) {
       `;
     }
 
-    function getAirspaceLabelHtml(name, color, opacity, fontSize, angle) {
-      return `
-        <span class="airspace-label-text"
-              style="color:${color}; opacity:${opacity}; font-size:${fontSize}px; transform: rotate(${angle}deg);">
-          ${escapeHtml(name)}
-        </span>
-      `;
-    }
+  function getAirspaceLabelHtml(name, color, opacity, fontSize) {
+  return `
+    <span class="airspace-label-text"
+          style="color:${color}; opacity:${opacity}; font-size:${fontSize}px; transform: translateX(-50%);">
+      ${escapeHtml(name)}
+    </span>
+  `;
+}
 
     function clearAllRouteTextMarkers() {
       waypointLabelRegistry.forEach(item => {
@@ -1056,13 +1067,12 @@ function updateRouteTextMarkers() {
       ? Math.max(8, Math.round(10 * labelStyle.scale))
       : Math.max(6, Math.round(7 * labelStyle.scale));
 
-    const labelHtml = getAirspaceLabelHtml(
-      item.featureName,
-      labelColor,
-      labelStyle.opacity,
-      fontSize,
-      placement.angle
-    );
+  const labelHtml = getAirspaceLabelHtml(
+  item.featureName,
+  labelColor,
+  labelStyle.opacity,
+  fontSize
+);
 
     item.labelMarker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
     item.visible = true;
