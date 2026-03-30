@@ -265,11 +265,13 @@
     const routeBoundsGroup = L.featureGroup();
 
     const waypointLabelRegistry = [];
+    const airspaceLabelRegistry = [];
 
     let ndbRawData = [];
     let ndbVisible = false;
     let ndbRedrawTimer = null;
     let routeLabelUpdateTimer = null;
+    let airspaceLabelUpdateTimer = null;
 
     const POPUP_OPTIONS = {
       maxWidth: 260,
@@ -972,6 +974,23 @@ function getShapeCodeLabel(name) {
     }
 
 
+    function registerAirspaceLabel(latlng, feature, targetLayer, sourceName, popupHtml) {
+      if (!feature || !feature.name) return;
+
+      const cleanedName = cleanLabelText(feature.name);
+      if (!cleanedName) return;
+
+      airspaceLabelRegistry.push({
+        latlng,
+        feature,
+        targetLayer: targetLayer || drawn,
+        sourceName: sourceName || "",
+        popupHtml: popupHtml || "",
+        marker: null
+      });
+    }
+
+
     function updateRouteTextMarkers() {
       const zoom = map.getZoom();
 
@@ -1033,6 +1052,62 @@ function getShapeCodeLabel(name) {
       clearTimeout(routeLabelUpdateTimer);
       routeLabelUpdateTimer = setTimeout(() => {
         updateRouteTextMarkers();
+      }, delay);
+    }
+
+
+    function clearAllAirspaceLabels() {
+      airspaceLabelRegistry.forEach(item => {
+        if (item.marker && item.targetLayer && item.targetLayer.hasLayer(item.marker)) {
+          item.targetLayer.removeLayer(item.marker);
+        }
+        item.marker = null;
+      });
+    }
+
+    function updateAirspaceLabels() {
+      clearAllAirspaceLabels();
+
+      if (map.getZoom() < ROUTE_LABEL_MIN_ZOOM) {
+        return;
+      }
+
+      airspaceLabelRegistry.forEach(item => {
+        const labelStyle = getLabelStyle(item.feature.style);
+        const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
+
+        const fontSize = isDesktopView()
+          ? Math.max(7, Math.round(8 * labelStyle.scale))
+          : Math.max(5, Math.round(6 * labelStyle.scale));
+
+        const labelHtml =
+          `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanLabelText(item.feature.name))}</span>`;
+
+        const marker = L.marker(item.latlng, {
+          opacity: 0,
+          keyboard: false
+        }).addTo(item.targetLayer);
+
+        if (item.popupHtml) {
+          marker.bindPopup(item.popupHtml, POPUP_OPTIONS);
+        }
+
+        marker.bindTooltip(labelHtml, {
+          permanent: true,
+          direction: "top",
+          offset: [0, 0],
+          className: "kml-label",
+          opacity: 1
+        });
+
+        item.marker = marker;
+      });
+    }
+
+    function scheduleAirspaceLabelUpdate(delay = 0) {
+      clearTimeout(airspaceLabelUpdateTimer);
+      airspaceLabelUpdateTimer = setTimeout(() => {
+        updateAirspaceLabels();
       }, delay);
     }
 
@@ -1395,38 +1470,10 @@ function getShapeCodeLabel(name) {
       const skipRouteBounds = !!options.skipRouteBounds;
       const skipNdbLabel = !!options.skipNdbLabel;
 
-if (isAirspaceLabel) {
-  const cleanedName = cleanLabelText(feature.name);
-  if (!cleanedName) return;
-
-  const labelColor = getAirspaceLabelColor(feature, labelStyle.color);
-  const fontSize = isDesktopView()
-    ? Math.max(7, Math.round(8 * labelStyle.scale))
-    : Math.max(5, Math.round(6 * labelStyle.scale));
-
-  const labelHtml =
-    `<span class="kml-label-text" style="color:${labelColor}; opacity:${labelStyle.opacity}; font-size:${fontSize}px;">${escapeHtml(cleanedName)}</span>`;
-
-  const labelOnlyMarker = L.marker(latlng, {
-    opacity: 0,
-    keyboard: false
-  }).addTo(targetLayer);
-
-  if (popupHtml) {
-    labelOnlyMarker.bindPopup(popupHtml, POPUP_OPTIONS);
-  }
-
-  labelOnlyMarker.bindTooltip(labelHtml, {
-    permanent: true,
-    direction: "top",
-    offset: [0, 0],
-    className: "kml-label",
-    opacity: 1
-  });
-
-  if (!skipRouteBounds) addToRouteBounds(labelOnlyMarker, sourceName);
-  return;
-}
+      if (isAirspaceLabel) {
+        registerAirspaceLabel(latlng, feature, targetLayer, sourceName, popupHtml);
+        return;
+      }
 
       if (iconStyle.href) {
         const iconSize = isDesktopView()
@@ -1844,6 +1891,7 @@ if (isAirspaceLabel) {
     async function init() {
       try {
         waypointLabelRegistry.length = 0;
+        airspaceLabelRegistry.length = 0;
 
         const requestedFiles = getRequestedFiles();
 
@@ -1865,6 +1913,7 @@ if (isAirspaceLabel) {
         setTimeout(() => {
           refreshMapSize();
           scheduleRouteTextUpdate(20);
+          scheduleAirspaceLabelUpdate(20);
         }, 80);
 
       } catch (err) {
@@ -1876,6 +1925,7 @@ if (isAirspaceLabel) {
     window.addEventListener("resize", () => {
       refreshMapSize();
       scheduleRouteTextUpdate(60);
+      scheduleAirspaceLabelUpdate(60);
       scheduleRedrawNDB();
     });
 
@@ -1884,6 +1934,7 @@ if (isAirspaceLabel) {
 
     map.on("moveend zoomend", function () {
       scheduleRouteTextUpdate(20);
+      scheduleAirspaceLabelUpdate(20);
       scheduleRedrawNDB();
     });
 
