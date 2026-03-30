@@ -108,37 +108,45 @@
 
 
 
-    .airspace-label-text {
-      display: inline-block;
-      white-space: nowrap;
-      font-weight: 700;
-      transform-origin: center center;
-      text-align: center;
-      line-height: 1;
-      text-shadow:
-        -1px -1px 0 #000,
-         1px -1px 0 #000,
-        -1px  1px 0 #000,
-         1px  1px 0 #000,
-         0 0 4px rgba(0, 0, 0, 0.65);
-      pointer-events: none;
-      user-select: none;
-    }
+  .airspace-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-weight: 700;
+  transform-origin: center center;
+  text-align: center;
+  line-height: 1;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+  user-select: none;
+}
 
-    .triangle-label-text,
-    .ndb-label-text {
-      display: inline-block;
-      white-space: nowrap;
-      font-weight: 700;
-      font-size: 10px;
-      text-align: left;
-      text-shadow:
-        -1px -1px 0 #000,
-         1px -1px 0 #000,
-        -1px  1px 0 #000,
-         1px  1px 0 #000,
-         0 0 4px rgba(0, 0, 0, 0.65);
-    }
+.triangle-label-text,
+.ndb-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 10px;
+  text-align: left;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0, 0, 0, 0.65);
+}
+
+.triangle-label-text {
+  color: #ff69b4;
+}
+
+.ndb-label-text {
+  color: #ffffff;
+}
 
     .triangle-label-text {
       color: #ff69b4;
@@ -861,7 +869,21 @@ function getOffsetLatLngFromCurrPoint(currPoint, placement, renderContext) {
 
   return map.layerPointToLatLng(labelPt);
 }
+function getHorizontalAirspacePlacement(prevPoint, currPoint, nextPoint, renderContext, distance) {
+  const routeAngle = getForwardRouteAngleDeg(prevPoint, currPoint, nextPoint, renderContext);
+  const rad = routeAngle * Math.PI / 180;
 
+  // waypoint와 같은 "오른쪽 side"를 쓰되,
+  // 텍스트는 회전하지 않고 수평 유지
+  const normalX = -Math.sin(rad);
+  const normalY =  Math.cos(rad);
+
+  return {
+    angle: 0,
+    offsetX: normalX * distance,
+    offsetY: normalY * distance
+  };
+}
     function createTextMarker(latlng, html, targetLayer) {
       const icon = L.divIcon({
         className: "route-text-marker",
@@ -886,7 +908,7 @@ function getOffsetLatLngFromCurrPoint(currPoint, placement, renderContext) {
       `;
     }
 
-  function getAirspaceLabelHtml(name, color, opacity, fontSize) {
+function getAirspaceLabelHtml(name, color, opacity, fontSize) {
   return `
     <span class="airspace-label-text"
           style="color:${color}; opacity:${opacity}; font-size:${fontSize}px; transform: translateX(-50%);">
@@ -1036,47 +1058,46 @@ function updateRouteTextMarkers() {
     item.visible = true;
   });
 
-  const airspaceCandidates = airspaceLabelRegistry
-    .filter(item => zoom >= item.minZoom && item.layer)
-    .sort((a, b) => a.sequence - b.sequence);
+const airspaceCandidates = airspaceLabelRegistry
+  .filter(item => zoom >= item.minZoom && item.layer)
+  .sort((a, b) => a.sequence - b.sequence);
 
-  airspaceCandidates.forEach(item => {
-    if (!item.currPoint) return;
+airspaceCandidates.forEach(item => {
+  if (!item.currPoint) return;
 
-    // ✅ waypoint와 완전히 같은 방향/기준점
-    const placement = getUnifiedRightPlacement(
-      item.prevPoint,
-      item.currPoint,
-      item.nextPoint,
-      item.renderContext,
-      AIRSPACE_LABEL_DISTANCE
-    );
+  const placement = getHorizontalAirspacePlacement(
+    item.prevPoint,
+    item.currPoint,
+    item.nextPoint,
+    item.renderContext,
+    AIRSPACE_LABEL_DISTANCE
+  );
 
-    const labelLatLng = getOffsetLatLngFromCurrPoint(
-      item.currPoint,
-      placement,
-      item.renderContext
-    );
+  const labelLatLng = getOffsetLatLngFromCurrPoint(
+    item.currPoint,
+    placement,
+    item.renderContext
+  );
 
-    if (!labelLatLng) return;
+  if (!labelLatLng) return;
 
-    const labelStyle = getLabelStyle(item.feature.style);
-    const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
+  const labelStyle = getLabelStyle(item.feature.style);
+  const labelColor = getAirspaceLabelColor(item.feature, labelStyle.color);
 
-    const fontSize = isDesktopView()
-      ? Math.max(8, Math.round(10 * labelStyle.scale))
-      : Math.max(6, Math.round(7 * labelStyle.scale));
+  const fontSize = isDesktopView()
+    ? Math.max(8, Math.round(10 * labelStyle.scale))
+    : Math.max(6, Math.round(7 * labelStyle.scale));
 
   const labelHtml = getAirspaceLabelHtml(
-  item.featureName,
-  labelColor,
-  labelStyle.opacity,
-  fontSize
-);
+    item.featureName,
+    labelColor,
+    labelStyle.opacity,
+    fontSize
+  );
 
-    item.labelMarker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
-    item.visible = true;
-  });
+  item.labelMarker = createTextMarker(labelLatLng, labelHtml, item.targetLayer);
+  item.visible = true;
+});
 }
 
     function scheduleRouteTextUpdate(delay = 0) {
