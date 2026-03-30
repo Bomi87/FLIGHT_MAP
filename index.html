@@ -1787,7 +1787,7 @@ function getShapeCodeLabel(name) {
 
         const idx = routeSequence.indexOf(f);
         const prevPoint = idx > 0 ? routeSequence[idx - 1].coords : null;
-        const currPoint = idx >= 0 ? routeSequence[idx].coords : f.coords;
+        const currPoint = idx >= 0 ? routeSequence[idx].coords : null;
         const nextPoint = idx >= 0 && idx < routeSequence.length - 1 ? routeSequence[idx + 1].coords : null;
 
         if (isAirspaceLabelFeature(f)) {
