@@ -106,22 +106,29 @@
       user-select: none;
     }
 
-    .kml-label-text {
-      display: inline-block;
-      white-space: nowrap;
-      font-weight: 700;
-      text-align: left;
-      transform-origin: left bottom;
-      transform: translate(18px, -2px) rotate(-90deg);
-      text-shadow:
-        -1px -1px 0 #000,
-         1px -1px 0 #000,
-        -1px  1px 0 #000,
-         1px  1px 0 #000,
-         0 0 4px rgba(0, 0, 0, 0.65);
-      pointer-events: none;
-      user-select: none;
-    }
+ .kml-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-weight: 700;
+  text-align: left;
+  transform-origin: left bottom;
+  transform: translate(25px, -2px) rotate(-90deg);
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 📱 모바일 보정 */
+@media (max-width: 767px) {
+  .kml-label-text {
+    transform: translate(7px, -2px) rotate(-90deg);
+  }
+}
 
     .triangle-label-text,
     .ndb-label-text {
