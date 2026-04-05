@@ -2,7 +2,42 @@
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
 <Document>
 	<name>HL8080 RKSS-KSJC PLAN</name>
+	<open>1</open>
 	<atom:link rel="app" href="https://www.google.com/earth/about/versions/#earth-pro" title="Google Earth Pro 7.3.7.1094"></atom:link>
+	<StyleMap id="m_ylw-pushpin">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#s_ylw-pushpin</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#s_ylw-pushpin_hl</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="s_ylw-pushpin">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<PolyStyle>
+			<color>9900ff00</color>
+		</PolyStyle>
+	</Style>
+	<Style id="s_ylw-pushpin_hl">
+		<IconStyle>
+			<scale>1.3</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<PolyStyle>
+			<color>9900ff00</color>
+		</PolyStyle>
+	</Style>
 	<Style id="style">
 		<IconStyle>
 			<Icon>
@@ -5145,6 +5180,18 @@
 			</Icon>
 		</IconStyle>
 	</Style>
+	<Style id="style_20">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+			<scale>1.4</scale>
+		</LabelStyle>
+	</Style>
 	<Style id="style_2">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -5153,7 +5200,7 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Style id="style_20">
+	<Style id="style_200">
 		<IconStyle>
 			<scale>1.2</scale>
 			<Icon>
@@ -5235,6 +5282,18 @@
 	</Style>
 	<Style id="style_3">
 		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+			<scale>1.4</scale>
+		</LabelStyle>
+	</Style>
+	<Style id="style_36">
+		<IconStyle>
 			<scale>1.2</scale>
 			<Icon>
 				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
@@ -5289,7 +5348,7 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Style id="style_36">
+	<Style id="style_360">
 		<IconStyle>
 			<scale>1.2</scale>
 			<Icon>
@@ -5321,13 +5380,25 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Style id="style_4">
+	<Style id="style_410">
 		<IconStyle>
 			<scale>1.2</scale>
 			<Icon>
 				<href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href>
 			</Icon>
 		</IconStyle>
+	</Style>
+	<Style id="style_4">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+			<scale>1.4</scale>
+		</LabelStyle>
 	</Style>
 	<Style id="style_40">
 		<IconStyle>
@@ -5409,6 +5480,18 @@
 			</Icon>
 		</IconStyle>
 	</Style>
+	<Style id="style_50">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+			<scale>1.4</scale>
+		</LabelStyle>
+	</Style>
 	<Style id="style_5">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -5417,7 +5500,7 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Style id="style_50">
+	<Style id="style_500">
 		<IconStyle>
 			<scale>1.2</scale>
 			<Icon>
@@ -5475,6 +5558,120 @@
 			<styleUrl>#style</styleUrl>
 		</Pair>
 	</StyleMap>
+	<Placemark>
+		<name>Parking</name>
+		<styleUrl>#m_ylw-pushpin</styleUrl>
+		<Polygon>
+			<tessellate>1</tessellate>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						-121.9269836156306,37.35585857056708,0 -121.9274346572723,37.35550581700833,0 -121.9267256523535,37.35492358999051,0 -121.9262834427679,37.35524330067875,0 -121.9269836156306,37.35585857056708,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark>
+		<name>일본(RJJJ)</name>
+		<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">Not required</font></span>]]></description>
+		<styleUrl>#style_20</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<altitudeMode>absolute</altitudeMode>
+			<coordinates>131.425,36.375,500000</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark>
+		<Style>
+			<LineStyle>
+				<color>ffffffff</color>
+				<width>2</width>
+			</LineStyle>
+		</Style>
+		<LineString>
+			<extrude>1</extrude>
+			<altitudeMode>absolute</altitudeMode>
+			<coordinates>
+				131.425,36.375,0 131.425,36.375,500000 
+			</coordinates>
+		</LineString>
+	</Placemark>
+	<Placemark>
+		<name>미국(KZAK)</name>
+		<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">Not required</font></span>]]></description>
+		<styleUrl>#style_3</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<altitudeMode>absolute</altitudeMode>
+			<coordinates>164.27,43.978333,500000</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark>
+		<Style>
+			<LineStyle>
+				<color>ffffffff</color>
+				<width>2</width>
+			</LineStyle>
+		</Style>
+		<LineString>
+			<extrude>1</extrude>
+			<altitudeMode>absolute</altitudeMode>
+			<coordinates>
+				164.27,43.978333,0 164.27,43.978333,500000 
+			</coordinates>
+		</LineString>
+	</Placemark>
+	<Placemark>
+		<name>미국(KZOA)</name>
+		<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">Not required</font></span>]]></description>
+		<styleUrl>#style_4</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<altitudeMode>absolute</altitudeMode>
+			<coordinates>-127,40.625,500000</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark>
+		<Style>
+			<LineStyle>
+				<color>ffffffff</color>
+				<width>2</width>
+			</LineStyle>
+		</Style>
+		<LineString>
+			<extrude>1</extrude>
+			<altitudeMode>absolute</altitudeMode>
+			<coordinates>
+				-127,40.625,0 -127,40.625,500000 
+			</coordinates>
+		</LineString>
+	</Placemark>
+	<Placemark>
+		<name>미국(KZOA)</name>
+		<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">Not required</font></span>]]></description>
+		<styleUrl>#style_50</styleUrl>
+		<Point>
+			<extrude>1</extrude>
+			<altitudeMode>absolute</altitudeMode>
+			<coordinates>-122.693333,37.676667,500000</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark>
+		<Style>
+			<LineStyle>
+				<color>ffffffff</color>
+				<width>2</width>
+			</LineStyle>
+		</Style>
+		<LineString>
+			<extrude>1</extrude>
+			<altitudeMode>absolute</altitudeMode>
+			<coordinates>
+				-122.693333,37.676667,0 -122.693333,37.676667,500000 
+			</coordinates>
+		</LineString>
+	</Placemark>
 	<Placemark>
 		<name>ntm1</name>
 		<Style>
@@ -5538,7 +5735,7 @@
 	<Placemark>
 		<name>TD040</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>EGOBA2T</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>0 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>167246 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>64136 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>11</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>248</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>18</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:02</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>10:17Z, 05</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 37KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>4100 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_3</styleUrl>
+		<styleUrl>#style_36</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
@@ -5548,7 +5745,7 @@
 	<Placemark>
 		<name>TD050</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>EGOBA2T</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>0 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>167087 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>63977 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>11</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>248</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>18</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:03</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>10:18Z, 05</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 73KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>4100 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_4</styleUrl>
+		<styleUrl>#style_410</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
@@ -5708,7 +5905,7 @@
 	<Placemark>
 		<name>SAMON</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>Y51</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL370</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>159669 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>1896 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>-13204 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>56559 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-52</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>452</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-25</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:00</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>11:15Z, 05</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 41kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1000 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_20</styleUrl>
+		<styleUrl>#style_200</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
@@ -5868,7 +6065,7 @@
 	<Placemark>
 		<name>48N70</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>132709 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>13546 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>-54 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>29599 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-49</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>455</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-22</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 06:12</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:27Z, 05</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 47kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1000 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_36</styleUrl>
+		<styleUrl>#style_360</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
@@ -6008,7 +6205,7 @@
 	<Placemark>
 		<name>OSI</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>PYE3</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>6900 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>112408 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>9298 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>4</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>314</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>16</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 10:55</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>21:10Z, 05</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 39kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6100 ft</font></span><br><br>]]></description>
-		<styleUrl>#style_50</styleUrl>
+		<styleUrl>#style_500</styleUrl>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>absolute</altitudeMode>
