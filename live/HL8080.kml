@@ -3,6 +3,28 @@
 <Document>
 	<name>HL8080 RKSS-KSJC PLAN</name>
 	<atom:link rel="app" href="https://www.google.com/earth/about/versions/#earth-pro" title="Google Earth Pro 7.3.7.1094"></atom:link>
+	<Style id="style">
+		<IconStyle>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/pal4/icon52.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+			<scale>1.2</scale>
+		</LabelStyle>
+	</Style>
+	<Style id="style0">
+		<IconStyle>
+			<Icon>
+				<href>https://maps.google.com/mapfiles/kml/pal4/icon52.png</href>
+			</Icon>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+			<scale>1.2</scale>
+		</LabelStyle>
+	</Style>
 	<Style id="style_10">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -5443,6 +5465,16 @@
 			</Icon>
 		</IconStyle>
 	</Style>
+	<StyleMap id="stylemap_id0">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#style0</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#style</styleUrl>
+		</Pair>
+	</StyleMap>
 	<Placemark>
 		<name>ntm1</name>
 		<Style>
@@ -5484,20 +5516,8 @@
 		</Polygon>
 	</Placemark>
 	<Placemark>
-		<name>ROCKET(1030Z~1430Z / ~ UNL)</name>
+		<name>ROCKET(1030Z~1430Z , ~ UNL)</name>
 		<styleUrl>#stylemap_id0</styleUrl>
-		<Style>
-			<IconStyle>
-				<scale>1</scale>
-				<Icon>
-					<href>https://maps.google.com/mapfiles/kml/pal4/icon52.png</href>
-				</Icon>
-			</IconStyle>
-			<LabelStyle>
-				<color>ff00ff00</color>
-				<scale>1.2</scale>
-			</LabelStyle>
-		</Style>
 		<Point>
 			<extrude>1</extrude>
 			<altitudeMode>relativeToGround</altitudeMode>
