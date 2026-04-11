@@ -1191,7 +1191,7 @@ function restoreAircraftTrailState() {
 
 const trail = normalizeRestoredTrail(
   Array.isArray(item.liveTrail)
-    ? item.liveTrail.slice(-80)
+    ? item.liveTrail.slice(-MAX_LIVE_TRAIL_POINTS)
     : []
 );
 
