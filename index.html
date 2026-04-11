@@ -1906,15 +1906,6 @@ function clearRouteOnly() {
   clearAllAirspaceLabels();
 }
 
-async function refreshRouteOnly() {
-  try {
-    clearRouteOnly();
-
-    const requestedFiles = getRequestedFiles();
-    const filesToLoad = [
-      ...ALWAYS_KML_FILES,
-      ...requestedFiles
-    ];
 
 async function refreshRouteOnly() {
   try {
