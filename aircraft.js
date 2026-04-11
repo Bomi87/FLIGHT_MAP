@@ -78,6 +78,8 @@ const ADSB_PROVIDERS = [
   }
 ];
 
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxGdKCxqiT4V2lVa9B3LvCxMOucqOBIYKnW2OWn68qXBwA_0jZFXGfPNXAl0wiuqyIaPg/exec";
+
 const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
 const MAX_LIVE_TRAIL_POINTS = 500;
@@ -1342,45 +1344,33 @@ async function fetchProviderByHex(provider, targets) {
 }
 
 async function fetchBatchAircraftData() {
-  const providers = getOrderedProviders();
+  const hexes = [...new Set(TARGETS.map(t => t.hex).filter(Boolean))];
+  if (!hexes.length) return new Map();
 
-  let resolvedMap = new Map();
-  let unresolvedTargets = [...TARGETS];
-  let anyProviderSucceeded = false;
-  let lastError = null;
+  const url = `${SCRIPT_URL}?hexes=${encodeURIComponent(hexes.join(","))}`;
+  const data = await fetchJson(url);
 
-  for (const provider of providers) {
-    if (unresolvedTargets.length === 0) break;
+  if (!data || !data.ok) {
+    throw new Error(data?.error || "Apps Script fetch failed");
+  }
 
-    try {
-      const aircraft = dedupeAircraftList(await fetchProviderByHex(provider, unresolvedTargets));
-      anyProviderSucceeded = true;
+  const aircraft = dedupeAircraftList(Array.isArray(data.ac) ? data.ac : []);
+  const byHex = new Map();
 
-      if (aircraft.length === 0) {
-        continue;
-      }
-
-      const { byHex } = indexAircraftList(aircraft);
-      const { found, missingTargets } = resolveAircraftForTargets(unresolvedTargets, byHex);
-
-      if (found.size > 0) {
-        lastGoodProviderId = provider.id;
-
-        for (const [targetKey, ac] of found.entries()) {
-          if (!resolvedMap.has(targetKey)) {
-            resolvedMap.set(targetKey, ac);
-          }
-        }
-      }
-
-      unresolvedTargets = missingTargets;
-    } catch (err) {
-      lastError = err;
+  for (const ac of aircraft) {
+    const hex = normalizeHex(ac.hex);
+    if (hex && !byHex.has(hex)) {
+      byHex.set(hex, ac);
     }
   }
 
-  if (!anyProviderSucceeded && lastError) {
-    throw lastError;
+  const resolvedMap = new Map();
+
+  for (const target of TARGETS) {
+    const ac = byHex.get(target.hex) || null;
+    if (ac) {
+      resolvedMap.set(target.key, ac);
+    }
   }
 
   return resolvedMap;
