@@ -1924,8 +1924,6 @@ async function refreshRouteOnly() {
       await autoLoadDefault();
     }
 
-    fitAllLoadedBounds();
-
     setTimeout(() => {
       refreshMapSize();
       scheduleRouteTextUpdate(20);
@@ -1941,6 +1939,7 @@ async function refreshRouteOnly() {
 async function init() {
   try {
     await refreshRouteOnly();
+    fitAllLoadedBounds();
   } catch (err) {
     console.error(err);
     alert("Error: " + (err.message || err));
