@@ -1166,27 +1166,28 @@ function restoreAircraftTrailState() {
       if (now - lastSeenAt > AIRCRAFT_TRAIL_RESTORE_TTL_MS) continue;
       if (!isNaN(lastGs) && lastGs <= AIRCRAFT_RESTORE_MAX_GS_KT) continue;
 
-      const trail = Array.isArray(item.liveTrail)
-        ? item.liveTrail
-            .filter(p =>
-              Array.isArray(p) &&
-              p.length >= 2 &&
-              isFinite(Number(p[0])) &&
-              isFinite(Number(p[1]))
-            )
-           .slice(-80)
-        : [];
+    const trail = Array.isArray(item.liveTrail)
+  ? item.liveTrail
+      .filter(p =>
+        Array.isArray(p) &&
+        p.length >= 2 &&
+        isFinite(Number(p[0])) &&
+        isFinite(Number(p[1]))
+      )
+      .slice(-80)
+  : [];
 
-      if (!trail.length) continue;
+if (!trail.length) continue;
 
-      state.liveTrail = trail;
-      state.lastSeenAt = lastSeenAt;
+state.liveTrail = trail;
+state.lastSeenAt = lastSeenAt;
+state.lastLatLng = trail[trail.length - 1];
 
-      if (state.liveTrailLine) {
-        if (map.hasLayer(state.liveTrailLine)) {
-          map.removeLayer(state.liveTrailLine);
-        }
-      }
+if (state.liveTrailLine) {
+  if (map.hasLayer(state.liveTrailLine)) {
+    map.removeLayer(state.liveTrailLine);
+  }
+}
 
       state.liveTrailLine = L.polyline(state.liveTrail, {
         color: state.color,
