@@ -87,7 +87,7 @@ const MAX_LIVE_TRAIL_POINTS = 180;
 const AIRCRAFT_TRAIL_STORAGE_KEY = "aircraftTrailState_v1";
 const AIRCRAFT_TRAIL_RESTORE_TTL_MS = 20 * 60 * 1000; // 재접속 복원 20분
 const AIRCRAFT_LIVE_TIMEOUT_MS = 15 * 60 * 1000;      // live 판정 15분
-const AIRCRAFT_RESTORE_MAX_GS_KT = 30;                // 마지막 GS가 40kt 이하이면 복원 안 함
+const AIRCRAFT_RESTORE_MAX_GS_KT = 30;                // 마지막 GS가 30kt 이하이면 복원 안 함
 
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
