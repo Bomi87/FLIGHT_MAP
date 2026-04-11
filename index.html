@@ -1857,95 +1857,119 @@ function getShapeCodeLabel(name) {
       return control;
     }
 
-    createNdbToggleControl().addTo(map);
+ createNdbToggleControl().addTo(map);
 
-    async function loadByFilename(filename) {
-      const ext = getExtension(filename);
-      if (!ext) {
-        throw new Error("Only .gpx or .kml supported");
+async function loadByFilename(filename) {
+  const ext = getExtension(filename);
+  if (!ext) {
+    throw new Error("Only .gpx or .kml supported");
+  }
+
+  const targetLayer = getTargetLayer(filename);
+  const text = await fetchTextFile(filename);
+
+  if (ext === "gpx") {
+    const points = parseGPX(text);
+    drawGPXRoute(points, filename, targetLayer);
+    return;
+  }
+
+  if (ext === "kml") {
+    const features = extractKMLFeatures(text);
+    drawKMLFeatures(features, filename, targetLayer);
+    return;
+  }
+}
+
+async function autoLoadDefault() {
+  try {
+    await loadByFilename("route.gpx");
+    return;
+  } catch (e1) {
+    try {
+      await loadByFilename("route.kml");
+      return;
+    } catch (e2) {
+      throw new Error("No default route.gpx or route.kml found");
+    }
+  }
+}
+
+function clearRouteOnly() {
+  drawn.clearLayers();
+  routeBoundsGroup.clearLayers();
+
+  waypointLabelRegistry.length = 0;
+  airspaceLabelRegistry.length = 0;
+
+  clearAllRouteTextMarkers();
+  clearAllAirspaceLabels();
+}
+
+async function refreshRouteOnly() {
+  try {
+    clearRouteOnly();
+
+    const requestedFiles = getRequestedFiles();
+    const filesToLoad = [
+      ...ALWAYS_KML_FILES,
+      ...requestedFiles
+    ];
+
+    if (filesToLoad.length > 0) {
+      for (const file of [...new Set(filesToLoad)]) {
+        await loadByFilename(file);
       }
-
-      const targetLayer = getTargetLayer(filename);
-      const text = await fetchTextFile(filename);
-
-      if (ext === "gpx") {
-        const points = parseGPX(text);
-        drawGPXRoute(points, filename, targetLayer);
-        return;
-      }
-
-      if (ext === "kml") {
-        const features = extractKMLFeatures(text);
-        drawKMLFeatures(features, filename, targetLayer);
-        return;
-      }
+    } else {
+      await autoLoadDefault();
     }
 
-    async function autoLoadDefault() {
-      try {
-        await loadByFilename("route.gpx");
-        return;
-      } catch (e1) {
-        try {
-          await loadByFilename("route.kml");
-          return;
-        } catch (e2) {
-          throw new Error("No default route.gpx or route.kml found");
-        }
-      }
-    }
+    fitAllLoadedBounds();
 
-    async function init() {
-      try {
-        waypointLabelRegistry.length = 0;
-        airspaceLabelRegistry.length = 0;
-
-        const requestedFiles = getRequestedFiles();
-
-        const filesToLoad = [
-          ...ALWAYS_KML_FILES,
-          ...requestedFiles
-        ];
-
-        if (filesToLoad.length > 0) {
-          for (const file of [...new Set(filesToLoad)]) {
-            await loadByFilename(file);
-          }
-        } else {
-          await autoLoadDefault();
-        }
-
-        fitAllLoadedBounds();
-
-        setTimeout(() => {
-          refreshMapSize();
-          scheduleRouteTextUpdate(20);
-          scheduleAirspaceLabelUpdate(20);
-        }, 80);
-
-      } catch (err) {
-        console.error(err);
-        alert("Error: " + (err.message || err));
-      }
-    }
-
-    window.addEventListener("resize", () => {
+    setTimeout(() => {
       refreshMapSize();
-      scheduleRouteTextUpdate(60);
-      scheduleAirspaceLabelUpdate(60);
-      scheduleRedrawNDB();
-    });
-
-    window.addEventListener("load", refreshMapSize);
-    window.addEventListener("pageshow", refreshMapSize);
-
-    map.on("moveend zoomend", function () {
       scheduleRouteTextUpdate(20);
       scheduleAirspaceLabelUpdate(20);
       scheduleRedrawNDB();
-    });
+    }, 80);
 
-    init();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function init() {
+  try {
+    await refreshRouteOnly();
+  } catch (err) {
+    console.error(err);
+    alert("Error: " + (err.message || err));
+  }
+}
+
+window.addEventListener("resize", () => {
+  refreshMapSize();
+  scheduleRouteTextUpdate(60);
+  scheduleAirspaceLabelUpdate(60);
+  scheduleRedrawNDB();
+});
+
+window.addEventListener("load", refreshMapSize);
+window.addEventListener("pageshow", refreshMapSize);
+
+map.on("moveend zoomend", function () {
+  scheduleRouteTextUpdate(20);
+  scheduleAirspaceLabelUpdate(20);
+  scheduleRedrawNDB();
+});
+
+const ROUTE_REFRESH_MS = 30000;
+
+setInterval(() => {
+  refreshRouteOnly();
+}, ROUTE_REFRESH_MS);
+
+init();
   </script>
 
   <script src="aircraft.js?v=4"></script>
