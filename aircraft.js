@@ -1144,7 +1144,30 @@ function serializeAircraftTrailState() {
     console.warn("Aircraft trail save failed:", err);
   }
 }
+function normalizeRestoredTrail(rawTrail) {
+  if (!Array.isArray(rawTrail) || rawTrail.length === 0) return [];
 
+  const cleaned = rawTrail
+    .filter(p =>
+      Array.isArray(p) &&
+      p.length >= 2 &&
+      isFinite(Number(p[0])) &&
+      isFinite(Number(p[1]))
+    )
+    .map(p => [Number(p[0]), Number(p[1])]);
+
+  if (!cleaned.length) return [];
+
+  const normalized = [[cleaned[0][0], wrapLon180Local(cleaned[0][1])]];
+
+  for (let i = 1; i < cleaned.length; i++) {
+    const lat = cleaned[i][0];
+    const lon = getClosestWrappedLongitude(cleaned[i][1], normalized[normalized.length - 1][1]);
+    normalized.push([lat, lon]);
+  }
+
+  return normalized;
+}
 function restoreAircraftTrailState() {
   try {
     const raw = localStorage.getItem(AIRCRAFT_TRAIL_STORAGE_KEY);
@@ -1166,16 +1189,11 @@ function restoreAircraftTrailState() {
       if (now - lastSeenAt > AIRCRAFT_TRAIL_RESTORE_TTL_MS) continue;
       if (!isNaN(lastGs) && lastGs <= AIRCRAFT_RESTORE_MAX_GS_KT) continue;
 
-    const trail = Array.isArray(item.liveTrail)
-  ? item.liveTrail
-      .filter(p =>
-        Array.isArray(p) &&
-        p.length >= 2 &&
-        isFinite(Number(p[0])) &&
-        isFinite(Number(p[1]))
-      )
-      .slice(-80)
-  : [];
+const trail = normalizeRestoredTrail(
+  Array.isArray(item.liveTrail)
+    ? item.liveTrail.slice(-80)
+    : []
+);
 
 if (!trail.length) continue;
 
