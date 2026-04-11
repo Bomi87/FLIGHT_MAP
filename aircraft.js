@@ -83,6 +83,7 @@ const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw4W1cedwTlN2BLzUvuc
 const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
 const FETCH_TIMEOUT_MS = 6500;
+const MAX_LIVE_TRAIL_POINTS = 120;
 
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
