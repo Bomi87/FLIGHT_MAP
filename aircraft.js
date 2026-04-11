@@ -78,12 +78,11 @@ const ADSB_PROVIDERS = [
   }
 ];
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwWc_lvkpAdm20-SWpQpt9geD8AkwctWyrX4lkNwlEBcOaxDGir6hOCKuZnvpNGGXWVUw/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwfIrGMXT8v5SsfGe7qvaHzhysUH9CHF0wCas1mfxItNl7CyJzN5h8jMyDJXKeJV8crwQ/exec";
 
 const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
-const MAX_LIVE_TRAIL_POINTS = 500;
-const FETCH_TIMEOUT_MS = 3000;
+const FETCH_TIMEOUT_MS = 6500;
 
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
@@ -1390,14 +1389,19 @@ async function pollAircraft() {
 
       const ac = resolvedMap.get(target.key) || null;
 
-      if (!ac) {
-        state.isLive = false;
-        state.staleCount = (state.staleCount || 0) + 1;
-        continue;
-      }
+    if (!ac) {
+  state.staleCount = (state.staleCount || 0) + 1;
 
-      state.isLive = true;
-      state.staleCount = 0;
+  // 2~3번 연속 miss일 때만 inactive 처리
+  if (state.staleCount >= 3) {
+    state.isLive = false;
+  }
+
+  continue;
+}
+
+state.isLive = true;
+state.staleCount = 0;
 
       if (!state.lastAircraft) {
         updateAircraftForTarget(target, ac);
@@ -1410,13 +1414,15 @@ async function pollAircraft() {
   } catch (err) {
     console.error("pollAircraft error:", err);
 
-    for (const target of TARGETS) {
-      const state = aircraftStates.get(target.key);
-      if (!state) continue;
-      state.isLive = false;
-      state.staleCount = (state.staleCount || 0) + 1;
-    }
+for (const target of TARGETS) {
+  const state = aircraftStates.get(target.key);
+  if (!state) continue;
 
+  state.staleCount = (state.staleCount || 0) + 1;
+  if (state.staleCount >= 3) {
+    state.isLive = false;
+  }
+}
     refreshAircraftFollowButtons();
   } finally {
     isPollingAircraft = false;
