@@ -78,7 +78,7 @@ const ADSB_PROVIDERS = [
   }
 ];
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwfIrGMXT8v5SsfGe7qvaHzhysUH9CHF0wCas1mfxItNl7CyJzN5h8jMyDJXKeJV8crwQ/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw4W1cedwTlN2BLzUvucQqkv6hU_P7rr6-XKZ_Hn0mmVu-uBozd7HAIPoabCfUXg-6XeQ/exec";
 
 const POLL_INTERVAL_MS = 5000;
 const ANIMATION_DURATION_MS = 4500;
