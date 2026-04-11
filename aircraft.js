@@ -81,7 +81,7 @@ const ADSB_PROVIDERS = [
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbza0ZkypGKes-TkOFJDk4lOScMzJ1NzzLrCGRpekQvS4QaGlBG7rjD46XswYQkVJEMPhg/exec";
 
 const POLL_INTERVAL_MS = 4000;
-const ANIMATION_DURATION_MS = 3800;
+const ANIMATION_DURATION_MS = 3500;
 const FETCH_TIMEOUT_MS = 6500;
 const MAX_LIVE_TRAIL_POINTS = 180;
 const AIRCRAFT_TRAIL_STORAGE_KEY = "aircraftTrailState_v1";
@@ -1174,7 +1174,7 @@ function restoreAircraftTrailState() {
               isFinite(Number(p[0])) &&
               isFinite(Number(p[1]))
             )
-            .slice(-MAX_LIVE_TRAIL_POINTS)
+           .slice(-80)
         : [];
 
       if (!trail.length) continue;
