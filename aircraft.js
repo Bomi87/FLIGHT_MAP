@@ -78,10 +78,10 @@ const ADSB_PROVIDERS = [
   }
 ];
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw4W1cedwTlN2BLzUvucQqkv6hU_P7rr6-XKZ_Hn0mmVu-uBozd7HAIPoabCfUXg-6XeQ/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbza0ZkypGKes-TkOFJDk4lOScMzJ1NzzLrCGRpekQvS4QaGlBG7rjD46XswYQkVJEMPhg/exec";
 
-const POLL_INTERVAL_MS = 5000;
-const ANIMATION_DURATION_MS = 4500;
+const POLL_INTERVAL_MS = 4000;
+const ANIMATION_DURATION_MS = 3000;
 const FETCH_TIMEOUT_MS = 6500;
 const MAX_LIVE_TRAIL_POINTS = 120;
 
@@ -644,10 +644,15 @@ function ensureAircraftDetailPanel() {
 }
 
 function buildDetailRow(label, value, valueColor = "#ffffff") {
+  const isVs = label === "V/S";
   return `
     <div style="display:grid;grid-template-columns:44px auto;column-gap:8px;margin-bottom:2px;">
       <div style="opacity:0.9;">${escapeHtml(label)}</div>
-      <div style="color:${valueColor};">${escapeHtml(value)}</div>
+      <div style="
+        color:${valueColor};
+        text-shadow:${isVs ? "0 0 1px rgba(0,0,0,0.55)" : "0 0 4px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.85)"};
+        font-weight:${isVs ? "900" : "700"};
+      ">${escapeHtml(value)}</div>
     </div>
   `;
 }
