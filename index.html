@@ -1916,6 +1916,20 @@ async function refreshRouteOnly() {
       ...requestedFiles
     ];
 
+async function refreshRouteOnly() {
+  try {
+    if (map && map._popup && map._popup.isOpen && map._popup.isOpen()) {
+      return;
+    }
+
+    clearRouteOnly();
+
+    const requestedFiles = getRequestedFiles();
+    const filesToLoad = [
+      ...ALWAYS_KML_FILES,
+      ...requestedFiles
+    ];
+
     if (filesToLoad.length > 0) {
       for (const file of [...new Set(filesToLoad)]) {
         await loadByFilename(file);
