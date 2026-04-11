@@ -2,6 +2,7 @@
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
 <Document>
 	<name>HL8372 RKSS-KHOU PLAN</name>
+	<open>1</open>
 	<atom:link rel="app" href="https://www.google.com/earth/about/versions/#earth-pro" title="Google Earth Pro 7.3.7.1155"></atom:link>
 	<Style id="style_10">
 		<IconStyle>
@@ -5578,6 +5579,88 @@
 			</Icon>
 		</IconStyle>
 	</Style>
+	<Placemark>
+		<name>ntm1</name>
+		<Style>
+			<PolyStyle>
+				<color>7f00ff00</color>
+				<outline>1</outline>
+			</PolyStyle>
+		</Style>
+		<Polygon>
+			<extrude>1</extrude>
+			<altitudeMode>relativeToGround</altitudeMode>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						162.921111111111,41.2583333333333,91440 165.644722222222,38.3466666666667,91440 164.906388888889,37.9233333333333,91440 162.151388888889,40.8352777777778,91440 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark>
+		<name>ntm2</name>
+		<Style>
+			<PolyStyle>
+				<color>7f00ff00</color>
+				<outline>1</outline>
+			</PolyStyle>
+		</Style>
+		<Polygon>
+			<extrude>1</extrude>
+			<altitudeMode>relativeToGround</altitudeMode>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						162.921111111111,41.2583333333333,91440 165,39.0641666666667,91440 165,37.9775,91440 164.906388888889,37.9233333333333,91440 162.151388888889,40.8352777777778,91440 162.921111111111,41.2583333333333,91440 162.921111111111,41.2583333333333,91440 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark>
+		<name>ntm3</name>
+		<Style>
+			<PolyStyle>
+				<color>7f00ff00</color>
+				<outline>1</outline>
+			</PolyStyle>
+		</Style>
+		<Polygon>
+			<extrude>1</extrude>
+			<altitudeMode>relativeToGround</altitudeMode>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						133.383333333333,33.1166666666667,91440 128.6,33.9166666666667,91440 129.166666666667,34.6666666666667,91440 131.566666666667,36.4333333333333,91440 135.433333333333,35.7,91440 133.383333333333,33.1166666666667,91440 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark>
+		<name>ROCKET(1030Z~1430Z / ~ UNL)</name>
+		<styleUrl>#stylemap_id0</styleUrl>
+		<Style>
+			<IconStyle>
+				<scale>1</scale>
+				<Icon>
+					<href>https://maps.google.com/mapfiles/kml/pal4/icon52.png</href>
+				</Icon>
+			</IconStyle>
+			<LabelStyle>
+				<color>ff00ff00</color>
+				<scale>1.2</scale>
+			</LabelStyle>
+		</Style>
+		<Point>
+			<extrude>1</extrude>
+			<altitudeMode>relativeToGround</altitudeMode>
+			<coordinates>162.921111111111,41.2583333333333,160000</coordinates>
+		</Point>
+		<gx:balloonVisibility>1</gx:balloonVisibility>
+	</Placemark>
 	<Placemark>
 		<name>RKSS</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>EGOBA2T</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>59 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>103177 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>47200 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>15</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>None</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00.00</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>06:46Z, 11</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>4100 ft</font></span><br><br>]]></description>
