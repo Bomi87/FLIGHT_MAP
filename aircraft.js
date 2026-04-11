@@ -83,7 +83,11 @@ const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbza0ZkypGKes-TkOFJDk
 const POLL_INTERVAL_MS = 4000;
 const ANIMATION_DURATION_MS = 3000;
 const FETCH_TIMEOUT_MS = 6500;
-const MAX_LIVE_TRAIL_POINTS = 120;
+const MAX_LIVE_TRAIL_POINTS = 180;
+const AIRCRAFT_TRAIL_STORAGE_KEY = "aircraftTrailState_v1";
+const AIRCRAFT_TRAIL_RESTORE_TTL_MS = 20 * 60 * 1000; // 재접속 복원 20분
+const AIRCRAFT_LIVE_TIMEOUT_MS = 15 * 60 * 1000;      // live 판정 15분
+const AIRCRAFT_RESTORE_MAX_GS_KT = 30;                // 마지막 GS가 40kt 이하이면 복원 안 함
 
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
@@ -202,7 +206,8 @@ function initAircraftStates() {
       buttonEl: null,
       isLive: false,
       staleCount: 0,
-      fixedLabel: getHexDescription(target.hex)
+      fixedLabel: getHexDescription(target.hex),
+      lastSeenAt: 0
     });
   });
 }
@@ -1103,7 +1108,98 @@ function syncFollowView(target) {
     duration: 0.8
   });
 }
+function clearAircraftTrailState(state) {
+  if (!state) return;
 
+  state.liveTrail = [];
+
+  if (state.liveTrailLine) {
+    if (map.hasLayer(state.liveTrailLine)) {
+      map.removeLayer(state.liveTrailLine);
+    }
+    state.liveTrailLine = null;
+  }
+}
+
+function serializeAircraftTrailState() {
+  try {
+    const payload = {
+      savedAt: Date.now(),
+      items: TARGETS.map(target => {
+        const state = aircraftStates.get(target.key);
+        if (!state || !state.liveTrail || state.liveTrail.length === 0) return null;
+
+        return {
+          key: target.key,
+          hex: target.hex,
+          liveTrail: state.liveTrail.slice(-MAX_LIVE_TRAIL_POINTS),
+          lastSeenAt: Number(state.lastSeenAt || 0),
+          lastGs: Number(state.lastAircraft?.gs ?? NaN)
+        };
+      }).filter(Boolean)
+    };
+
+    localStorage.setItem(AIRCRAFT_TRAIL_STORAGE_KEY, JSON.stringify(payload));
+  } catch (err) {
+    console.warn("Aircraft trail save failed:", err);
+  }
+}
+
+function restoreAircraftTrailState() {
+  try {
+    const raw = localStorage.getItem(AIRCRAFT_TRAIL_STORAGE_KEY);
+    if (!raw) return;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.items)) return;
+
+    const now = Date.now();
+
+    for (const item of parsed.items) {
+      const state = aircraftStates.get(item.key);
+      if (!state) continue;
+
+      const lastSeenAt = Number(item.lastSeenAt || 0);
+      const lastGs = Number(item.lastGs);
+
+      if (!lastSeenAt) continue;
+      if (now - lastSeenAt > AIRCRAFT_TRAIL_RESTORE_TTL_MS) continue;
+      if (!isNaN(lastGs) && lastGs <= AIRCRAFT_RESTORE_MAX_GS_KT) continue;
+
+      const trail = Array.isArray(item.liveTrail)
+        ? item.liveTrail
+            .filter(p =>
+              Array.isArray(p) &&
+              p.length >= 2 &&
+              isFinite(Number(p[0])) &&
+              isFinite(Number(p[1]))
+            )
+            .slice(-MAX_LIVE_TRAIL_POINTS)
+        : [];
+
+      if (!trail.length) continue;
+
+      state.liveTrail = trail;
+      state.lastSeenAt = lastSeenAt;
+
+      if (state.liveTrailLine) {
+        if (map.hasLayer(state.liveTrailLine)) {
+          map.removeLayer(state.liveTrailLine);
+        }
+      }
+
+      state.liveTrailLine = L.polyline(state.liveTrail, {
+        color: state.color,
+        weight: 3,
+        opacity: 0.7,
+        dashArray: "6,6",
+        smoothFactor: 1
+      }).addTo(map);
+    }
+  } catch (err) {
+    console.warn("Aircraft trail restore failed:", err);
+  }
+}
 /* ------------------ AIRCRAFT DRAW ------------------ */
 
 function getWrappedAircraftLatLng(target, ac) {
@@ -1206,6 +1302,8 @@ function updateLiveTrail(target, ac) {
   } else {
     state.liveTrailLine.setLatLngs(state.liveTrail);
   }
+
+  serializeAircraftTrailState();
 }
 
 function updateAircraftForTarget(target, ac) {
@@ -1213,7 +1311,10 @@ function updateAircraftForTarget(target, ac) {
   if (!state || !ac) return;
 
   state.lastAircraft = ac;
+  state.lastSeenAt = Date.now();
+  state.isLive = true;
   state.staleCount = 0;
+
   ensureAircraftMarker(target, ac);
   updateLiveTrail(target, ac);
   refreshAircraftFollowButtons();
@@ -1388,6 +1489,7 @@ async function pollAircraft() {
 
   try {
     const resolvedMap = await fetchBatchAircraftData();
+    const now = Date.now();
 
     for (const target of TARGETS) {
       const state = aircraftStates.get(target.key);
@@ -1397,9 +1499,13 @@ async function pollAircraft() {
 
       if (!ac) {
         state.staleCount = (state.staleCount || 0) + 1;
-        if (state.staleCount >= 6) {
+
+        if (state.lastSeenAt && (now - state.lastSeenAt >= AIRCRAFT_LIVE_TIMEOUT_MS)) {
           state.isLive = false;
+          clearAircraftTrailState(state);
+          serializeAircraftTrailState();
         }
+
         continue;
       }
 
@@ -1417,13 +1523,18 @@ async function pollAircraft() {
   } catch (err) {
     console.error("pollAircraft error:", err);
 
+    const now = Date.now();
+
     for (const target of TARGETS) {
       const state = aircraftStates.get(target.key);
       if (!state) continue;
 
       state.staleCount = (state.staleCount || 0) + 1;
-      if (state.staleCount >= 6) {
+
+      if (state.lastSeenAt && (now - state.lastSeenAt >= AIRCRAFT_LIVE_TIMEOUT_MS)) {
         state.isLive = false;
+        clearAircraftTrailState(state);
+        serializeAircraftTrailState();
       }
     }
 
@@ -2022,6 +2133,8 @@ function initAircraftTracking() {
 
   createToggleButton();
   restoreTrailState();
+  restoreAircraftTrailState();
+  refreshAircraftFollowButtons();
   startGpsTracking();
 
   if (map && typeof map.on === "function") {
@@ -2048,3 +2161,7 @@ function initAircraftTracking() {
 }
 
 initAircraftTracking();
+
+window.addEventListener("beforeunload", () => {
+  serializeAircraftTrailState();
+});
