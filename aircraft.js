@@ -1389,22 +1389,16 @@ async function pollAircraft() {
 
       const ac = resolvedMap.get(target.key) || null;
 
-if (!ac) {
-  state.staleCount = (state.staleCount || 0) + 1;
+      if (!ac) {
+        state.staleCount = (state.staleCount || 0) + 1;
+        if (state.staleCount >= 6) {
+          state.isLive = false;
+        }
+        continue;
+      }
 
-  // 6회 연속 miss (5초 poll 기준 약 30초)일 때만 inactive
-  if (state.staleCount >= 6) {
-    state.isLive = false;
-  }
-
-  continue;
-}
-
-state.isLive = true;
-state.staleCount = 0;
-
-state.isLive = true;
-state.staleCount = 0;
+      state.isLive = true;
+      state.staleCount = 0;
 
       if (!state.lastAircraft) {
         updateAircraftForTarget(target, ac);
@@ -1417,21 +1411,21 @@ state.staleCount = 0;
   } catch (err) {
     console.error("pollAircraft error:", err);
 
-for (const target of TARGETS) {
-  const state = aircraftStates.get(target.key);
-  if (!state) continue;
+    for (const target of TARGETS) {
+      const state = aircraftStates.get(target.key);
+      if (!state) continue;
 
-  state.staleCount = (state.staleCount || 0) + 1;
-  if (state.staleCount >= 3) {
-    state.isLive = false;
-  }
-}
+      state.staleCount = (state.staleCount || 0) + 1;
+      if (state.staleCount >= 6) {
+        state.isLive = false;
+      }
+    }
+
     refreshAircraftFollowButtons();
   } finally {
     isPollingAircraft = false;
   }
 }
-
 /* ------------------ COMPASS / GPS ------------------ */
 
 function getHeadingArrowLatLng(baseLatLng, headingDeg) {
