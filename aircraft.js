@@ -1389,16 +1389,19 @@ async function pollAircraft() {
 
       const ac = resolvedMap.get(target.key) || null;
 
-    if (!ac) {
+if (!ac) {
   state.staleCount = (state.staleCount || 0) + 1;
 
-  // 2~3번 연속 miss일 때만 inactive 처리
-  if (state.staleCount >= 3) {
+  // 6회 연속 miss (5초 poll 기준 약 30초)일 때만 inactive
+  if (state.staleCount >= 6) {
     state.isLive = false;
   }
 
   continue;
 }
+
+state.isLive = true;
+state.staleCount = 0;
 
 state.isLive = true;
 state.staleCount = 0;
