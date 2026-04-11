@@ -488,19 +488,34 @@ function getAircraftButtonLabel(ac, target) {
 function formatAltitudeText(ac) {
   const altBaro = ac.alt_baro;
   const altGeom = ac.alt_geom;
-  const altFt = altBaro ?? altGeom;
+  const altFtRaw = altBaro ?? altGeom;
 
-  if (altFt == null || isNaN(altFt)) return "";
+  if (altFtRaw == null || isNaN(altFtRaw)) return "";
 
-  const ft = Math.round(Number(altFt));
+  const altFt = Math.round(Number(altFtRaw));
+  const gs = Number(ac.gs);
+  const vr = Number(ac.vert_rate ?? ac.baro_rate ?? 0);
 
-  if (ft >= 18000) {
-    return "FL" + String(Math.round(ft / 100)).padStart(3, "0");
+  const hasReliableGroundClues =
+    !isNaN(gs) &&
+    !isNaN(vr);
+
+  const looksGround =
+    hasReliableGroundClues &&
+    gs <= 25 &&
+    altFt <= 1000 &&
+    Math.abs(vr) <= 200;
+
+  if (looksGround) {
+    return "GND";
   }
 
-  return ft.toLocaleString() + " ft";
-}
+  if (altFt >= 18000) {
+    return "FL" + String(Math.round(altFt / 100)).padStart(3, "0");
+  }
 
+  return altFt.toLocaleString() + " ft";
+}
 function formatMachText(ac) {
   if (ac.mach != null && !isNaN(ac.mach)) {
     return "M" + String(Number(ac.mach).toFixed(2)).replace(/^0/, "");
