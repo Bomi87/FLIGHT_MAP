@@ -174,15 +174,15 @@
 .leaflet-control-refresh button {
   display: block;
   width: 100%;
-  min-width: 72px;
-  height: 26px;
+  min-width: 54px;
+  height: 24px;
   border: none;
   background: #2563eb;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   cursor: pointer;
-  padding: 0 8px;
+  padding: 0 6px;
   text-align: center;
 }
 
@@ -194,30 +194,30 @@
   background: #93c5fd;
   cursor: default;
 }
-    .leaflet-control-ndb-toggle button {
-      display: block;
-      width: 100%;
-      min-width: 72px;
-      height: 26px;
-      border: none;
-      background: #7c3aed;
-      color: #ffffff;
-      font-size: 11px;
-      font-weight: 700;
-      cursor: pointer;
-      padding: 0 8px;
-      text-align: center;
-    }
 
-    .leaflet-control-ndb-toggle button:hover {
-      background: #6d28d9;
-    }
+.leaflet-control-ndb-toggle button {
+  display: block;
+  width: 100%;
+  min-width: 54px;
+  height: 24px;
+  border: none;
+  background: #7c3aed;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 6px;
+  text-align: center;
+}
 
-    .leaflet-control-ndb-toggle button.ndb-on {
-      background: #5b21b6;
-      color: #ffffff;
-    }
+.leaflet-control-ndb-toggle button:hover {
+  background: #6d28d9;
+}
 
+.leaflet-control-ndb-toggle button.ndb-on {
+  background: #5b21b6;
+  color: #ffffff;
+}
     @media (min-width: 768px) {
       .waypoint-label-text,
       .triangle-label-text,
@@ -1843,7 +1843,7 @@ function getShapeCodeLabel(name) {
     }
 
     function createNdbToggleControl() {
-      const control = L.control({ position: "topright" });
+      const control = L.control({ position: "topleft" });
 
       control.onAdd = function () {
         const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-ndb-toggle");
@@ -1887,7 +1887,7 @@ function getShapeCodeLabel(name) {
       return control;
     }
 function createRefreshControl() {
-  const control = L.control({ position: "topright" });
+  const control = L.control({ position: "topleft" });
 
   control.onAdd = function () {
     const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-refresh");
