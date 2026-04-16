@@ -163,7 +163,37 @@
       box-shadow: 0 1px 5px rgba(0,0,0,0.4);
       overflow: hidden;
     }
+.leaflet-control-refresh {
+  background: #2563eb;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  overflow: hidden;
+  margin-top: 6px;
+}
 
+.leaflet-control-refresh button {
+  display: block;
+  width: 100%;
+  min-width: 72px;
+  height: 26px;
+  border: none;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 8px;
+  text-align: center;
+}
+
+.leaflet-control-refresh button:hover {
+  background: #1d4ed8;
+}
+
+.leaflet-control-refresh button:disabled {
+  background: #93c5fd;
+  cursor: default;
+}
     .leaflet-control-ndb-toggle button {
       display: block;
       width: 100%;
@@ -1856,8 +1886,42 @@ function getShapeCodeLabel(name) {
 
       return control;
     }
+function createRefreshControl() {
+  const control = L.control({ position: "topright" });
 
- createNdbToggleControl().addTo(map);
+  control.onAdd = function () {
+    const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-refresh");
+    const button = L.DomUtil.create("button", "", container);
+
+    button.type = "button";
+    button.textContent = "새로고침";
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    L.DomEvent.on(button, "click", async function (e) {
+      L.DomEvent.stop(e);
+
+      button.disabled = true;
+      button.textContent = "업데이트중";
+
+      try {
+        await refreshRouteOnly();
+      } catch (err) {
+        console.error(err);
+      } finally {
+        button.disabled = false;
+        button.textContent = "새로고침";
+      }
+    });
+
+    return container;
+  };
+
+  return control;
+}
+createNdbToggleControl().addTo(map);
+createRefreshControl().addTo(map);
 
 async function loadByFilename(filename) {
   const ext = getExtension(filename);
