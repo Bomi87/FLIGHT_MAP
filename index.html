@@ -156,9 +156,7 @@
     .leaflet-control-layers {
       font-size: 12px;
     }
-.leaflet-top.leaflet-left {
-  margin-top: 30px;
-}
+
 
 .leaflet-control-ndb-toggle {
   background: #7c3aed;
@@ -1847,7 +1845,7 @@ function getShapeCodeLabel(name) {
     }
 
     function createNdbToggleControl() {
-      const control = L.control({ position: "topleft" });
+      const control = L.control({ position: "topright" });
 
       control.onAdd = function () {
         const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-ndb-toggle");
@@ -1891,7 +1889,7 @@ function getShapeCodeLabel(name) {
       return control;
     }
 function createRefreshControl() {
-  const control = L.control({ position: "topleft" });
+  const control = L.control({ position: "topright" });
 
   control.onAdd = function () {
     const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-refresh");
