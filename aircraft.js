@@ -1037,7 +1037,7 @@ function createToggleButton() {
     gpsBtn.id = "focus-gps-btn";
     gpsBtn.type = "button";
     gpsBtn.textContent = "GPS";
-    gpsBtn.style.width = "68px";
+    gpsBtn.style.width = "50px";
     applyControlButtonStyle(gpsBtn);
     gpsBtn.onclick = async () => {
       activeFollowTargetKey = null;
