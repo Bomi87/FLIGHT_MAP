@@ -1898,7 +1898,7 @@ function createRefreshControl() {
     const button = L.DomUtil.create("button", "", container);
 
     button.type = "button";
-    button.textContent = "새로고침";
+    button.textContent = "Refresh";
 
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
@@ -1907,7 +1907,7 @@ function createRefreshControl() {
       L.DomEvent.stop(e);
 
       button.disabled = true;
-      button.textContent = "업데이트중";
+      button.textContent = "Updating...";
 
       try {
         await refreshRouteOnly();
@@ -1915,7 +1915,7 @@ function createRefreshControl() {
         console.error(err);
       } finally {
         button.disabled = false;
-        button.textContent = "새로고침";
+        button.textContent = "Refresh";
       }
     });
 
