@@ -3,6 +3,132 @@
 <Document>
 	<name>HL8372 RKSS-VVNB PLAN</name>
 	<atom:link rel="app" href="https://www.google.com/earth/about/versions/#earth-pro" title="Google Earth Pro 7.3.7.1155"></atom:link>
+	<StyleMap id="msn_arrow0">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#sn_arrow</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#sh_arrow0</styleUrl>
+		</Pair>
+	</StyleMap>
+	<StyleMap id="msn_arrow1">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#sn_arrow1</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#sh_arrow</styleUrl>
+		</Pair>
+	</StyleMap>
+	<StyleMap id="msn_arrow">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#sn_arrow0</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#sh_arrow1</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="sh_arrow1">
+		<IconStyle>
+			<scale>1.4</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/shapes/arrow.png</href>
+			</Icon>
+			<hotSpot x="32" y="1" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LabelStyle>
+			<color>ffffaaff</color>
+		</LabelStyle>
+		<BalloonStyle>
+		</BalloonStyle>
+		<ListStyle>
+		</ListStyle>
+	</Style>
+	<Style id="sh_arrow0">
+		<IconStyle>
+			<scale>1.4</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/shapes/arrow.png</href>
+			</Icon>
+			<hotSpot x="32" y="1" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00aaff</color>
+		</LabelStyle>
+		<BalloonStyle>
+		</BalloonStyle>
+		<ListStyle>
+		</ListStyle>
+	</Style>
+	<Style id="sh_arrow">
+		<IconStyle>
+			<scale>1.4</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/shapes/arrow.png</href>
+			</Icon>
+			<hotSpot x="32" y="1" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+		</LabelStyle>
+		<BalloonStyle>
+		</BalloonStyle>
+		<ListStyle>
+		</ListStyle>
+	</Style>
+	<Style id="sn_arrow">
+		<IconStyle>
+			<scale>1.2</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/shapes/arrow.png</href>
+			</Icon>
+			<hotSpot x="32" y="1" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00aaff</color>
+		</LabelStyle>
+		<BalloonStyle>
+		</BalloonStyle>
+		<ListStyle>
+		</ListStyle>
+	</Style>
+	<Style id="sn_arrow0">
+		<IconStyle>
+			<scale>1.2</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/shapes/arrow.png</href>
+			</Icon>
+			<hotSpot x="32" y="1" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LabelStyle>
+			<color>ffffaaff</color>
+		</LabelStyle>
+		<BalloonStyle>
+		</BalloonStyle>
+		<ListStyle>
+		</ListStyle>
+	</Style>
+	<Style id="sn_arrow1">
+		<IconStyle>
+			<scale>1.2</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/shapes/arrow.png</href>
+			</Icon>
+			<hotSpot x="32" y="1" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LabelStyle>
+			<color>ff00ff00</color>
+		</LabelStyle>
+		<BalloonStyle>
+		</BalloonStyle>
+		<ListStyle>
+		</ListStyle>
+	</Style>
 	<Style id="style_10">
 		<IconStyle>
 			<scale>1.2</scale>
@@ -5596,8 +5722,60 @@
 			</Icon>
 		</IconStyle>
 	</Style>
+	<Placemark>
+		<name>VIP Terminal</name>
+		<LookAt>
+			<longitude>105.7991132550127</longitude>
+			<latitude>21.21595821532848</latitude>
+			<altitude>0</altitude>
+			<heading>13.99482464269474</heading>
+			<tilt>16.98556888479508</tilt>
+			<range>642.5745686875987</range>
+			<gx:altitudeMode>relativeToSeaFloor</gx:altitudeMode>
+		</LookAt>
+		<styleUrl>#msn_arrow0</styleUrl>
+		<Point>
+			<gx:drawOrder>1</gx:drawOrder>
+			<coordinates>105.7993185155713,21.21567559362132,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark>
+		<name>Terminal 2</name>
+		<LookAt>
+			<longitude>105.7938269322027</longitude>
+			<latitude>21.21844547253757</latitude>
+			<altitude>0</altitude>
+			<heading>0.942091719987931</heading>
+			<tilt>17.15573800102057</tilt>
+			<range>955.2010587126316</range>
+			<gx:altitudeMode>relativeToSeaFloor</gx:altitudeMode>
+		</LookAt>
+		<styleUrl>#msn_arrow</styleUrl>
+		<Point>
+			<gx:drawOrder>1</gx:drawOrder>
+			<coordinates>105.7928596571742,21.21827717430142,0</coordinates>
+		</Point>
+	</Placemark>
+	<Placemark>
+		<name>#37 (Parking)</name>
+		<LookAt>
+			<longitude>105.8014327057627</longitude>
+			<latitude>21.2172286685034</latitude>
+			<altitude>0</altitude>
+			<heading>0.05660625465529109</heading>
+			<tilt>28.7009408315975</tilt>
+			<range>249.971323633997</range>
+			<gx:altitudeMode>relativeToSeaFloor</gx:altitudeMode>
+		</LookAt>
+		<styleUrl>#msn_arrow1</styleUrl>
+		<Point>
+			<gx:drawOrder>1</gx:drawOrder>
+			<coordinates>105.8014110138956,21.21706661341032,0</coordinates>
+		</Point>
+	</Placemark>
 	<Document>
 		<name>NTM.kml</name>
+		<open>1</open>
 		<Style id="style">
 			<IconStyle>
 				<Icon>
@@ -5771,121 +5949,6 @@
 				<altitudeMode>relativeToGround</altitudeMode>
 				<coordinates>105.728055555556,19.1122222222222,160000</coordinates>
 			</Point>
-		</Placemark>
-	</Document>
-	<Document>
-		<name>영공통과</name>
-		<open>1</open>
-		<Style id="style_210">
-			<IconStyle>
-				<scale>1.1</scale>
-				<Icon>
-					<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
-				</Icon>
-			</IconStyle>
-			<LabelStyle>
-				<color>ff0000ff</color>
-				<scale>1.4</scale>
-			</LabelStyle>
-		</Style>
-		<Style id="style_310">
-			<IconStyle>
-				<scale>1.1</scale>
-				<Icon>
-					<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
-				</Icon>
-			</IconStyle>
-			<LabelStyle>
-				<color>ff0000ff</color>
-				<scale>1.4</scale>
-			</LabelStyle>
-		</Style>
-		<Style id="style_410">
-			<IconStyle>
-				<scale>1.1</scale>
-				<Icon>
-					<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
-				</Icon>
-			</IconStyle>
-			<LabelStyle>
-				<color>ff0000ff</color>
-				<scale>1.4</scale>
-			</LabelStyle>
-		</Style>
-		<Placemark>
-			<name>중국(ZSHA)</name>
-			<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">3 Working days</font></span>]]></description>
-			<styleUrl>#style_210</styleUrl>
-			<Point>
-				<extrude>1</extrude>
-				<altitudeMode>absolute</altitudeMode>
-				<coordinates>124,31.61,500000</coordinates>
-			</Point>
-		</Placemark>
-		<Placemark>
-			<Style>
-				<LineStyle>
-					<color>ffffffff</color>
-					<width>2</width>
-				</LineStyle>
-			</Style>
-			<LineString>
-				<extrude>1</extrude>
-				<altitudeMode>absolute</altitudeMode>
-				<coordinates>
-					124,31.61,0 124,31.61,500000 
-				</coordinates>
-			</LineString>
-		</Placemark>
-		<Placemark>
-			<name>중국(ZGZU)</name>
-			<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">3 Working days</font></span>]]></description>
-			<styleUrl>#style_310</styleUrl>
-			<Point>
-				<extrude>1</extrude>
-				<altitudeMode>absolute</altitudeMode>
-				<coordinates>114.848333,25.776667,500000</coordinates>
-			</Point>
-		</Placemark>
-		<Placemark>
-			<Style>
-				<LineStyle>
-					<color>ffffffff</color>
-					<width>2</width>
-				</LineStyle>
-			</Style>
-			<LineString>
-				<extrude>1</extrude>
-				<altitudeMode>absolute</altitudeMode>
-				<coordinates>
-					114.848333,25.776667,0 114.848333,25.776667,500000 
-				</coordinates>
-			</LineString>
-		</Placemark>
-		<Placemark>
-			<name>베트남(VVHN)</name>
-			<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">3 Working days</font></span>]]></description>
-			<styleUrl>#style_410</styleUrl>
-			<Point>
-				<extrude>1</extrude>
-				<altitudeMode>absolute</altitudeMode>
-				<coordinates>106.695,22.193333,500000</coordinates>
-			</Point>
-		</Placemark>
-		<Placemark>
-			<Style>
-				<LineStyle>
-					<color>ffffffff</color>
-					<width>2</width>
-				</LineStyle>
-			</Style>
-			<LineString>
-				<extrude>1</extrude>
-				<altitudeMode>absolute</altitudeMode>
-				<coordinates>
-					106.695,22.193333,0 106.695,22.193333,500000 
-				</coordinates>
-			</LineString>
 		</Placemark>
 	</Document>
 	<Placemark>
@@ -16538,5 +16601,119 @@
 			</coordinates>
 		</LineString>
 	</Placemark>
+	<Document>
+		<name>영공통과</name>
+		<Style id="style_210">
+			<IconStyle>
+				<scale>1.1</scale>
+				<Icon>
+					<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+				</Icon>
+			</IconStyle>
+			<LabelStyle>
+				<color>ff00a5ff</color>
+				<scale>1.4</scale>
+			</LabelStyle>
+		</Style>
+		<Style id="style_310">
+			<IconStyle>
+				<scale>1.1</scale>
+				<Icon>
+					<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+				</Icon>
+			</IconStyle>
+			<LabelStyle>
+				<color>ff00a5ff</color>
+				<scale>1.4</scale>
+			</LabelStyle>
+		</Style>
+		<Style id="style_410">
+			<IconStyle>
+				<scale>1.1</scale>
+				<Icon>
+					<href>https://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+				</Icon>
+			</IconStyle>
+			<LabelStyle>
+				<color>ff00a5ff</color>
+				<scale>1.4</scale>
+			</LabelStyle>
+		</Style>
+		<Placemark>
+			<name>중국(ZSHA)</name>
+			<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">3 Working days</font></span>]]></description>
+			<styleUrl>#style_210</styleUrl>
+			<Point>
+				<extrude>1</extrude>
+				<altitudeMode>absolute</altitudeMode>
+				<coordinates>124,31.61,500000</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<Style>
+				<LineStyle>
+					<color>ffffffff</color>
+					<width>2</width>
+				</LineStyle>
+			</Style>
+			<LineString>
+				<extrude>1</extrude>
+				<altitudeMode>absolute</altitudeMode>
+				<coordinates>
+					124,31.61,0 124,31.61,500000 
+				</coordinates>
+			</LineString>
+		</Placemark>
+		<Placemark>
+			<name>중국(ZGZU)</name>
+			<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">3 Working days</font></span>]]></description>
+			<styleUrl>#style_310</styleUrl>
+			<Point>
+				<extrude>1</extrude>
+				<altitudeMode>absolute</altitudeMode>
+				<coordinates>114.848333,25.776667,500000</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<Style>
+				<LineStyle>
+					<color>ffffffff</color>
+					<width>2</width>
+				</LineStyle>
+			</Style>
+			<LineString>
+				<extrude>1</extrude>
+				<altitudeMode>absolute</altitudeMode>
+				<coordinates>
+					114.848333,25.776667,0 114.848333,25.776667,500000 
+				</coordinates>
+			</LineString>
+		</Placemark>
+		<Placemark>
+			<name>베트남(VVHN)</name>
+			<description><![CDATA[<b>-Overfly permit :</b> <span style="white-space:nowrap"><font color="red">3 Working days</font></span>]]></description>
+			<styleUrl>#style_410</styleUrl>
+			<Point>
+				<extrude>1</extrude>
+				<altitudeMode>absolute</altitudeMode>
+				<coordinates>106.695,22.193333,500000</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<Style>
+				<LineStyle>
+					<color>ffffffff</color>
+					<width>2</width>
+				</LineStyle>
+			</Style>
+			<LineString>
+				<extrude>1</extrude>
+				<altitudeMode>absolute</altitudeMode>
+				<coordinates>
+					106.695,22.193333,0 106.695,22.193333,500000 
+				</coordinates>
+			</LineString>
+		</Placemark>
+	</Document>
 </Document>
 </kml>
