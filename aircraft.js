@@ -45,7 +45,8 @@ const HEX_INFO_MAP = {
   "71c508": "삼성(B788)",
   "71c230": "KE(GLEX)",
   "71c068": "KE(G650)",
-  "71c222": "KE(BBJ)"
+  "71c222": "KE(BBJ)",
+  "71BE43": "CD1(B748)"
 };
 
 function getHexDescription(hex) {
