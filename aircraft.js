@@ -683,6 +683,9 @@ function formatAircraftDetailPanelHtml(ac, color) {
   const hex = (ac.hex || "").toUpperCase();
   const hexDesc = getHexDescription(ac.hex);
 
+  // 등록기호 추출
+  const reg = (ac.r || ac.reg || ac.registration || "").toUpperCase();
+
   let gsText = "-";
   let iasText = "-";
 
@@ -707,6 +710,7 @@ function formatAircraftDetailPanelHtml(ac, color) {
     ${buildDetailRow("G/S", gsText)}
     ${buildDetailRow("V/S", vsDisplay, vsColor)}
     ${hex ? buildDetailRow("HEX", hex) : ""}
+    ${reg ? buildDetailRow("REG", reg) : ""}
     ${hexDesc ? buildDetailRow("INFO", hexDesc) : ""}
   `;
 }
