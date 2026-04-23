@@ -86,6 +86,7 @@ const POLL_INTERVAL_MS = 4000;
 const ANIMATION_DURATION_MS = 3500;
 const FETCH_TIMEOUT_MS = 6500;
 const MAX_LIVE_TRAIL_POINTS = 120;
+const AIRCRAFT_STALE_REMOVE_MS = 15 * 60 * 1000; // 15분 미수신 시 삭제
 
 /* ------------------ GPS / USER SETTINGS ------------------ */
 
@@ -147,7 +148,8 @@ const aircraftStates = new Map();
   buttonEl,
   isLive,
   staleCount,
-  fixedLabel
+  fixedLabel,
+  lastSeenAt
 }
 */
 
@@ -204,7 +206,8 @@ function initAircraftStates() {
       buttonEl: null,
       isLive: false,
       staleCount: 0,
-      fixedLabel: getHexDescription(target.hex)
+      fixedLabel: getHexDescription(target.hex),
+      lastSeenAt: null
     });
   });
 }
@@ -267,7 +270,7 @@ function getMapCenterLonSafe() {
 
 function getRouteReferenceLonSafe() {
   const v = window.__ROUTE_RENDER_REFERENCE_LON;
-  return Number.isFinite(v) ? Number(v) : NaN;
+  return Number.isFinite(v) ? v : NaN;
 }
 
 function shiftLonNearReferenceLocal(lon, referenceLon) {
@@ -518,6 +521,7 @@ function formatAltitudeText(ac) {
 
   return altFt.toLocaleString() + " ft";
 }
+
 function formatMachText(ac) {
   if (ac.mach != null && !isNaN(ac.mach)) {
     return "M" + String(Number(ac.mach).toFixed(2)).replace(/^0/, "");
@@ -684,7 +688,6 @@ function formatAircraftDetailPanelHtml(ac, color) {
   const hex = (ac.hex || "").toUpperCase();
   const hexDesc = getHexDescription(ac.hex);
 
-  // 등록기호 추출
   const reg = (ac.r || ac.reg || ac.registration || "").toUpperCase();
 
   let gsText = "-";
@@ -1235,10 +1238,47 @@ function updateAircraftForTarget(target, ac) {
 
   state.lastAircraft = ac;
   state.staleCount = 0;
+  state.lastSeenAt = Date.now();
+
   ensureAircraftMarker(target, ac);
   updateLiveTrail(target, ac);
   refreshAircraftFollowButtons();
   syncFollowView(target);
+}
+
+function clearAircraftFromMap(targetKey) {
+  const state = aircraftStates.get(targetKey);
+  if (!state) return;
+
+  if (state.animationFrameId) {
+    cancelAnimationFrame(state.animationFrameId);
+    state.animationFrameId = null;
+  }
+
+  if (state.marker && map.hasLayer(state.marker)) {
+    map.removeLayer(state.marker);
+  }
+  state.marker = null;
+  state.tooltipBound = false;
+
+  if (state.liveTrailLine && map.hasLayer(state.liveTrailLine)) {
+    map.removeLayer(state.liveTrailLine);
+  }
+  state.liveTrailLine = null;
+  state.liveTrail = [];
+
+ 
+  state.lastLatLng = null;
+  state.isLive = false;
+  state.staleCount = 0;
+
+  if (activeFollowTargetKey === targetKey) {
+    activeFollowTargetKey = null;
+  }
+
+  if (selectedAircraftTargetKey === targetKey) {
+    hideAircraftDetailPanel();
+  }
 }
 
 /* ------------------ AIRCRAFT ANIMATION ------------------ */
@@ -1409,6 +1449,7 @@ async function pollAircraft() {
 
   try {
     const resolvedMap = await fetchBatchAircraftData();
+    const now = Date.now();
 
     for (const target of TARGETS) {
       const state = aircraftStates.get(target.key);
@@ -1418,14 +1459,21 @@ async function pollAircraft() {
 
       if (!ac) {
         state.staleCount = (state.staleCount || 0) + 1;
+
         if (state.staleCount >= 6) {
           state.isLive = false;
         }
+
+        if (state.lastSeenAt && (now - state.lastSeenAt >= AIRCRAFT_STALE_REMOVE_MS)) {
+          clearAircraftFromMap(target.key);
+        }
+
         continue;
       }
 
       state.isLive = true;
       state.staleCount = 0;
+      state.lastSeenAt = now;
 
       if (!state.lastAircraft) {
         updateAircraftForTarget(target, ac);
@@ -1438,13 +1486,20 @@ async function pollAircraft() {
   } catch (err) {
     console.error("pollAircraft error:", err);
 
+    const now = Date.now();
+
     for (const target of TARGETS) {
       const state = aircraftStates.get(target.key);
       if (!state) continue;
 
       state.staleCount = (state.staleCount || 0) + 1;
+
       if (state.staleCount >= 6) {
         state.isLive = false;
+      }
+
+      if (state.lastSeenAt && (now - state.lastSeenAt >= AIRCRAFT_STALE_REMOVE_MS)) {
+        clearAircraftFromMap(target.key);
       }
     }
 
@@ -1453,6 +1508,7 @@ async function pollAircraft() {
     isPollingAircraft = false;
   }
 }
+
 /* ------------------ COMPASS / GPS ------------------ */
 
 function getHeadingArrowLatLng(baseLatLng, headingDeg) {
