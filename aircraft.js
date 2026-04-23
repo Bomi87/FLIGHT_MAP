@@ -47,7 +47,7 @@ const HEX_INFO_MAP = {
   "71c068": "KE(G650)",
   "71c222": "KE(BBJ)",
   "71c229": "KE(GLEX)",
-  "71BE43": "CD1(B748)"
+  "71be43": "CD1(B748)"
 };
 
 function getHexDescription(hex) {
