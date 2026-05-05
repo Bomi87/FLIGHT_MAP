@@ -238,7 +238,24 @@
   </style>
 </head>
 <body>
-  <div id="map"></div>
+  <div id="authScreen" style="
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    background:#f4f7fb;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR',Arial,sans-serif;
+    color:#1f2937;
+    font-size:15px;
+    font-weight:700;
+  ">
+    승인 확인 중...
+  </div>
+
+  <div id="appRoot" style="display:none; height:100%; width:100%;">
+    <div id="map"></div>
+  </div>
 
   <script>
     const map = L.map("map", {
@@ -2041,14 +2058,69 @@ map.on("moveend zoomend", function () {
 });
 
 const ROUTE_REFRESH_MS = 60000;
+let ROUTE_VIEWER_STARTED = false;
+let AIRCRAFT_SCRIPT_LOADED = false;
+
+function showAuthorizedApp() {
+  const authScreen = document.getElementById("authScreen");
+  const appRoot = document.getElementById("appRoot");
+
+  if (authScreen) authScreen.style.display = "none";
+  if (appRoot) appRoot.style.display = "block";
+
+  refreshMapSize();
+}
+
+function loadAircraftScriptOnce() {
+  return new Promise((resolve) => {
+    if (AIRCRAFT_SCRIPT_LOADED) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "aircraft.js?v=5";
+
+    script.onload = function () {
+      AIRCRAFT_SCRIPT_LOADED = true;
+      resolve();
+    };
+
+    script.onerror = function () {
+      console.warn("aircraft.js load failed");
+      resolve();
+    };
+
+    document.body.appendChild(script);
+  });
+}
+
+async function startRouteViewerAfterAuth() {
+  if (ROUTE_VIEWER_STARTED) return;
+
+  ROUTE_VIEWER_STARTED = true;
+  showAuthorizedApp();
+
+  await loadAircraftScriptOnce();
+  await init();
+}
+
+(function waitForPortalAuth() {
+  if (window.CURRENT_PORTAL_USER) {
+    startRouteViewerAfterAuth();
+    return;
+  }
+
+  setTimeout(waitForPortalAuth, 200);
+})();
 
 setInterval(() => {
+  if (!ROUTE_VIEWER_STARTED) return;
   refreshRouteOnly();
 }, ROUTE_REFRESH_MS);
-
-init();
   </script>
 
-  <script src="aircraft.js?v=5"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://bomi87.github.io/SK-Aviation-portal/common-auth.js"></script>
 </body>
 </html>
