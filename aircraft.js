@@ -2020,7 +2020,7 @@ function updateUserLocation(position) {
   } else {
     lastProcessedGpsTimestamp = gpsTimestamp;
     lastUserLatLng = [lat, lon];
-    appendUserTrailPoint(lat, lon, accuracy, gpsTimestamp);
+   // appendUserTrailPoint(lat, lon, accuracy, gpsTimestamp);
   }
 
   lastKnownSpeedKt = speedKt;
