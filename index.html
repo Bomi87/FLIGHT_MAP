@@ -2172,30 +2172,7 @@ function getFirLabelLatLng(feature, referenceLon, lonOffset) {
   return [lat, lon];
 }
 
-function addFirPermanentLabel(feature, referenceLon, lonOffset) {
-  const latlng = getFirLabelLatLng(feature, referenceLon, lonOffset);
-  if (!latlng) return;
 
-  const label = getFirLabel(feature);
-  if (!label) return;
-
-  const marker = L.marker(latlng, {
-    opacity: 0,
-    interactive: false,
-    keyboard: false
-  }).addTo(firLayer);
-
-  marker.bindTooltip(escapeHtml(label), {
-    permanent: true,
-    direction: "center",
-    className: "fir-label",
-    opacity: 1
-  });
-
-  if (marker.openTooltip) {
-    marker.openTooltip();
-  }
-}
 
 function bindFirTooltipAndHover(layer, feature) {
   const firLabel = getFirLabel(feature);
@@ -2251,7 +2228,7 @@ function drawFirFeature(feature, referenceLon) {
     });
   });
 
-  addFirPermanentLabel(feature, referenceLon, lonOffset);
+ 
 }
 
 async function loadFirGeojson() {
