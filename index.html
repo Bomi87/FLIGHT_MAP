@@ -157,6 +157,56 @@
       font-size: 12px;
     }
 
+/* ===== FIR Layer CSS 추가 시작 ===== */
+.fir-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0,0,0,0.8);
+}
+
+.fir-label:before {
+  display: none !important;
+}
+
+.leaflet-control-fir-toggle {
+  background: #0f766e;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+
+.leaflet-control-fir-toggle button {
+  display: block;
+  width: 100%;
+  min-width: 54px;
+  height: 24px;
+  border: none;
+  background: #0f766e;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 6px;
+  text-align: center;
+}
+
+.leaflet-control-fir-toggle button:hover {
+  background: #0d9488;
+}
+
+.leaflet-control-fir-toggle button.fir-on {
+  background: #115e59;
+}
+/* ===== FIR Layer CSS 추가 끝 ===== */
 .leaflet-top.leaflet-right .leaflet-control {
   margin-top: 2px;
   margin-right: 8px;
@@ -310,7 +360,10 @@
     const drawn = L.featureGroup().addTo(map);
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
-
+const firLayer = L.featureGroup();
+let firVisible = false;
+let firLoaded = false;
+let firGeoJsonLayer = null;
     const waypointLabelRegistry = [];
     const airspaceLabelRegistry = [];
 
@@ -1896,26 +1949,18 @@ function getFirCode(props) {
     }
   }
 
-  const allText = Object.values(props || {})
-    .map(v => String(v || "").toUpperCase())
-    .join(" ");
-
-  const match = allText.match(/\b[A-Z]{4}\b/);
-  return match ? match[0] : "";
+  return "";
 }
-
 function getFirName(props, code) {
   const candidates = [
     props.nom_comp,
     props.NOM_COMP,
-    props.firname,
-    props.FIRNAME,
     props.name,
     props.NAME,
+    props.firname,
+    props.FIRNAME,
     props.fir_name,
     props.FIR_NAME,
-    props.firName,
-    props.FIRname,
     props.label,
     props.LABEL
   ];
@@ -1932,7 +1977,6 @@ function getFirName(props, code) {
 
   return code || "UNKNOWN FIR";
 }
-
 function getFirLabel(feature) {
   const p = feature.properties || {};
   const code = getFirCode(p);
