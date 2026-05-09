@@ -2011,17 +2011,7 @@ function getFirRenderReferenceLon() {
   return map.getCenter().lng;
 }
 
-function getFeatureRepresentativeLon(feature) {
-  const props = feature.properties || {};
 
-  const centlong = Number(props.centlong ?? props.CENTLONG);
-  if (Number.isFinite(centlong)) return centlong;
-
-  try {
-    const geom = feature && feature.geometry;
-    if (!geom || !geom.coordinates) return 0;
-
-    const values = [];
 
     function collectLon(arr) {
       if (!Array.isArray(arr)) return;
@@ -2125,38 +2115,37 @@ function normalizeFirRingToSegments(ring, referenceLon) {
   if (current.length >= 2) segments.push(current);
   return segments;
 }
+function normalizeFirRingToPolygonLatLngs(ring, referenceLon) {
+  if (!Array.isArray(ring) || ring.length < 3) return [];
 
-function getFirLabelLatLng(feature, referenceLon) {
-  const props = feature.properties || {};
-  const centlat = Number(props.centlat ?? props.CENTLAT);
-  const centlong = Number(props.centlong ?? props.CENTLONG);
+  const latlngs = [];
+  let prevLon = null;
 
-  if (Number.isFinite(centlat) && Number.isFinite(centlong)) {
-    return [centlat, shiftLonNearReference(centlong, referenceLon)];
+  for (let i = 0; i < ring.length; i++) {
+    const raw = ring[i];
+    if (!isGeoJsonCoordPair(raw)) continue;
+
+    const rawLon = Number(raw[0]);
+    const lat = Number(raw[1]);
+
+    if (!Number.isFinite(rawLon) || !Number.isFinite(lat)) continue;
+
+    let lon;
+
+    if (prevLon === null) {
+      lon = shiftLonNearReference(rawLon, referenceLon);
+    } else {
+      lon = rawLon;
+
+      while (lon - prevLon > 180) lon -= 360;
+      while (lon - prevLon < -180) lon += 360;
+    }
+
+    latlngs.push([lat, lon]);
+    prevLon = lon;
   }
 
-  const rings = extractFirRingsFromGeometry(feature.geometry);
-  const values = [];
-
-  rings.forEach(ring => {
-    (ring || []).forEach(pt => {
-      if (!isGeoJsonCoordPair(pt)) return;
-
-      const lat = Number(pt[1]);
-      const lon = shiftLonNearReference(Number(pt[0]), referenceLon);
-
-      if (Number.isFinite(lat) && Number.isFinite(lon)) {
-        values.push([lat, lon]);
-      }
-    });
-  });
-
-  if (!values.length) return null;
-
-  const lat = values.reduce((a, b) => a + b[0], 0) / values.length;
-  const lon = values.reduce((a, b) => a + b[1], 0) / values.length;
-
-  return [lat, lon];
+  return latlngs.length >= 3 ? latlngs : [];
 }
 
 function bindFirTooltipAndHover(layer, feature) {
@@ -2187,11 +2176,41 @@ function bindFirTooltipAndHover(layer, feature) {
     }
   });
 }
+function addFirHitArea(feature, referenceLon) {
+  const rings = extractFirRingsFromGeometry(feature.geometry);
+  if (!rings.length) return;
 
+  const polygonRings = [];
+
+  rings.forEach(ring => {
+    const latlngs = normalizeFirRingToPolygonLatLngs(ring, referenceLon);
+    if (latlngs.length >= 3) {
+      polygonRings.push(latlngs);
+    }
+  });
+
+  if (!polygonRings.length) return;
+
+  const hitArea = L.polygon(polygonRings, {
+    color: "#0f766e",
+    weight: 0,
+    opacity: 0,
+    fillColor: "#0f766e",
+    fillOpacity: 0.001,
+    interactive: true
+  });
+
+  bindFirTooltipAndHover(hitArea, feature);
+  hitArea.addTo(firLayer);
+}
 function drawFirFeature(feature, referenceLon) {
   const rings = extractFirRingsFromGeometry(feature.geometry);
   if (!rings.length) return;
 
+  // 먼저 내부 hover 영역을 투명 polygon으로 추가
+  addFirHitArea(feature, referenceLon);
+
+  // 그 다음 기존처럼 FIR 경계선 표시
   const baseStyle = getFirStyle();
 
   rings.forEach(ring => {
@@ -2211,11 +2230,7 @@ function drawFirFeature(feature, referenceLon) {
       layer.addTo(firLayer);
     });
   });
-
-  // 전체 FIR 이름을 항상 표시하지 않음
-  // 마우스 hover 시에만 bindFirTooltipAndHover()에서 표시
 }
-
 async function loadFirGeojson() {
   if (firLoaded) return;
 
@@ -2241,6 +2256,8 @@ async function loadFirGeojson() {
   firGeoJsonLayer = firLayer;
   firLoaded = true;
 }
+
+    
     function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
 
