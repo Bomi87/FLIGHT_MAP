@@ -153,9 +153,56 @@
       color: #ffffff;
     }
 
-    .leaflet-control-layers {
-      font-size: 12px;
-    }
+.leaflet-control-layers {
+  font-size: 12px;
+}
+
+/* ===== FIR Layer CSS 추가 시작 ===== */
+.fir-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0,0,0,0.8);
+}
+
+.leaflet-control-fir-toggle {
+  background: #0f766e;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+
+.leaflet-control-fir-toggle button {
+  display: block;
+  width: 100%;
+  min-width: 54px;
+  height: 24px;
+  border: none;
+  background: #0f766e;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 6px;
+  text-align: center;
+}
+
+.leaflet-control-fir-toggle button:hover {
+  background: #0d9488;
+}
+
+.leaflet-control-fir-toggle button.fir-on {
+  background: #115e59;
+}
+/* ===== FIR Layer CSS 추가 끝 ===== */
 
 .leaflet-top.leaflet-right .leaflet-control {
   margin-top: 2px;
@@ -310,6 +357,10 @@
     const drawn = L.featureGroup().addTo(map);
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
+    const firLayer = L.featureGroup();
+let firVisible = false;
+let firLoaded = false;
+let firGeoJsonLayer = null;
 
     const waypointLabelRegistry = [];
     const airspaceLabelRegistry = [];
@@ -1851,7 +1902,105 @@ function getShapeCodeLabel(name) {
 
       drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName, renderContext);
     }
+function getFirCode(props) {
+  return String(
+    props.fir_code ||
+    props.FIR_CODE ||
+    props.icao ||
+    props.ICAO ||
+    props.ident ||
+    props.IDENT ||
+    props.id ||
+    props.ID ||
+    ""
+  ).trim().toUpperCase();
+}
 
+function getFirName(props, code) {
+  return String(
+    props.name ||
+    props.NAME ||
+    props.fir_name ||
+    props.FIR_NAME ||
+    props.label ||
+    props.LABEL ||
+    code ||
+    "UNKNOWN FIR"
+  ).trim();
+}
+
+function getFirStyle() {
+  return {
+    color: "#0f766e",
+    weight: 1.2,
+    opacity: 0.9,
+    fillColor: "#0f766e",
+    fillOpacity: 0.035
+  };
+}
+
+function getFirHoverStyle() {
+  return {
+    color: "#14b8a6",
+    weight: 2.2,
+    opacity: 1,
+    fillColor: "#14b8a6",
+    fillOpacity: 0.10
+  };
+}
+
+async function loadFirGeojson() {
+  if (firLoaded) return;
+
+  const res = await fetch("world_fir.geojson?v=" + Date.now(), {
+    cache: "no-store"
+  });
+
+  if (!res.ok) {
+    throw new Error("world_fir.geojson load failed: " + res.status);
+  }
+
+  const data = await res.json();
+
+  firGeoJsonLayer = L.geoJSON(data, {
+    style: function () {
+      return getFirStyle();
+    },
+
+    onEachFeature: function (feature, layer) {
+      const p = feature.properties || {};
+      const code = getFirCode(p);
+      const name = getFirName(p, code);
+
+      layer.bindPopup(
+        "<b>" + escapeHtml(code) + "</b><br>" +
+        escapeHtml(name)
+      );
+
+      layer.bindTooltip(code, {
+        permanent: false,
+        direction: "center",
+        className: "fir-label",
+        opacity: 1
+      });
+
+      layer.on("mouseover", function () {
+        if (layer.setStyle) {
+          layer.setStyle(getFirHoverStyle());
+        }
+      });
+
+      layer.on("mouseout", function () {
+        if (layer.setStyle) {
+          layer.setStyle(getFirStyle());
+        }
+      });
+    }
+  });
+
+  firGeoJsonLayer.addTo(firLayer);
+  firLoaded = true;
+}
     function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
 
@@ -1896,6 +2045,61 @@ function getShapeCodeLabel(name) {
 
       return control;
     }
+function createFirToggleControl() {
+  const control = L.control({ position: "topright" });
+
+  control.onAdd = function () {
+    const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-fir-toggle");
+    const button = L.DomUtil.create("button", "", container);
+
+    function updateButton() {
+      button.textContent = firVisible ? "FIR On" : "FIR Off";
+      button.className = firVisible ? "fir-on" : "";
+    }
+
+    button.type = "button";
+    updateButton();
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    L.DomEvent.on(button, "click", async function (e) {
+      L.DomEvent.stop(e);
+
+      button.disabled = true;
+      button.textContent = "Loading...";
+
+      try {
+        firVisible = !firVisible;
+
+        if (firVisible) {
+          await loadFirGeojson();
+
+          if (!map.hasLayer(firLayer)) {
+            map.addLayer(firLayer);
+          }
+        } else {
+          if (map.hasLayer(firLayer)) {
+            map.removeLayer(firLayer);
+          }
+        }
+
+      } catch (err) {
+        console.error(err);
+        alert("FIR Layer load failed: " + err.message);
+        firVisible = false;
+      } finally {
+        button.disabled = false;
+        updateButton();
+      }
+    });
+
+    return container;
+  };
+
+  return control;
+}
+    
 function createRefreshControl() {
   const control = L.control({ position: "topright" });
 
@@ -1931,6 +2135,7 @@ function createRefreshControl() {
   return control;
 }
 createNdbToggleControl().addTo(map);
+createFirToggleControl().addTo(map);
 createRefreshControl().addTo(map);
 
 async function loadByFilename(filename) {
