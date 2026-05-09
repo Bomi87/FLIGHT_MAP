@@ -153,56 +153,9 @@
       color: #ffffff;
     }
 
-.leaflet-control-layers {
-  font-size: 12px;
-}
-
-/* ===== FIR Layer CSS 추가 시작 ===== */
-.fir-label {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  text-shadow:
-    -1px -1px 0 #000,
-     1px -1px 0 #000,
-    -1px  1px 0 #000,
-     1px  1px 0 #000,
-     0 0 4px rgba(0,0,0,0.8);
-}
-
-.leaflet-control-fir-toggle {
-  background: #0f766e;
-  border-radius: 4px;
-  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-  overflow: hidden;
-}
-
-.leaflet-control-fir-toggle button {
-  display: block;
-  width: 100%;
-  min-width: 54px;
-  height: 24px;
-  border: none;
-  background: #0f766e;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0 6px;
-  text-align: center;
-}
-
-.leaflet-control-fir-toggle button:hover {
-  background: #0d9488;
-}
-
-.leaflet-control-fir-toggle button.fir-on {
-  background: #115e59;
-}
-/* ===== FIR Layer CSS 추가 끝 ===== */
+    .leaflet-control-layers {
+      font-size: 12px;
+    }
 
 .leaflet-top.leaflet-right .leaflet-control {
   margin-top: 2px;
@@ -358,12 +311,13 @@
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
     const firLayer = L.featureGroup();
-let firVisible = false;
-let firLoaded = false;
-let firGeoJsonLayer = null;
 
     const waypointLabelRegistry = [];
     const airspaceLabelRegistry = [];
+
+    let firVisible = false;
+    let firLoaded = false;
+    let firGeoJsonLayer = null;
 
     let ndbRawData = [];
     let ndbVisible = false;
@@ -1903,19 +1857,28 @@ function getShapeCodeLabel(name) {
       drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName, renderContext);
     }
 
+
+
+/*******************************************************
+ * FIR Layer helpers
+ * - world_fir.geojson의 소문자 icaocode / nom_comp 필드를 읽음
+ * - 클릭 팝업은 사용하지 않고 hover tooltip만 표시
+ * - Polygon을 직접 그리지 않고 ring을 polyline segment로 그려 180도선 seam line을 줄임
+ *******************************************************/
 function getFirCode(props) {
   const candidates = [
-    props.fir_code,
-    props.FIR_CODE,
-    props.firCode,
+    props.icaocode,
     props.ICAOCODE,
     props.icaoCode,
     props.ICAO_CODE,
     props.icao_code,
     props.ICAO,
     props.icao,
-    props.ULC,
+    props.fir_code,
+    props.FIR_CODE,
+    props.firCode,
     props.ulc,
+    props.ULC,
     props.FIRCODE,
     props.fircode,
     props.CODE,
@@ -1932,25 +1895,31 @@ function getFirCode(props) {
     const text = String(v).trim().toUpperCase().replace(/\s+/g, "");
     if (!text) continue;
 
-    if (/^[A-Z]{4,6}$/.test(text) && text !== "UNKNOWN") {
+    if (/^[A-Z]{4}$/.test(text)) {
       return text;
     }
   }
 
-  return "";
+  const allText = Object.values(props || {})
+    .map(v => String(v || "").toUpperCase())
+    .join(" ");
+
+  const match = allText.match(/\b[A-Z]{4}\b/);
+  return match ? match[0] : "";
 }
 
 function getFirName(props, code) {
   const candidates = [
-    props.NOM_COMP,
     props.nom_comp,
+    props.NOM_COMP,
     props.name,
     props.NAME,
+    props.firname,
+    props.FIRNAME,
     props.fir_name,
     props.FIR_NAME,
     props.firName,
     props.FIRname,
-    props.FIRNAME,
     props.label,
     props.LABEL
   ];
@@ -1958,9 +1927,10 @@ function getFirName(props, code) {
   for (const v of candidates) {
     if (v === undefined || v === null) continue;
 
-    const text = String(v).trim();
+    let text = String(v).trim();
     if (!text) continue;
 
+    text = text.replace(/^FIR\s+/i, "").replace(/^UIR\s+/i, "").trim();
     return text;
   }
 
@@ -1987,49 +1957,11 @@ function getFirHoverStyle() {
   };
 }
 
-
-function unwrapGeoJsonRing(ring, referenceLon) {
-  if (!Array.isArray(ring) || !ring.length) return ring;
-
-  const result = [];
-
-  let firstLon = shiftLonNearReference(ring[0][0], referenceLon);
-  result.push([firstLon, ring[0][1]]);
-
-  let prevLon = firstLon;
-
-  for (let i = 1; i < ring.length; i++) {
-    let lon = Number(ring[i][0]);
-    const lat = ring[i][1];
-
-    while (lon - prevLon > 180) lon -= 360;
-    while (lon - prevLon < -180) lon += 360;
-
-    result.push([lon, lat]);
-    prevLon = lon;
+function getFirRenderReferenceLon() {
+  if (Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)) {
+    return window.__ROUTE_RENDER_REFERENCE_LON;
   }
-
-  return result;
-}
-
-function unwrapGeoJsonCoordinatesByGeometry(geometry, referenceLon) {
-  if (!geometry || !geometry.coordinates) return geometry;
-
-  const cloned = JSON.parse(JSON.stringify(geometry));
-
-  if (cloned.type === "Polygon") {
-    cloned.coordinates = cloned.coordinates.map(ring =>
-      unwrapGeoJsonRing(ring, referenceLon)
-    );
-  }
-
-  if (cloned.type === "MultiPolygon") {
-    cloned.coordinates = cloned.coordinates.map(poly =>
-      poly.map(ring => unwrapGeoJsonRing(ring, referenceLon))
-    );
-  }
-
-  return cloned;
+  return map.getCenter().lng;
 }
 
 function getFeatureRepresentativeLon(feature) {
@@ -2057,7 +1989,6 @@ function getFeatureRepresentativeLon(feature) {
     collectLon(geom.coordinates);
 
     if (!values.length) return 0;
-
     return values.reduce((a, b) => a + b, 0) / values.length;
   } catch (e) {
     return 0;
@@ -2084,47 +2015,136 @@ function getBestLonOffsetForFeature(feature, referenceLon) {
   return bestOffset;
 }
 
-function shiftGeoJsonCoordinates(coords, lonOffset) {
-  if (!Array.isArray(coords)) return coords;
-
-  if (
+function isGeoJsonCoordPair(coords) {
+  return (
+    Array.isArray(coords) &&
     coords.length >= 2 &&
     typeof coords[0] === "number" &&
     typeof coords[1] === "number"
-  ) {
-    return [coords[0] + lonOffset, coords[1]];
-  }
-
-  return coords.map(child => shiftGeoJsonCoordinates(child, lonOffset));
+  );
 }
 
-function buildFirGeoJsonNearestWorldCopy(data) {
-  const cloned = JSON.parse(JSON.stringify(data));
+function extractFirRingsFromGeometry(geometry) {
+  if (!geometry || !geometry.coordinates) return [];
 
-  const referenceLon = Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)
-    ? window.__ROUTE_RENDER_REFERENCE_LON
-    : map.getCenter().lng;
+  if (geometry.type === "Polygon") {
+    return geometry.coordinates || [];
+  }
 
-  if (cloned.features && Array.isArray(cloned.features)) {
-    cloned.features.forEach(feature => {
-      if (!feature.geometry || !feature.geometry.coordinates) return;
-
-      const lonOffset = getBestLonOffsetForFeature(feature, referenceLon);
-
-      feature.geometry = unwrapGeoJsonCoordinatesByGeometry(
-        feature.geometry,
-        referenceLon
-      );
-
-      feature.geometry.coordinates = shiftGeoJsonCoordinates(
-        feature.geometry.coordinates,
-        lonOffset
-      );
+  if (geometry.type === "MultiPolygon") {
+    const rings = [];
+    (geometry.coordinates || []).forEach(poly => {
+      (poly || []).forEach(ring => rings.push(ring));
     });
+    return rings;
   }
 
-  return cloned;
+  return [];
 }
+
+function normalizeFirRingToSegments(ring, referenceLon, lonOffset) {
+  if (!Array.isArray(ring) || ring.length < 2) return [];
+
+  const segments = [];
+  let current = [];
+  let prev = null;
+
+  for (let i = 0; i < ring.length; i++) {
+    const raw = ring[i];
+    if (!isGeoJsonCoordPair(raw)) continue;
+
+    let lon = Number(raw[0]);
+    const lat = Number(raw[1]);
+
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+
+    if (!prev) {
+      lon = shiftLonNearReference(lon, referenceLon) + lonOffset;
+      current.push([lat, lon]);
+      prev = { rawLon: Number(raw[0]), lon, lat };
+      continue;
+    }
+
+    const rawLon = Number(raw[0]);
+    let shiftedLon = rawLon;
+
+    while (shiftedLon + lonOffset - prev.lon > 180) shiftedLon -= 360;
+    while (shiftedLon + lonOffset - prev.lon < -180) shiftedLon += 360;
+
+    shiftedLon += lonOffset;
+
+    const rawJump = Math.abs(rawLon - prev.rawLon);
+    const renderedJump = Math.abs(shiftedLon - prev.lon);
+    const verticalSeam = Math.abs(shiftedLon - prev.lon) < 0.3 && Math.abs(lat - prev.lat) > 70;
+
+    // 180도선 seam/closure 성격의 긴 선은 segment를 끊어서 표시하지 않음
+    if (rawJump > 170 || renderedJump > 170 || verticalSeam) {
+      if (current.length >= 2) segments.push(current);
+      current = [[lat, shiftedLon]];
+    } else {
+      current.push([lat, shiftedLon]);
+    }
+
+    prev = { rawLon, lon: shiftedLon, lat };
+  }
+
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
+function bindFirTooltipAndHover(layer, feature) {
+  const p = feature.properties || {};
+  const code = getFirCode(p);
+  const name = getFirName(p, code);
+  const firLabel = (code ? code + " / " : "") + (name || "FIR");
+
+  layer.bindTooltip(firLabel, {
+    permanent: false,
+    direction: "center",
+    className: "fir-label",
+    opacity: 1,
+    sticky: true
+  });
+
+  layer.on("mouseover", function () {
+    if (layer.setStyle) {
+      layer.setStyle(getFirHoverStyle());
+    }
+  });
+
+  layer.on("mouseout", function () {
+    if (layer.setStyle) {
+      layer.setStyle(getFirStyle());
+    }
+  });
+}
+
+function drawFirFeature(feature, referenceLon) {
+  const rings = extractFirRingsFromGeometry(feature.geometry);
+  if (!rings.length) return;
+
+  const lonOffset = getBestLonOffsetForFeature(feature, referenceLon);
+  const baseStyle = getFirStyle();
+
+  rings.forEach(ring => {
+    const segments = normalizeFirRingToSegments(ring, referenceLon, lonOffset);
+
+    segments.forEach(segment => {
+      if (!segment || segment.length < 2) return;
+
+      const layer = L.polyline(segment, {
+        color: baseStyle.color,
+        weight: baseStyle.weight,
+        opacity: baseStyle.opacity,
+        interactive: true
+      });
+
+      bindFirTooltipAndHover(layer, feature);
+      layer.addTo(firLayer);
+    });
+  });
+}
+
 async function loadFirGeojson() {
   if (firLoaded) return;
 
@@ -2136,51 +2156,22 @@ async function loadFirGeojson() {
     throw new Error("world_fir.geojson load failed: " + res.status);
   }
 
-  const originalData = await res.json();
-  const data = buildFirGeoJsonNearestWorldCopy(originalData);
+  const data = await res.json();
+  const referenceLon = getFirRenderReferenceLon();
 
   firLayer.clearLayers();
 
-  firGeoJsonLayer = L.geoJSON(data, {
-    style: function () {
-      return getFirStyle();
-    },
+  if (!data || !Array.isArray(data.features)) {
+    throw new Error("world_fir.geojson is not valid GeoJSON FeatureCollection");
+  }
 
-    onEachFeature: function (feature, layer) {
-      const p = feature.properties || {};
-      const code = getFirCode(p);
-      const name = getFirName(p, code);
+  data.features.forEach(feature => drawFirFeature(feature, referenceLon));
 
-      layer.bindPopup(
-        "<b>" + escapeHtml((code || "UNKNOWN") + " / " + (name || "-")) + "</b>"
-      );
-
-      layer.bindTooltip(code || name || "FIR", {
-        permanent: false,
-        direction: "center",
-        className: "fir-label",
-        opacity: 1
-      });
-
-      layer.on("mouseover", function () {
-        if (layer.setStyle) {
-          layer.setStyle(getFirHoverStyle());
-        }
-      });
-
-      layer.on("mouseout", function () {
-        if (layer.setStyle) {
-          layer.setStyle(getFirStyle());
-        }
-      });
-    }
-  });
-
-  firGeoJsonLayer.addTo(firLayer);
+  firGeoJsonLayer = firLayer;
   firLoaded = true;
 }
 
- function createNdbToggleControl() {
+    function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
 
       control.onAdd = function () {
@@ -2225,6 +2216,7 @@ async function loadFirGeojson() {
       return control;
     }
 
+
 function createFirToggleControl() {
   const control = L.control({ position: "topright" });
 
@@ -2263,7 +2255,6 @@ function createFirToggleControl() {
             map.removeLayer(firLayer);
           }
         }
-
       } catch (err) {
         console.error(err);
         alert("FIR Layer load failed: " + err.message);
@@ -2279,7 +2270,7 @@ function createFirToggleControl() {
 
   return control;
 }
-    
+
 function createRefreshControl() {
   const control = L.control({ position: "topright" });
 
@@ -2387,30 +2378,29 @@ async function refreshRouteOnly() {
       await autoLoadDefault();
     }
 
-setTimeout(async () => {
-  refreshMapSize();
-  scheduleRouteTextUpdate(20);
-  scheduleAirspaceLabelUpdate(20);
-  scheduleRedrawNDB();
+    setTimeout(async () => {
+      refreshMapSize();
+      scheduleRouteTextUpdate(20);
+      scheduleAirspaceLabelUpdate(20);
+      scheduleRedrawNDB();
 
-  // Route가 새로고침되면 FIR도 다시 그림
-  // FIR world copy를 다시 구성해서 180/360 표시 꼬임 방지
-  if (firVisible) {
-    firLayer.clearLayers();
-    firLoaded = false;
-    firGeoJsonLayer = null;
+      // Route 기준 경도가 바뀌면 FIR도 같은 world copy 기준으로 다시 표시
+      if (firVisible) {
+        firLayer.clearLayers();
+        firLoaded = false;
+        firGeoJsonLayer = null;
 
-    try {
-      await loadFirGeojson();
+        try {
+          await loadFirGeojson();
 
-      if (!map.hasLayer(firLayer)) {
-        map.addLayer(firLayer);
+          if (!map.hasLayer(firLayer)) {
+            map.addLayer(firLayer);
+          }
+        } catch (err) {
+          console.error("FIR reload failed:", err);
+        }
       }
-    } catch (err) {
-      console.error("FIR reload failed:", err);
-    }
-  }
-}, 80);
+    }, 80);
 
   } catch (err) {
     console.error(err);
