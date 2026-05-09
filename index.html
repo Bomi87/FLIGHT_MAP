@@ -2118,6 +2118,69 @@ function normalizeFirRingToSegments(ring, referenceLon) {
   return segments;
 }
 
+function normalizeFirRingToPolygon(ring, referenceLon) {
+  if (!Array.isArray(ring) || ring.length < 3) return [];
+
+  const result = [];
+  let prevLon = null;
+
+  for (let i = 0; i < ring.length; i++) {
+    const raw = ring[i];
+    if (!isGeoJsonCoordPair(raw)) continue;
+
+    const rawLon = Number(raw[0]);
+    const lat = Number(raw[1]);
+
+    if (!Number.isFinite(rawLon) || !Number.isFinite(lat)) continue;
+
+    let lon;
+
+    if (prevLon === null) {
+      lon = shiftLonNearReference(rawLon, referenceLon);
+    } else {
+      lon = rawLon;
+      while (lon - prevLon > 180) lon -= 360;
+      while (lon - prevLon < -180) lon += 360;
+    }
+
+    result.push([lat, lon]);
+    prevLon = lon;
+  }
+
+  return result.length >= 3 ? result : [];
+}
+
+function addFirHitPolygon(feature, referenceLon) {
+  const rings = extractFirRingsFromGeometry(feature.geometry);
+  if (!rings.length) return;
+
+  const polygonRings = [];
+
+  rings.forEach(ring => {
+    const normalizedRing = normalizeFirRingToPolygon(ring, referenceLon);
+    if (normalizedRing.length >= 3) {
+      polygonRings.push(normalizedRing);
+    }
+  });
+
+  if (!polygonRings.length) return;
+
+  const baseStyle = getFirStyle();
+
+  const hitPolygon = L.polygon(polygonRings, {
+    color: baseStyle.color,
+    weight: 0,
+    opacity: 0,
+    fillColor: baseStyle.fillColor,
+    fillOpacity: 0.001,
+    interactive: true,
+    bubblingMouseEvents: false
+  });
+
+  bindFirTooltipAndHover(hitPolygon, feature);
+  hitPolygon.addTo(firLayer);
+}
+    
 function bindFirTooltipAndHover(layer, feature) {
   const firLabel = getFirLabel(feature);
 
@@ -2153,6 +2216,10 @@ function drawFirFeature(feature, referenceLon) {
 
   const baseStyle = getFirStyle();
 
+  // 1) 내부 마우스 hover 감지용 투명 polygon
+  addFirHitPolygon(feature, referenceLon);
+
+  // 2) 실제 화면에 보이는 FIR boundary line
   rings.forEach(ring => {
     const segments = normalizeFirRingToSegments(ring, referenceLon);
 
