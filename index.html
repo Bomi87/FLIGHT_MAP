@@ -2047,25 +2047,7 @@ function getFeatureRepresentativeLon(feature) {
   }
 }
 
-function getBestLonOffsetForFeature(feature, referenceLon) {
-  const baseLon = getFeatureRepresentativeLon(feature);
-  const candidates = [-360, 0, 360];
 
-  let bestOffset = 0;
-  let bestDiff = Infinity;
-
-  candidates.forEach(offset => {
-    const shiftedLon = baseLon + offset;
-    const diff = Math.abs(shiftedLon - referenceLon);
-
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      bestOffset = offset;
-    }
-  });
-
-  return bestOffset;
-}
 
 function isGeoJsonCoordPair(coords) {
   return (
@@ -2094,7 +2076,7 @@ function extractFirRingsFromGeometry(geometry) {
   return [];
 }
 
-function normalizeFirRingToSegments(ring, referenceLon, lonOffset) {
+function normalizeFirRingToSegments(ring, referenceLon) {
   if (!Array.isArray(ring) || ring.length < 2) return [];
 
   const segments = [];
@@ -2105,52 +2087,52 @@ function normalizeFirRingToSegments(ring, referenceLon, lonOffset) {
     const raw = ring[i];
     if (!isGeoJsonCoordPair(raw)) continue;
 
-    let lon = Number(raw[0]);
+    const rawLon = Number(raw[0]);
     const lat = Number(raw[1]);
 
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    if (!Number.isFinite(rawLon) || !Number.isFinite(lat)) continue;
+
+    let lon;
 
     if (!prev) {
-      lon = shiftLonNearReference(lon, referenceLon) + lonOffset;
+      lon = shiftLonNearReference(rawLon, referenceLon);
       current.push([lat, lon]);
-      prev = { rawLon: Number(raw[0]), lon, lat };
+      prev = { rawLon, lon, lat };
       continue;
     }
 
-    const rawLon = Number(raw[0]);
-    let shiftedLon = rawLon;
+    lon = rawLon;
 
-    while (shiftedLon + lonOffset - prev.lon > 180) shiftedLon -= 360;
-    while (shiftedLon + lonOffset - prev.lon < -180) shiftedLon += 360;
-
-    shiftedLon += lonOffset;
+    while (lon - prev.lon > 180) lon -= 360;
+    while (lon - prev.lon < -180) lon += 360;
 
     const rawJump = Math.abs(rawLon - prev.rawLon);
-    const renderedJump = Math.abs(shiftedLon - prev.lon);
-    const verticalSeam = Math.abs(shiftedLon - prev.lon) < 0.3 && Math.abs(lat - prev.lat) > 70;
+    const renderedJump = Math.abs(lon - prev.lon);
+    const verticalSeam =
+      Math.abs(lon - prev.lon) < 0.3 &&
+      Math.abs(lat - prev.lat) > 70;
 
-    // 180도선 seam/closure 성격의 긴 선은 segment를 끊어서 표시하지 않음
     if (rawJump > 170 || renderedJump > 170 || verticalSeam) {
       if (current.length >= 2) segments.push(current);
-      current = [[lat, shiftedLon]];
+      current = [[lat, lon]];
     } else {
-      current.push([lat, shiftedLon]);
+      current.push([lat, lon]);
     }
 
-    prev = { rawLon, lon: shiftedLon, lat };
+    prev = { rawLon, lon, lat };
   }
 
   if (current.length >= 2) segments.push(current);
   return segments;
 }
 
-function getFirLabelLatLng(feature, referenceLon, lonOffset) {
+function getFirLabelLatLng(feature, referenceLon) {
   const props = feature.properties || {};
   const centlat = Number(props.centlat ?? props.CENTLAT);
   const centlong = Number(props.centlong ?? props.CENTLONG);
 
   if (Number.isFinite(centlat) && Number.isFinite(centlong)) {
-    return [centlat, shiftLonNearReference(centlong, referenceLon) + lonOffset];
+    return [centlat, shiftLonNearReference(centlong, referenceLon)];
   }
 
   const rings = extractFirRingsFromGeometry(feature.geometry);
@@ -2159,9 +2141,13 @@ function getFirLabelLatLng(feature, referenceLon, lonOffset) {
   rings.forEach(ring => {
     (ring || []).forEach(pt => {
       if (!isGeoJsonCoordPair(pt)) return;
+
       const lat = Number(pt[1]);
-      const lon = shiftLonNearReference(Number(pt[0]), referenceLon) + lonOffset;
-      if (Number.isFinite(lat) && Number.isFinite(lon)) values.push([lat, lon]);
+      const lon = shiftLonNearReference(Number(pt[0]), referenceLon);
+
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        values.push([lat, lon]);
+      }
     });
   });
 
@@ -2169,10 +2155,9 @@ function getFirLabelLatLng(feature, referenceLon, lonOffset) {
 
   const lat = values.reduce((a, b) => a + b[0], 0) / values.length;
   const lon = values.reduce((a, b) => a + b[1], 0) / values.length;
+
   return [lat, lon];
 }
-
-
 
 function bindFirTooltipAndHover(layer, feature) {
   const firLabel = getFirLabel(feature);
@@ -2207,11 +2192,10 @@ function drawFirFeature(feature, referenceLon) {
   const rings = extractFirRingsFromGeometry(feature.geometry);
   if (!rings.length) return;
 
-  const lonOffset = getBestLonOffsetForFeature(feature, referenceLon);
   const baseStyle = getFirStyle();
 
   rings.forEach(ring => {
-    const segments = normalizeFirRingToSegments(ring, referenceLon, lonOffset);
+    const segments = normalizeFirRingToSegments(ring, referenceLon);
 
     segments.forEach(segment => {
       if (!segment || segment.length < 2) return;
@@ -2228,7 +2212,8 @@ function drawFirFeature(feature, referenceLon) {
     });
   });
 
- 
+  // 전체 FIR 이름을 항상 표시하지 않음
+  // 마우스 hover 시에만 bindFirTooltipAndHover()에서 표시
 }
 
 async function loadFirGeojson() {
