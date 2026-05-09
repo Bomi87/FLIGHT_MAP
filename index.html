@@ -2176,33 +2176,7 @@ function bindFirTooltipAndHover(layer, feature) {
     }
   });
 }
-function addFirHitArea(feature, referenceLon) {
-  const rings = extractFirRingsFromGeometry(feature.geometry);
-  if (!rings.length) return;
 
-  const polygonRings = [];
-
-  rings.forEach(ring => {
-    const latlngs = normalizeFirRingToPolygonLatLngs(ring, referenceLon);
-    if (latlngs.length >= 3) {
-      polygonRings.push(latlngs);
-    }
-  });
-
-  if (!polygonRings.length) return;
-
-  const hitArea = L.polygon(polygonRings, {
-    color: "#0f766e",
-    weight: 0,
-    opacity: 0,
-    fillColor: "#0f766e",
-    fillOpacity: 0.001,
-    interactive: true
-  });
-
-  bindFirTooltipAndHover(hitArea, feature);
-  hitArea.addTo(firLayer);
-}
 function drawFirFeature(feature, referenceLon) {
   const rings = extractFirRingsFromGeometry(feature.geometry);
   if (!rings.length) return;
