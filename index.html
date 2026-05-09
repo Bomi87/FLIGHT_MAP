@@ -2011,7 +2011,11 @@ function getFirRenderReferenceLon() {
   return map.getCenter().lng;
 }
 
+function getFirGeometryReferenceLon(geom) {
+  try {
+    if (!geom || !geom.coordinates) return 0;
 
+    const values = [];
 
     function collectLon(arr) {
       if (!Array.isArray(arr)) return;
@@ -2031,14 +2035,12 @@ function getFirRenderReferenceLon() {
     collectLon(geom.coordinates);
 
     if (!values.length) return 0;
+
     return values.reduce((a, b) => a + b, 0) / values.length;
   } catch (e) {
     return 0;
   }
 }
-
-
-
 function isGeoJsonCoordPair(coords) {
   return (
     Array.isArray(coords) &&
