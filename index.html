@@ -229,7 +229,66 @@
 .leaflet-control-fir-toggle button.fir-on {
   background: #115e59;
 }
+   
 /* ===== FIR Layer CSS 추가 끝 ===== */
+
+    /* ===== U.S ARTCC Layer CSS 시작 ===== */
+.leaflet-control-artcc-toggle {
+  background: #ea580c;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+
+.leaflet-control-artcc-toggle button {
+  display: block;
+  width: 100%;
+  min-width: 72px;
+  height: 24px;
+  border: none;
+  background: #ea580c;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 6px;
+  text-align: center;
+}
+
+.leaflet-control-artcc-toggle button:hover {
+  background: #f97316;
+}
+
+.leaflet-control-artcc-toggle button.artcc-on {
+  background: #c2410c;
+}
+
+.artcc-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.artcc-label:before {
+  display: none !important;
+}
+
+.artcc-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0,0,0,0.85);
+  pointer-events: none;
+  user-select: none;
+}
+/* ===== U.S ARTCC Layer CSS 끝 ===== */
 .leaflet-top.leaflet-right .leaflet-control {
   margin-top: 2px;
   margin-right: 8px;
@@ -388,6 +447,10 @@ let firVisible = false;
 let firLoaded = false;
 let firGeoJsonLayer = null;
 let activeFirCenterLabel = null;
+const artccLayer = L.featureGroup();
+let artccVisible = false;
+let artccLoaded = false;
+    
     const waypointLabelRegistry = [];
     const airspaceLabelRegistry = [];
 
@@ -2273,18 +2336,13 @@ function addFirHitPolygon(feature, referenceLon) {
 
   if (!polygonRings.length) return;
 
-  const baseStyle = getFirStyle();
-
   const hitPolygon = L.polygon(polygonRings, getFirHitPolygonStyle());
 
-bindFirTooltipAndHover(hitPolygon, feature, {
-  isHitPolygon: true,
-  referenceLon
-});
+  bindFirTooltipAndHover(hitPolygon, feature, {
+    isHitPolygon: true,
+    referenceLon
+  });
 
-hitPolygon.addTo(firLayer);
-
-  bindFirTooltipAndHover(hitPolygon, feature);
   hitPolygon.addTo(firLayer);
 }
     
@@ -2379,7 +2437,220 @@ async function loadFirGeojson() {
   firGeoJsonLayer = firLayer;
   firLoaded = true;
 }
+/*******************************************************
+ * U.S ARTCC Layer helpers
+ * - artcc.geojson 사용
+ * - properties.ident / facility / name 사용
+ *******************************************************/
+function getArtccCode(props) {
+  const candidates = [
+    props.ident,
+    props.IDENT,
+    props.facility,
+    props.FACILITY,
+    props.id,
+    props.ID,
+    props.code,
+    props.CODE,
+    props.artcc,
+    props.ARTCC,
+    props.name,
+    props.NAME
+  ];
 
+  for (const v of candidates) {
+    if (v === undefined || v === null) continue;
+
+    const text = String(v).trim().toUpperCase();
+
+    const match = text.match(/\bZ[A-Z]{2}\b/);
+    if (match) return match[0];
+
+    if (/^Z[A-Z]{2}$/.test(text)) return text;
+  }
+
+  return "";
+}
+
+function getArtccLabel(feature) {
+  const props = feature.properties || {};
+  const code = getArtccCode(props);
+  return code || "";
+}
+
+function getArtccStyle() {
+  return {
+    color: "#f97316",
+    weight: 2.2,
+    opacity: 0.95,
+    fillColor: "#f97316",
+    fillOpacity: 0.13
+  };
+}
+
+function getArtccHoverStyle() {
+  return {
+    color: "#ef4444",
+    weight: 3,
+    opacity: 1,
+    fillColor: "#ef4444",
+    fillOpacity: 0.18
+  };
+}
+
+function getGeoJsonRings(geometry) {
+  if (!geometry || !geometry.coordinates) return [];
+
+  if (geometry.type === "Polygon") {
+    return geometry.coordinates || [];
+  }
+
+  if (geometry.type === "MultiPolygon") {
+    const rings = [];
+    (geometry.coordinates || []).forEach(poly => {
+      (poly || []).forEach(ring => rings.push(ring));
+    });
+    return rings;
+  }
+
+  return [];
+}
+
+function normalizeGeoJsonRingToLatLng(ring) {
+  if (!Array.isArray(ring) || ring.length < 3) return [];
+
+  return ring
+    .filter(pt => Array.isArray(pt) && pt.length >= 2)
+    .map(pt => [Number(pt[1]), Number(pt[0])])
+    .filter(pt =>
+      Number.isFinite(pt[0]) &&
+      Number.isFinite(pt[1]) &&
+      Math.abs(pt[0]) <= 90 &&
+      Math.abs(pt[1]) <= 180
+    );
+}
+
+function getArtccCenterLatLng(feature) {
+  const props = feature.properties || {};
+
+  const latCandidates = [
+    props.centlat,
+    props.CENTLAT,
+    props.lat,
+    props.LAT
+  ];
+
+  const lonCandidates = [
+    props.centlong,
+    props.CENTLONG,
+    props.lon,
+    props.LON,
+    props.lng,
+    props.LNG
+  ];
+
+  for (let i = 0; i < latCandidates.length; i++) {
+    const lat = Number(latCandidates[i]);
+    const lon = Number(lonCandidates[i]);
+
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      return [lat, lon];
+    }
+  }
+
+  const rings = getGeoJsonRings(feature.geometry);
+  const points = [];
+
+  rings.forEach(ring => {
+    const latlngs = normalizeGeoJsonRingToLatLng(ring);
+    latlngs.forEach(p => points.push(p));
+  });
+
+  if (!points.length) return null;
+
+  const avgLat = points.reduce((sum, p) => sum + p[0], 0) / points.length;
+  const avgLon = points.reduce((sum, p) => sum + p[1], 0) / points.length;
+
+  return [avgLat, avgLon];
+}
+
+function addArtccLabel(feature) {
+  const center = getArtccCenterLatLng(feature);
+  if (!center) return;
+
+  const label = getArtccLabel(feature);
+  if (!label) return;
+
+  const icon = L.divIcon({
+    className: "artcc-label",
+    html: `<span class="artcc-label-text">${escapeHtml(label)}</span>`,
+    iconSize: null
+  });
+
+  L.marker(center, {
+    icon,
+    interactive: false,
+    keyboard: false,
+    zIndexOffset: 4500
+  }).addTo(artccLayer);
+}
+
+function drawArtccFeature(feature) {
+  const rings = getGeoJsonRings(feature.geometry);
+  if (!rings.length) return;
+
+  const polygonRings = [];
+
+  rings.forEach(ring => {
+    const latlngs = normalizeGeoJsonRingToLatLng(ring);
+    if (latlngs.length >= 3) {
+      polygonRings.push(latlngs);
+    }
+  });
+
+  if (!polygonRings.length) return;
+
+  const polygon = L.polygon(polygonRings, {
+    ...getArtccStyle(),
+    interactive: true
+  }).addTo(artccLayer);
+
+  polygon.on("mouseover", function () {
+    polygon.setStyle(getArtccHoverStyle());
+  });
+
+  polygon.on("mouseout", function () {
+    polygon.setStyle(getArtccStyle());
+  });
+
+  addArtccLabel(feature);
+}
+
+async function loadArtccGeojson() {
+  if (artccLoaded) return;
+
+  const res = await fetch("artcc.geojson?v=" + Date.now(), {
+    cache: "no-store"
+  });
+
+  if (!res.ok) {
+    throw new Error("artcc.geojson load failed: " + res.status);
+  }
+
+  const data = await res.json();
+
+  if (!data || !Array.isArray(data.features)) {
+    throw new Error("artcc.geojson is not valid GeoJSON FeatureCollection");
+  }
+
+  artccLayer.clearLayers();
+
+  data.features.forEach(feature => {
+    drawArtccFeature(feature);
+  });
+
+  artccLoaded = true;
+}
     
     function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
@@ -2479,7 +2750,60 @@ function createFirToggleControl() {
 
   return control;
 }
+function createArtccToggleControl() {
+  const control = L.control({ position: "topright" });
 
+  control.onAdd = function () {
+    const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-artcc-toggle");
+    const button = L.DomUtil.create("button", "", container);
+
+    function updateButton() {
+      button.textContent = artccVisible ? "ARTCC On" : "U.S ARTCC";
+      button.className = artccVisible ? "artcc-on" : "";
+    }
+
+    button.type = "button";
+    updateButton();
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    L.DomEvent.on(button, "click", async function (e) {
+      L.DomEvent.stop(e);
+
+      button.disabled = true;
+      button.textContent = "Loading...";
+
+      try {
+        artccVisible = !artccVisible;
+
+        if (artccVisible) {
+          await loadArtccGeojson();
+
+          if (!map.hasLayer(artccLayer)) {
+            map.addLayer(artccLayer);
+          }
+        } else {
+          if (map.hasLayer(artccLayer)) {
+            map.removeLayer(artccLayer);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        alert("U.S ARTCC Layer load failed: " + err.message);
+        artccVisible = false;
+      } finally {
+        button.disabled = false;
+        updateButton();
+      }
+    });
+
+    return container;
+  };
+
+  return control;
+}
+    
 function createRefreshControl() {
   const control = L.control({ position: "topright" });
 
@@ -2516,6 +2840,7 @@ function createRefreshControl() {
 }
 createNdbToggleControl().addTo(map);
 createFirToggleControl().addTo(map);
+createArtccToggleControl().addTo(map);
 createRefreshControl().addTo(map);
 
 async function loadByFilename(filename) {
