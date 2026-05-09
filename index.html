@@ -2768,7 +2768,7 @@ function createArtccToggleControl() {
     const button = L.DomUtil.create("button", "", container);
 
     function updateButton() {
-      button.textContent = artccVisible ? "ARTCC On" : "U.S ARTCC";
+      button.textContent = artccVisible ? "U.S ON" : "U.S ARTCC";
       button.className = artccVisible ? "artcc-on" : "";
     }
 
