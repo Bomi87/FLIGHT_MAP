@@ -1960,6 +1960,63 @@ function getFirCode(props) {
   return allMatch && allMatch[0] !== "UNKNOWN" ? allMatch[0] : "";
 }
 
+function getFirCode(props) {
+  const candidates = [
+    props.fir_code,
+    props.FIR_CODE,
+    props.firCode,
+    props.ICAOCODE,
+    props.icaoCode,
+    props.ICAO_CODE,
+    props.icao_code,
+    props.ICAO,
+    props.icao,
+    props.ULC,
+    props.ulc,
+    props.FIRCODE,
+    props.fircode,
+    props.CODE,
+    props.code,
+    props.IDENT,
+    props.ident,
+    props.ID,
+    props.id,
+    props.NAME,
+    props.name,
+    props.NOM_COMP,
+    props.nom_comp,
+    props.label,
+    props.LABEL
+  ];
+
+  for (const v of candidates) {
+    if (v === undefined || v === null) continue;
+
+    const text = String(v).trim().toUpperCase();
+    if (!text) continue;
+
+    const direct = text.replace(/\s+/g, "");
+
+    // RJJJ, RKRR, VHHK, ZAN, ZOA 등
+    if (/^[A-Z]{3,6}$/.test(direct) && direct !== "UNKNOWN") {
+      return direct;
+    }
+
+    const match = text.match(/\b[A-Z]{3,6}\b/);
+    if (match && match[0] !== "UNKNOWN") {
+      return match[0];
+    }
+  }
+
+  const allText = Object.values(props || {})
+    .map(v => String(v || ""))
+    .join(" ")
+    .toUpperCase();
+
+  const allMatch = allText.match(/\b[A-Z]{3,6}\b/);
+  return allMatch && allMatch[0] !== "UNKNOWN" ? allMatch[0] : "";
+}
+
 function getFirName(props, code) {
   const candidates = [
     props.name,
@@ -1983,7 +2040,6 @@ function getFirName(props, code) {
     const text = String(v).trim();
     if (!text) continue;
 
-    // 이름이 코드와 같아도 일단 표시
     return text;
   }
 
@@ -2011,73 +2067,46 @@ function getFirHoverStyle() {
 }
 
 /*******************************************************
- * FIR longitude render helpers
- * Route와 같은 world copy에 FIR를 표시하기 위한 보정
+ * FIR World Copy Helper
+ * 중요:
+ * Polygon 좌표를 vertex마다 180/360 보정하면 경계가 찢어짐.
+ * 그래서 FIR 전체를 -360 / 0 / +360 복사본으로 표시함.
  *******************************************************/
-function getFirRenderReferenceLon() {
-  if (Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)) {
-    return window.__ROUTE_RENDER_REFERENCE_LON;
-  }
-
-  return map.getCenter().lng;
-}
-
-function shiftFirLon(lon) {
-  return shiftLonNearReference(lon, getFirRenderReferenceLon());
-}
-
-function transformFirCoordinates(coords) {
-  if (!Array.isArray(coords)) return coords;
-
-  // coordinate pair: [lon, lat]
-  if (
-    coords.length >= 2 &&
-    typeof coords[0] === "number" &&
-    typeof coords[1] === "number"
-  ) {
-    return [
-      shiftFirLon(coords[0]),
-      coords[1]
-    ];
-  }
-
-  return coords.map(transformFirCoordinates);
-}
-
-function transformFirGeoJsonToRouteWorldCopy(data) {
+function cloneGeoJsonWithLonOffset(data, lonOffset) {
   const cloned = JSON.parse(JSON.stringify(data));
 
-  if (!cloned.features || !Array.isArray(cloned.features)) {
-    return cloned;
+  function shiftCoords(coords) {
+    if (!Array.isArray(coords)) return coords;
+
+    // GeoJSON coordinate pair: [lon, lat]
+    if (
+      coords.length >= 2 &&
+      typeof coords[0] === "number" &&
+      typeof coords[1] === "number"
+    ) {
+      return [
+        coords[0] + lonOffset,
+        coords[1]
+      ];
+    }
+
+    return coords.map(shiftCoords);
   }
 
-  cloned.features.forEach(feature => {
-    if (!feature.geometry || !feature.geometry.coordinates) return;
-
-    feature.geometry.coordinates =
-      transformFirCoordinates(feature.geometry.coordinates);
-  });
+  if (cloned.features && Array.isArray(cloned.features)) {
+    cloned.features.forEach(feature => {
+      if (!feature.geometry || !feature.geometry.coordinates) return;
+      feature.geometry.coordinates = shiftCoords(feature.geometry.coordinates);
+    });
+  }
 
   return cloned;
 }
 
-async function loadFirGeojson() {
-  if (firLoaded) return;
+function addFirGeoJsonCopy(data, lonOffset) {
+  const shiftedData = cloneGeoJsonWithLonOffset(data, lonOffset);
 
-  const res = await fetch("world_fir.geojson?v=" + Date.now(), {
-    cache: "no-store"
-  });
-
-  if (!res.ok) {
-    throw new Error("world_fir.geojson load failed: " + res.status);
-  }
-
-  const originalData = await res.json();
-
-  // 핵심: FIR도 Route와 같은 180/360 경도 기준으로 이동
-  const data = transformFirGeoJsonToRouteWorldCopy(originalData);
-
-  firGeoJsonLayer = L.geoJSON(data, {
+  const layer = L.geoJSON(shiftedData, {
     style: function () {
       return getFirStyle();
     },
@@ -2087,7 +2116,6 @@ async function loadFirGeojson() {
       const code = getFirCode(p);
       const name = getFirName(p, code);
 
-      // 디버깅용: 여전히 UNKNOWN이면 property 확인 가능
       const propsHtml =
         "<details style='margin-top:6px; font-size:10px;'>" +
         "<summary>Properties</summary>" +
@@ -2122,10 +2150,34 @@ async function loadFirGeojson() {
     }
   });
 
-  firGeoJsonLayer.addTo(firLayer);
-  firLoaded = true;
+  layer.addTo(firLayer);
+  return layer;
 }
 
+async function loadFirGeojson() {
+  if (firLoaded) return;
+
+  const res = await fetch("world_fir.geojson?v=" + Date.now(), {
+    cache: "no-store"
+  });
+
+  if (!res.ok) {
+    throw new Error("world_fir.geojson load failed: " + res.status);
+  }
+
+  const data = await res.json();
+
+  firLayer.clearLayers();
+
+  // 중요:
+  // FIR polygon을 개별 좌표 보정하지 않고,
+  // 세계 복사본을 -360 / 0 / +360으로 표시해서 180도선 꼬임 방지
+  addFirGeoJsonCopy(data, -360);
+  addFirGeoJsonCopy(data, 0);
+  addFirGeoJsonCopy(data, 360);
+
+  firLoaded = true;
+}
     
     function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
@@ -2339,7 +2391,8 @@ setTimeout(async () => {
   scheduleAirspaceLabelUpdate(20);
   scheduleRedrawNDB();
 
-  // Route reference longitude가 바뀌었을 수 있으므로 FIR를 같은 world copy로 재표시
+  // Route가 새로고침되면 FIR도 다시 그림
+  // FIR world copy를 다시 구성해서 180/360 표시 꼬임 방지
   if (firVisible) {
     firLayer.clearLayers();
     firLoaded = false;
