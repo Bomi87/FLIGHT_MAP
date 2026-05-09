@@ -2328,7 +2328,7 @@ function createFirToggleControl() {
   const control = L.control({ position: "topright" });
 
   control.onAdd = function () {
-    const container = L.DomUtil.create("div", "leaflet-control leaflet-control-fir-toggle");
+    const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-fir-toggle");
     const button = L.DomUtil.create("button", "", container);
 
     function updateButton() {
