@@ -172,7 +172,30 @@
      1px  1px 0 #000,
      0 0 4px rgba(0,0,0,0.8);
 }
+.fir-center-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
 
+.fir-center-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(15, 118, 110, 0.75);
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0 0 4px rgba(0,0,0,0.8);
+  pointer-events: none;
+  user-select: none;
+}
 .fir-label:before {
   display: none !important;
 }
@@ -364,6 +387,7 @@ const firLayer = L.featureGroup();
 let firVisible = false;
 let firLoaded = false;
 let firGeoJsonLayer = null;
+let activeFirCenterLabel = null;
     const waypointLabelRegistry = [];
     const airspaceLabelRegistry = [];
 
@@ -2032,7 +2056,69 @@ function getFirRenderReferenceLon() {
   }
   return map.getCenter().lng;
 }
+function removeActiveFirCenterLabel() {
+  if (activeFirCenterLabel && firLayer.hasLayer(activeFirCenterLabel)) {
+    firLayer.removeLayer(activeFirCenterLabel);
+  }
+  activeFirCenterLabel = null;
+}
 
+function getFirCenterLatLng(feature, referenceLon) {
+  const props = feature.properties || {};
+
+  const centlat = Number(props.centlat ?? props.CENTLAT);
+  const centlong = Number(props.centlong ?? props.CENTLONG);
+
+  if (Number.isFinite(centlat) && Number.isFinite(centlong)) {
+    return [
+      centlat,
+      shiftLonNearReference(centlong, referenceLon)
+    ];
+  }
+
+  const rings = extractFirRingsFromGeometry(feature.geometry);
+  const points = [];
+
+  rings.forEach(ring => {
+    (ring || []).forEach(pt => {
+      if (!isGeoJsonCoordPair(pt)) return;
+
+      const lon = shiftLonNearReference(Number(pt[0]), referenceLon);
+      const lat = Number(pt[1]);
+
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        points.push([lat, lon]);
+      }
+    });
+  });
+
+  if (!points.length) return map.getCenter();
+
+  const avgLat = points.reduce((sum, p) => sum + p[0], 0) / points.length;
+  const avgLon = points.reduce((sum, p) => sum + p[1], 0) / points.length;
+
+  return [avgLat, avgLon];
+}
+
+function showFirCenterLabel(feature, referenceLon) {
+  removeActiveFirCenterLabel();
+
+  const firLabel = getFirLabel(feature);
+  const centerLatLng = getFirCenterLatLng(feature, referenceLon);
+
+  const icon = L.divIcon({
+    className: "fir-center-label",
+    html: `<div class="fir-center-label-text">${escapeHtml(firLabel)}</div>`,
+    iconSize: null
+  });
+
+  activeFirCenterLabel = L.marker(centerLatLng, {
+    icon,
+    interactive: false,
+    keyboard: false,
+    zIndexOffset: 5000
+  }).addTo(firLayer);
+}
 function getFirGeometryReferenceLon(geom) {
   try {
     if (!geom || !geom.coordinates) return 0;
@@ -2192,7 +2278,8 @@ function addFirHitPolygon(feature, referenceLon) {
   const hitPolygon = L.polygon(polygonRings, getFirHitPolygonStyle());
 
 bindFirTooltipAndHover(hitPolygon, feature, {
-  isHitPolygon: true
+  isHitPolygon: true,
+  referenceLon
 });
 
 hitPolygon.addTo(firLayer);
@@ -2202,40 +2289,38 @@ hitPolygon.addTo(firLayer);
 }
     
 function bindFirTooltipAndHover(layer, feature, options = {}) {
-  const firLabel = getFirLabel(feature);
   const isHitPolygon = !!options.isHitPolygon;
-
-  layer.bindTooltip(escapeHtml(firLabel), {
-    permanent: false,
-    direction: "center",
-    className: "fir-label",
-    opacity: 1,
-    sticky: true
-  });
+  const referenceLon = Number.isFinite(options.referenceLon)
+    ? options.referenceLon
+    : getFirRenderReferenceLon();
 
   layer.on("mouseover", function () {
-    if (!layer.setStyle) return;
-
-    if (isHitPolygon) {
-      layer.setStyle(getFirHitPolygonHoverStyle());
-    } else {
-      layer.setStyle(getFirHoverStyle());
+    if (layer.setStyle) {
+      if (isHitPolygon) {
+        layer.setStyle(getFirHitPolygonHoverStyle());
+      } else {
+        layer.setStyle(getFirHoverStyle());
+      }
     }
+
+    showFirCenterLabel(feature, referenceLon);
   });
 
   layer.on("mouseout", function () {
-    if (!layer.setStyle) return;
-
-    if (isHitPolygon) {
-      layer.setStyle(getFirHitPolygonStyle());
-    } else {
-      const s = getFirStyle();
-      layer.setStyle({
-        color: s.color,
-        weight: s.weight,
-        opacity: s.opacity
-      });
+    if (layer.setStyle) {
+      if (isHitPolygon) {
+        layer.setStyle(getFirHitPolygonStyle());
+      } else {
+        const s = getFirStyle();
+        layer.setStyle({
+          color: s.color,
+          weight: s.weight,
+          opacity: s.opacity
+        });
+      }
     }
+
+    removeActiveFirCenterLabel();
   });
 }
 
@@ -2262,7 +2347,9 @@ function drawFirFeature(feature, referenceLon) {
         interactive: true
       });
 
-      bindFirTooltipAndHover(layer, feature);
+     bindFirTooltipAndHover(layer, feature, {
+  referenceLon
+});
       layer.addTo(firLayer);
     });
   });
