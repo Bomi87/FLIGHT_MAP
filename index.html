@@ -243,7 +243,7 @@
 .leaflet-control-artcc-toggle button {
   display: block;
   width: 100%;
-  min-width: 72px;
+  min-width: 54px;
   height: 24px;
   border: none;
   background: #ea580c;
@@ -276,7 +276,7 @@
 .artcc-label-text {
   display: inline-block;
   white-space: nowrap;
-  color: #ff69b4;
+  color: #ec4899;
   font-size: 13px;
   font-weight: 800;
   text-shadow:
@@ -2768,7 +2768,7 @@ function createArtccToggleControl() {
     const button = L.DomUtil.create("button", "", container);
 
     function updateButton() {
-      button.textContent = artccVisible ? "U.S ON" : "U.S ARTCC";
+      button.textContent = artccVisible ? "U.S ON" : "U.S OFF";
       button.className = artccVisible ? "artcc-on" : "";
     }
 
