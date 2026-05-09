@@ -2115,38 +2115,6 @@ function normalizeFirRingToSegments(ring, referenceLon) {
   if (current.length >= 2) segments.push(current);
   return segments;
 }
-function normalizeFirRingToPolygonLatLngs(ring, referenceLon) {
-  if (!Array.isArray(ring) || ring.length < 3) return [];
-
-  const latlngs = [];
-  let prevLon = null;
-
-  for (let i = 0; i < ring.length; i++) {
-    const raw = ring[i];
-    if (!isGeoJsonCoordPair(raw)) continue;
-
-    const rawLon = Number(raw[0]);
-    const lat = Number(raw[1]);
-
-    if (!Number.isFinite(rawLon) || !Number.isFinite(lat)) continue;
-
-    let lon;
-
-    if (prevLon === null) {
-      lon = shiftLonNearReference(rawLon, referenceLon);
-    } else {
-      lon = rawLon;
-
-      while (lon - prevLon > 180) lon -= 360;
-      while (lon - prevLon < -180) lon += 360;
-    }
-
-    latlngs.push([lat, lon]);
-    prevLon = lon;
-  }
-
-  return latlngs.length >= 3 ? latlngs : [];
-}
 
 function bindFirTooltipAndHover(layer, feature) {
   const firLabel = getFirLabel(feature);
@@ -2181,10 +2149,6 @@ function drawFirFeature(feature, referenceLon) {
   const rings = extractFirRingsFromGeometry(feature.geometry);
   if (!rings.length) return;
 
-  // 먼저 내부 hover 영역을 투명 polygon으로 추가
-  addFirHitArea(feature, referenceLon);
-
-  // 그 다음 기존처럼 FIR 경계선 표시
   const baseStyle = getFirStyle();
 
   rings.forEach(ring => {
