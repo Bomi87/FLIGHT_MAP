@@ -2004,6 +2004,28 @@ function getFirHoverStyle() {
   };
 }
 
+function getFirHitPolygonStyle() {
+  return {
+    color: "#0f766e",
+    weight: 0,
+    opacity: 0,
+    fillColor: "#0f766e",
+    fillOpacity: 0.001,
+    interactive: true,
+    bubblingMouseEvents: false
+  };
+}
+
+function getFirHitPolygonHoverStyle() {
+  return {
+    color: "#14b8a6",
+    weight: 0,
+    opacity: 0,
+    fillColor: "#14b8a6",
+    fillOpacity: 0.10
+  };
+}
+    
 function getFirRenderReferenceLon() {
   if (Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)) {
     return window.__ROUTE_RENDER_REFERENCE_LON;
@@ -2167,22 +2189,21 @@ function addFirHitPolygon(feature, referenceLon) {
 
   const baseStyle = getFirStyle();
 
-  const hitPolygon = L.polygon(polygonRings, {
-    color: baseStyle.color,
-    weight: 0,
-    opacity: 0,
-    fillColor: baseStyle.fillColor,
-    fillOpacity: 0.001,
-    interactive: true,
-    bubblingMouseEvents: false
-  });
+  const hitPolygon = L.polygon(polygonRings, getFirHitPolygonStyle());
+
+bindFirTooltipAndHover(hitPolygon, feature, {
+  isHitPolygon: true
+});
+
+hitPolygon.addTo(firLayer);
 
   bindFirTooltipAndHover(hitPolygon, feature);
   hitPolygon.addTo(firLayer);
 }
     
-function bindFirTooltipAndHover(layer, feature) {
+function bindFirTooltipAndHover(layer, feature, options = {}) {
   const firLabel = getFirLabel(feature);
+  const isHitPolygon = !!options.isHitPolygon;
 
   layer.bindTooltip(escapeHtml(firLabel), {
     permanent: false,
@@ -2193,13 +2214,21 @@ function bindFirTooltipAndHover(layer, feature) {
   });
 
   layer.on("mouseover", function () {
-    if (layer.setStyle) {
+    if (!layer.setStyle) return;
+
+    if (isHitPolygon) {
+      layer.setStyle(getFirHitPolygonHoverStyle());
+    } else {
       layer.setStyle(getFirHoverStyle());
     }
   });
 
   layer.on("mouseout", function () {
-    if (layer.setStyle) {
+    if (!layer.setStyle) return;
+
+    if (isHitPolygon) {
+      layer.setStyle(getFirHitPolygonStyle());
+    } else {
       const s = getFirStyle();
       layer.setStyle({
         color: s.color,
