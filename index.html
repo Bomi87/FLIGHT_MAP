@@ -1903,7 +1903,62 @@ function getShapeCodeLabel(name) {
       drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName, renderContext);
     }
 
-function getFirCode(props) {
+
+
+async function loadFirGeojson() {
+  if (firLoaded) return;
+
+  const res = await fetch("world_fir.geojson?v=" + Date.now(), {
+    cache: "no-store"
+  });
+
+  if (!res.ok) {
+    throw new Error("world_fir.geojson load failed: " + res.status);
+  }
+
+  const originalData = await res.json();
+  const data = buildFirGeoJsonNearestWorldCopy(originalData);
+
+  firLayer.clearLayers();
+
+  firGeoJsonLayer = L.geoJSON(data, {
+    style: function () {
+      return getFirStyle();
+    },
+
+    onEachFeature: function (feature, layer) {
+      const p = feature.properties || {};
+      const code = getFirCode(p);
+      const name = getFirName(p, code);
+
+      layer.bindPopup(
+        "<b>" + escapeHtml((code || "UNKNOWN") + " / " + (name || "-")) + "</b>"
+      );
+
+      layer.bindTooltip(code || name || "FIR", {
+        permanent: false,
+        direction: "center",
+        className: "fir-label",
+        opacity: 1
+      });
+
+      layer.on("mouseover", function () {
+        if (layer.setStyle) layer.setStyle(getFirHoverStyle());
+      });
+
+      layer.on("mouseout", function () {
+        if (layer.setStyle) layer.setStyle(getFirStyle());
+      });
+    }
+  });
+
+  firGeoJsonLayer.addTo(firLayer);
+  firLoaded = true;
+}
+
+  firLoaded = true;
+}
+    function getFirCode(props) {
   const candidates = [
     props.fir_code,
     props.FIR_CODE,
@@ -1966,6 +2021,7 @@ function getFirName(props, code) {
 
   return code || "UNKNOWN FIR";
 }
+
 function getFirStyle() {
   return {
     color: "#0f766e",
@@ -1985,12 +2041,12 @@ function getFirHoverStyle() {
     fillOpacity: 0.10
   };
 }
+
 function getFeatureRepresentativeLon(feature) {
   try {
     const geom = feature && feature.geometry;
     if (!geom || !geom.coordinates) return 0;
 
-    const coords = geom.coordinates;
     const values = [];
 
     function collectLon(arr) {
@@ -2008,12 +2064,11 @@ function getFeatureRepresentativeLon(feature) {
       arr.forEach(collectLon);
     }
 
-    collectLon(coords);
+    collectLon(geom.coordinates);
 
     if (!values.length) return 0;
 
-    const sum = values.reduce((a, b) => a + b, 0);
-    return sum / values.length;
+    return values.reduce((a, b) => a + b, 0) / values.length;
   } catch (e) {
     return 0;
   }
@@ -2038,17 +2093,10 @@ function getBestLonOffsetForFeature(feature, referenceLon) {
 
   return bestOffset;
 }
-/*******************************************************
- * FIR World Copy Helper
- * 중요:
- * Polygon 좌표를 vertex마다 180/360 보정하면 경계가 찢어짐.
- * 그래서 FIR 전체를 -360 / 0 / +360 복사본으로 표시함.
- *******************************************************/
-function cloneGeoJsonWithLonOffset(data, lonOffset) {
-  const cloned = JSON.parse(JSON.stringify(data));
 
 function buildFirGeoJsonNearestWorldCopy(data) {
   const cloned = JSON.parse(JSON.stringify(data));
+
   const referenceLon = Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)
     ? window.__ROUTE_RENDER_REFERENCE_LON
     : map.getCenter().lng;
@@ -2078,100 +2126,6 @@ function buildFirGeoJsonNearestWorldCopy(data) {
 
   return cloned;
 }
-  
-  function shiftCoords(coords) {
-    if (!Array.isArray(coords)) return coords;
-
-    // GeoJSON coordinate pair: [lon, lat]
-    if (
-      coords.length >= 2 &&
-      typeof coords[0] === "number" &&
-      typeof coords[1] === "number"
-    ) {
-      return [
-        coords[0] + lonOffset,
-        coords[1]
-      ];
-    }
-
-    return coords.map(shiftCoords);
-  }
-
-  if (cloned.features && Array.isArray(cloned.features)) {
-    cloned.features.forEach(feature => {
-      if (!feature.geometry || !feature.geometry.coordinates) return;
-      feature.geometry.coordinates = shiftCoords(feature.geometry.coordinates);
-    });
-  }
-
-  return cloned;
-}
-
-function addFirGeoJsonCopy(data, lonOffset) {
-  const shiftedData = cloneGeoJsonWithLonOffset(data, lonOffset);
-
-  const layer = L.geoJSON(shiftedData, {
-    style: function () {
-      return getFirStyle();
-    },
-
-    onEachFeature: function (feature, layer) {
-      const p = feature.properties || {};
-      const code = getFirCode(p);
-      const name = getFirName(p, code);
-
-      const propsHtml =
-        "<details style='margin-top:6px; font-size:10px;'>" +
-        "<summary>Properties</summary>" +
-        "<pre style='white-space:pre-wrap; max-width:260px; max-height:160px; overflow:auto;'>" +
-        escapeHtml(JSON.stringify(p, null, 2)) +
-        "</pre></details>";
-
-      layer.bindPopup(
-        "<b>FIR: " + escapeHtml(code || "UNKNOWN") + "</b><br>" +
-        "Name: " + escapeHtml(name || "-") +
-        propsHtml
-      );
-
-      layer.bindTooltip(code || name || "FIR", {
-        permanent: false,
-        direction: "center",
-        className: "fir-label",
-        opacity: 1
-      });
-
-      layer.on("mouseover", function () {
-        if (layer.setStyle) {
-          layer.setStyle(getFirHoverStyle());
-        }
-      });
-
-      layer.on("mouseout", function () {
-        if (layer.setStyle) {
-          layer.setStyle(getFirStyle());
-        }
-      });
-    }
-  });
-
-  layer.addTo(firLayer);
-  return layer;
-}
-
-async function loadFirGeojson() {
-  if (firLoaded) return;
-
-  const res = await fetch("world_fir.geojson?v=" + Date.now(), {
-    cache: "no-store"
-  });
-
-  if (!res.ok) {
-    throw new Error("world_fir.geojson load failed: " + res.status);
-  }
-
-  const data = await res.json();
-
-  firLayer.clearLayers();
 
 async function loadFirGeojson() {
   if (firLoaded) return;
@@ -2211,11 +2165,15 @@ async function loadFirGeojson() {
       });
 
       layer.on("mouseover", function () {
-        if (layer.setStyle) layer.setStyle(getFirHoverStyle());
+        if (layer.setStyle) {
+          layer.setStyle(getFirHoverStyle());
+        }
       });
 
       layer.on("mouseout", function () {
-        if (layer.setStyle) layer.setStyle(getFirStyle());
+        if (layer.setStyle) {
+          layer.setStyle(getFirStyle());
+        }
       });
     }
   });
@@ -2223,10 +2181,6 @@ async function loadFirGeojson() {
   firGeoJsonLayer.addTo(firLayer);
   firLoaded = true;
 }
-
-  firLoaded = true;
-}
-    
     function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
 
