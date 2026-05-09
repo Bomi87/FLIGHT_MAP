@@ -276,7 +276,7 @@
 .artcc-label-text {
   display: inline-block;
   white-space: nowrap;
-  color: #ffffff;
+  color: #22c55e;
   font-size: 13px;
   font-weight: 800;
   text-shadow:
@@ -2516,21 +2516,26 @@ function getGeoJsonRings(geometry) {
   return [];
 }
 
-function normalizeGeoJsonRingToLatLng(ring) {
+
+    
+function normalizeGeoJsonRingToLatLng(ring, referenceLon) {
   if (!Array.isArray(ring) || ring.length < 3) return [];
 
   return ring
     .filter(pt => Array.isArray(pt) && pt.length >= 2)
-    .map(pt => [Number(pt[1]), Number(pt[0])])
+    .map(pt => {
+      const lat = Number(pt[1]);
+      const lon = shiftLonNearReference(Number(pt[0]), referenceLon);
+      return [lat, lon];
+    })
     .filter(pt =>
       Number.isFinite(pt[0]) &&
       Number.isFinite(pt[1]) &&
-      Math.abs(pt[0]) <= 90 &&
-      Math.abs(pt[1]) <= 180
+      Math.abs(pt[0]) <= 90
     );
 }
 
-function getArtccCenterLatLng(feature) {
+function getArtccCenterLatLng(feature, referenceLon) {
   const props = feature.properties || {};
 
   const latCandidates = [
@@ -2551,10 +2556,10 @@ function getArtccCenterLatLng(feature) {
 
   for (let i = 0; i < latCandidates.length; i++) {
     const lat = Number(latCandidates[i]);
-    const lon = Number(lonCandidates[i]);
+    const lonRaw = Number(lonCandidates[i]);
 
-    if (Number.isFinite(lat) && Number.isFinite(lon)) {
-      return [lat, lon];
+    if (Number.isFinite(lat) && Number.isFinite(lonRaw)) {
+      return [lat, shiftLonNearReference(lonRaw, referenceLon)];
     }
   }
 
@@ -2562,7 +2567,7 @@ function getArtccCenterLatLng(feature) {
   const points = [];
 
   rings.forEach(ring => {
-    const latlngs = normalizeGeoJsonRingToLatLng(ring);
+    const latlngs = normalizeGeoJsonRingToLatLng(ring, referenceLon);
     latlngs.forEach(p => points.push(p));
   });
 
@@ -2574,8 +2579,8 @@ function getArtccCenterLatLng(feature) {
   return [avgLat, avgLon];
 }
 
-function addArtccLabel(feature) {
-  const center = getArtccCenterLatLng(feature);
+function addArtccLabel(feature, referenceLon) {
+  const center = getArtccCenterLatLng(feature, referenceLon);
   if (!center) return;
 
   const label = getArtccLabel(feature);
@@ -2595,14 +2600,14 @@ function addArtccLabel(feature) {
   }).addTo(artccLayer);
 }
 
-function drawArtccFeature(feature) {
+function drawArtccFeature(feature, referenceLon) {
   const rings = getGeoJsonRings(feature.geometry);
   if (!rings.length) return;
 
   const polygonRings = [];
 
   rings.forEach(ring => {
-    const latlngs = normalizeGeoJsonRingToLatLng(ring);
+    const latlngs = normalizeGeoJsonRingToLatLng(ring, referenceLon);
     if (latlngs.length >= 3) {
       polygonRings.push(latlngs);
     }
@@ -2623,12 +2628,9 @@ function drawArtccFeature(feature) {
     polygon.setStyle(getArtccStyle());
   });
 
-  addArtccLabel(feature);
+  addArtccLabel(feature, referenceLon);
 }
-
 async function loadArtccGeojson() {
-  if (artccLoaded) return;
-
   const res = await fetch("artcc.geojson?v=" + Date.now(), {
     cache: "no-store"
   });
@@ -2643,13 +2645,21 @@ async function loadArtccGeojson() {
     throw new Error("artcc.geojson is not valid GeoJSON FeatureCollection");
   }
 
+  const referenceLon = getArtccRenderReferenceLon();
+
   artccLayer.clearLayers();
 
   data.features.forEach(feature => {
-    drawArtccFeature(feature);
+    drawArtccFeature(feature, referenceLon);
   });
 
-  artccLoaded = true;
+
+}
+function getArtccRenderReferenceLon() {
+  if (Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)) {
+    return window.__ROUTE_RENDER_REFERENCE_LON;
+  }
+  return map.getCenter().lng;
 }
     
     function createNdbToggleControl() {
