@@ -188,9 +188,9 @@
   height: 24px;
   border: none;
   background: #2563eb;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
+  color: #ffffff !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
   cursor: pointer;
   padding: 0 6px;
   text-align: center;
@@ -310,14 +310,9 @@
     const drawn = L.featureGroup().addTo(map);
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
-    const firLayer = L.featureGroup();
 
     const waypointLabelRegistry = [];
     const airspaceLabelRegistry = [];
-
-    let firVisible = false;
-    let firLoaded = false;
-    let firGeoJsonLayer = null;
 
     let ndbRawData = [];
     let ndbVisible = false;
@@ -1861,9 +1856,10 @@ function getShapeCodeLabel(name) {
 
 /*******************************************************
  * FIR Layer helpers
- * - world_fir.geojson의 소문자 icaocode / nom_comp 필드를 읽음
- * - 클릭 팝업은 사용하지 않고 hover tooltip만 표시
- * - Polygon을 직접 그리지 않고 ring을 polyline segment로 그려 180도선 seam line을 줄임
+ * - world_fir.geojson의 icaocode / nom_comp 필드를 사용
+ * - 클릭 팝업 없음
+ * - FIR boundary는 segment polyline으로 표시해서 180도 seam line을 줄임
+ * - FIR 이름은 항상 지도 위에 표시
  *******************************************************/
 function getFirCode(props) {
   const candidates = [
@@ -1912,10 +1908,10 @@ function getFirName(props, code) {
   const candidates = [
     props.nom_comp,
     props.NOM_COMP,
-    props.name,
-    props.NAME,
     props.firname,
     props.FIRNAME,
+    props.name,
+    props.NAME,
     props.fir_name,
     props.FIR_NAME,
     props.firName,
@@ -1935,6 +1931,13 @@ function getFirName(props, code) {
   }
 
   return code || "UNKNOWN FIR";
+}
+
+function getFirLabel(feature) {
+  const p = feature.properties || {};
+  const code = getFirCode(p);
+  const name = getFirName(p, code);
+  return (code ? code + " / " : "") + (name || "FIR");
 }
 
 function getFirStyle() {
@@ -1965,6 +1968,11 @@ function getFirRenderReferenceLon() {
 }
 
 function getFeatureRepresentativeLon(feature) {
+  const props = feature.properties || {};
+
+  const centlong = Number(props.centlong ?? props.CENTLONG);
+  if (Number.isFinite(centlong)) return centlong;
+
   try {
     const geom = feature && feature.geometry;
     if (!geom || !geom.coordinates) return 0;
@@ -2092,13 +2100,63 @@ function normalizeFirRingToSegments(ring, referenceLon, lonOffset) {
   return segments;
 }
 
-function bindFirTooltipAndHover(layer, feature) {
-  const p = feature.properties || {};
-  const code = getFirCode(p);
-  const name = getFirName(p, code);
-  const firLabel = (code ? code + " / " : "") + (name || "FIR");
+function getFirLabelLatLng(feature, referenceLon, lonOffset) {
+  const props = feature.properties || {};
+  const centlat = Number(props.centlat ?? props.CENTLAT);
+  const centlong = Number(props.centlong ?? props.CENTLONG);
 
-  layer.bindTooltip(firLabel, {
+  if (Number.isFinite(centlat) && Number.isFinite(centlong)) {
+    return [centlat, shiftLonNearReference(centlong, referenceLon) + lonOffset];
+  }
+
+  const rings = extractFirRingsFromGeometry(feature.geometry);
+  const values = [];
+
+  rings.forEach(ring => {
+    (ring || []).forEach(pt => {
+      if (!isGeoJsonCoordPair(pt)) return;
+      const lat = Number(pt[1]);
+      const lon = shiftLonNearReference(Number(pt[0]), referenceLon) + lonOffset;
+      if (Number.isFinite(lat) && Number.isFinite(lon)) values.push([lat, lon]);
+    });
+  });
+
+  if (!values.length) return null;
+
+  const lat = values.reduce((a, b) => a + b[0], 0) / values.length;
+  const lon = values.reduce((a, b) => a + b[1], 0) / values.length;
+  return [lat, lon];
+}
+
+function addFirPermanentLabel(feature, referenceLon, lonOffset) {
+  const latlng = getFirLabelLatLng(feature, referenceLon, lonOffset);
+  if (!latlng) return;
+
+  const label = getFirLabel(feature);
+  if (!label) return;
+
+  const marker = L.marker(latlng, {
+    opacity: 0,
+    interactive: false,
+    keyboard: false
+  }).addTo(firLayer);
+
+  marker.bindTooltip(escapeHtml(label), {
+    permanent: true,
+    direction: "center",
+    className: "fir-label",
+    opacity: 1
+  });
+
+  if (marker.openTooltip) {
+    marker.openTooltip();
+  }
+}
+
+function bindFirTooltipAndHover(layer, feature) {
+  const firLabel = getFirLabel(feature);
+
+  layer.bindTooltip(escapeHtml(firLabel), {
     permanent: false,
     direction: "center",
     className: "fir-label",
@@ -2114,7 +2172,12 @@ function bindFirTooltipAndHover(layer, feature) {
 
   layer.on("mouseout", function () {
     if (layer.setStyle) {
-      layer.setStyle(getFirStyle());
+      const s = getFirStyle();
+      layer.setStyle({
+        color: s.color,
+        weight: s.weight,
+        opacity: s.opacity
+      });
     }
   });
 }
@@ -2143,6 +2206,8 @@ function drawFirFeature(feature, referenceLon) {
       layer.addTo(firLayer);
     });
   });
+
+  addFirPermanentLabel(feature, referenceLon, lonOffset);
 }
 
 async function loadFirGeojson() {
@@ -2170,7 +2235,6 @@ async function loadFirGeojson() {
   firGeoJsonLayer = firLayer;
   firLoaded = true;
 }
-
     function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
 
@@ -2216,12 +2280,11 @@ async function loadFirGeojson() {
       return control;
     }
 
-
 function createFirToggleControl() {
   const control = L.control({ position: "topright" });
 
   control.onAdd = function () {
-    const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-fir-toggle");
+    const container = L.DomUtil.create("div", "leaflet-control leaflet-control-fir-toggle");
     const button = L.DomUtil.create("button", "", container);
 
     function updateButton() {
@@ -2384,7 +2447,6 @@ async function refreshRouteOnly() {
       scheduleAirspaceLabelUpdate(20);
       scheduleRedrawNDB();
 
-      // Route 기준 경도가 바뀌면 FIR도 같은 world copy 기준으로 다시 표시
       if (firVisible) {
         firLayer.clearLayers();
         firLoaded = false;
