@@ -2127,6 +2127,50 @@ async function loadFirGeojson() {
   firLoaded = true;
 }
 
+ function createNdbToggleControl() {
+      const control = L.control({ position: "topright" });
+
+      control.onAdd = function () {
+        const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-ndb-toggle");
+        const button = L.DomUtil.create("button", "", container);
+
+        function updateButton() {
+          button.textContent = ndbVisible ? "NDB On" : "NDB Off";
+          button.className = ndbVisible ? "ndb-on" : "";
+        }
+
+        button.type = "button";
+        updateButton();
+
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+
+        L.DomEvent.on(button, "click", function (e) {
+          L.DomEvent.stop(e);
+
+          ndbVisible = !ndbVisible;
+
+          if (ndbVisible) {
+            if (!map.hasLayer(acjNdbLayer)) {
+              map.addLayer(acjNdbLayer);
+            }
+            scheduleRedrawNDB();
+          } else {
+            clearTimeout(ndbRedrawTimer);
+            acjNdbLayer.clearLayers();
+            if (map.hasLayer(acjNdbLayer)) {
+              map.removeLayer(acjNdbLayer);
+            }
+          }
+
+          updateButton();
+        });
+
+        return container;
+      };
+
+      return control;
+    }
 
 function createFirToggleControl() {
   const control = L.control({ position: "topright" });
