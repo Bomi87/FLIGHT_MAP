@@ -1987,6 +1987,51 @@ function getFirHoverStyle() {
   };
 }
 
+
+function unwrapGeoJsonRing(ring, referenceLon) {
+  if (!Array.isArray(ring) || !ring.length) return ring;
+
+  const result = [];
+
+  let firstLon = shiftLonNearReference(ring[0][0], referenceLon);
+  result.push([firstLon, ring[0][1]]);
+
+  let prevLon = firstLon;
+
+  for (let i = 1; i < ring.length; i++) {
+    let lon = Number(ring[i][0]);
+    const lat = ring[i][1];
+
+    while (lon - prevLon > 180) lon -= 360;
+    while (lon - prevLon < -180) lon += 360;
+
+    result.push([lon, lat]);
+    prevLon = lon;
+  }
+
+  return result;
+}
+
+function unwrapGeoJsonCoordinatesByGeometry(geometry, referenceLon) {
+  if (!geometry || !geometry.coordinates) return geometry;
+
+  const cloned = JSON.parse(JSON.stringify(geometry));
+
+  if (cloned.type === "Polygon") {
+    cloned.coordinates = cloned.coordinates.map(ring =>
+      unwrapGeoJsonRing(ring, referenceLon)
+    );
+  }
+
+  if (cloned.type === "MultiPolygon") {
+    cloned.coordinates = cloned.coordinates.map(poly =>
+      poly.map(ring => unwrapGeoJsonRing(ring, referenceLon))
+    );
+  }
+
+  return cloned;
+}
+
 function getFeatureRepresentativeLon(feature) {
   try {
     const geom = feature && feature.geometry;
@@ -2039,6 +2084,20 @@ function getBestLonOffsetForFeature(feature, referenceLon) {
   return bestOffset;
 }
 
+function shiftGeoJsonCoordinates(coords, lonOffset) {
+  if (!Array.isArray(coords)) return coords;
+
+  if (
+    coords.length >= 2 &&
+    typeof coords[0] === "number" &&
+    typeof coords[1] === "number"
+  ) {
+    return [coords[0] + lonOffset, coords[1]];
+  }
+
+  return coords.map(child => shiftGeoJsonCoordinates(child, lonOffset));
+}
+
 function buildFirGeoJsonNearestWorldCopy(data) {
   const cloned = JSON.parse(JSON.stringify(data));
 
@@ -2046,32 +2105,26 @@ function buildFirGeoJsonNearestWorldCopy(data) {
     ? window.__ROUTE_RENDER_REFERENCE_LON
     : map.getCenter().lng;
 
-  function shiftCoords(coords, lonOffset) {
-    if (!Array.isArray(coords)) return coords;
-
-    if (
-      coords.length >= 2 &&
-      typeof coords[0] === "number" &&
-      typeof coords[1] === "number"
-    ) {
-      return [coords[0] + lonOffset, coords[1]];
-    }
-
-    return coords.map(child => shiftCoords(child, lonOffset));
-  }
-
   if (cloned.features && Array.isArray(cloned.features)) {
     cloned.features.forEach(feature => {
       if (!feature.geometry || !feature.geometry.coordinates) return;
 
       const lonOffset = getBestLonOffsetForFeature(feature, referenceLon);
-      feature.geometry.coordinates = shiftCoords(feature.geometry.coordinates, lonOffset);
+
+      feature.geometry = unwrapGeoJsonCoordinatesByGeometry(
+        feature.geometry,
+        referenceLon
+      );
+
+      feature.geometry.coordinates = shiftGeoJsonCoordinates(
+        feature.geometry.coordinates,
+        lonOffset
+      );
     });
   }
 
   return cloned;
 }
-
 async function loadFirGeojson() {
   if (firLoaded) return;
 
