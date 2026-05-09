@@ -1903,62 +1903,7 @@ function getShapeCodeLabel(name) {
       drawRouteEndpointMarkers(routeEndpoints, targetLayer, sourceName, renderContext);
     }
 
-
-
-async function loadFirGeojson() {
-  if (firLoaded) return;
-
-  const res = await fetch("world_fir.geojson?v=" + Date.now(), {
-    cache: "no-store"
-  });
-
-  if (!res.ok) {
-    throw new Error("world_fir.geojson load failed: " + res.status);
-  }
-
-  const originalData = await res.json();
-  const data = buildFirGeoJsonNearestWorldCopy(originalData);
-
-  firLayer.clearLayers();
-
-  firGeoJsonLayer = L.geoJSON(data, {
-    style: function () {
-      return getFirStyle();
-    },
-
-    onEachFeature: function (feature, layer) {
-      const p = feature.properties || {};
-      const code = getFirCode(p);
-      const name = getFirName(p, code);
-
-      layer.bindPopup(
-        "<b>" + escapeHtml((code || "UNKNOWN") + " / " + (name || "-")) + "</b>"
-      );
-
-      layer.bindTooltip(code || name || "FIR", {
-        permanent: false,
-        direction: "center",
-        className: "fir-label",
-        opacity: 1
-      });
-
-      layer.on("mouseover", function () {
-        if (layer.setStyle) layer.setStyle(getFirHoverStyle());
-      });
-
-      layer.on("mouseout", function () {
-        if (layer.setStyle) layer.setStyle(getFirStyle());
-      });
-    }
-  });
-
-  firGeoJsonLayer.addTo(firLayer);
-  firLoaded = true;
-}
-
-  firLoaded = true;
-}
-    function getFirCode(props) {
+function getFirCode(props) {
   const candidates = [
     props.fir_code,
     props.FIR_CODE,
@@ -2181,50 +2126,8 @@ async function loadFirGeojson() {
   firGeoJsonLayer.addTo(firLayer);
   firLoaded = true;
 }
-    function createNdbToggleControl() {
-      const control = L.control({ position: "topright" });
 
-      control.onAdd = function () {
-        const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-ndb-toggle");
-        const button = L.DomUtil.create("button", "", container);
 
-        function updateButton() {
-          button.textContent = ndbVisible ? "NDB On" : "NDB Off";
-          button.className = ndbVisible ? "ndb-on" : "";
-        }
-
-        button.type = "button";
-        updateButton();
-
-        L.DomEvent.disableClickPropagation(container);
-        L.DomEvent.disableScrollPropagation(container);
-
-        L.DomEvent.on(button, "click", function (e) {
-          L.DomEvent.stop(e);
-
-          ndbVisible = !ndbVisible;
-
-          if (ndbVisible) {
-            if (!map.hasLayer(acjNdbLayer)) {
-              map.addLayer(acjNdbLayer);
-            }
-            scheduleRedrawNDB();
-          } else {
-            clearTimeout(ndbRedrawTimer);
-            acjNdbLayer.clearLayers();
-            if (map.hasLayer(acjNdbLayer)) {
-              map.removeLayer(acjNdbLayer);
-            }
-          }
-
-          updateButton();
-        });
-
-        return container;
-      };
-
-      return control;
-    }
 function createFirToggleControl() {
   const control = L.control({ position: "topright" });
 
