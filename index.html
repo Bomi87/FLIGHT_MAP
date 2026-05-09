@@ -1923,102 +1923,27 @@ function getFirCode(props) {
     props.IDENT,
     props.ident,
     props.ID,
-    props.id,
-    props.NAME,
-    props.name,
-    props.NOM_COMP,
-    props.nom_comp,
-    props.label,
-    props.LABEL
+    props.id
   ];
 
   for (const v of candidates) {
     if (v === undefined || v === null) continue;
 
-    const text = String(v).trim().toUpperCase();
-
-    // 예: RJJJ, RKRR, VHHK, ZAN, ZOA 등
-    const direct = text.replace(/\s+/g, "");
-    if (/^[A-Z]{3,6}$/.test(direct) && direct !== "UNKNOWN") {
-      return direct;
-    }
-
-    // 예: "RJJJ FUKUOKA FIR", "RJJJ / FUKUOKA FIR"
-    const match = text.match(/\b[A-Z]{3,6}\b/);
-    if (match && match[0] !== "UNKNOWN") {
-      return match[0];
-    }
-  }
-
-  // 마지막 fallback: 모든 property 값에서 FIR 코드처럼 보이는 값 찾기
-  const allText = Object.values(props || {})
-    .map(v => String(v || ""))
-    .join(" ")
-    .toUpperCase();
-
-  const allMatch = allText.match(/\b[A-Z]{3,6}\b/);
-  return allMatch && allMatch[0] !== "UNKNOWN" ? allMatch[0] : "";
-}
-
-function getFirCode(props) {
-  const candidates = [
-    props.fir_code,
-    props.FIR_CODE,
-    props.firCode,
-    props.ICAOCODE,
-    props.icaoCode,
-    props.ICAO_CODE,
-    props.icao_code,
-    props.ICAO,
-    props.icao,
-    props.ULC,
-    props.ulc,
-    props.FIRCODE,
-    props.fircode,
-    props.CODE,
-    props.code,
-    props.IDENT,
-    props.ident,
-    props.ID,
-    props.id,
-    props.NAME,
-    props.name,
-    props.NOM_COMP,
-    props.nom_comp,
-    props.label,
-    props.LABEL
-  ];
-
-  for (const v of candidates) {
-    if (v === undefined || v === null) continue;
-
-    const text = String(v).trim().toUpperCase();
+    const text = String(v).trim().toUpperCase().replace(/\s+/g, "");
     if (!text) continue;
 
-    const direct = text.replace(/\s+/g, "");
-
-    // RJJJ, RKRR, VHHK, ZAN, ZOA 등
-    if (/^[A-Z]{3,6}$/.test(direct) && direct !== "UNKNOWN") {
-      return direct;
-    }
-
-    const match = text.match(/\b[A-Z]{3,6}\b/);
-    if (match && match[0] !== "UNKNOWN") {
-      return match[0];
+    if (/^[A-Z]{4,6}$/.test(text) && text !== "UNKNOWN") {
+      return text;
     }
   }
 
-  const allText = Object.values(props || {})
-    .map(v => String(v || ""))
-    .join(" ")
-    .toUpperCase();
-
-  const allMatch = allText.match(/\b[A-Z]{3,6}\b/);
-  return allMatch && allMatch[0] !== "UNKNOWN" ? allMatch[0] : "";
+  return "";
 }
 
 function getFirName(props, code) {
   const candidates = [
+    props.NOM_COMP,
+    props.nom_comp,
     props.name,
     props.NAME,
     props.fir_name,
@@ -2026,12 +1951,8 @@ function getFirName(props, code) {
     props.firName,
     props.FIRname,
     props.FIRNAME,
-    props.NOM_COMP,
-    props.nom_comp,
-    props.LABEL,
     props.label,
-    props.description,
-    props.DESCRIPTION
+    props.LABEL
   ];
 
   for (const v of candidates) {
@@ -2045,7 +1966,6 @@ function getFirName(props, code) {
 
   return code || "UNKNOWN FIR";
 }
-
 function getFirStyle() {
   return {
     color: "#0f766e",
@@ -2065,7 +1985,59 @@ function getFirHoverStyle() {
     fillOpacity: 0.10
   };
 }
+function getFeatureRepresentativeLon(feature) {
+  try {
+    const geom = feature && feature.geometry;
+    if (!geom || !geom.coordinates) return 0;
 
+    const coords = geom.coordinates;
+    const values = [];
+
+    function collectLon(arr) {
+      if (!Array.isArray(arr)) return;
+
+      if (
+        arr.length >= 2 &&
+        typeof arr[0] === "number" &&
+        typeof arr[1] === "number"
+      ) {
+        values.push(arr[0]);
+        return;
+      }
+
+      arr.forEach(collectLon);
+    }
+
+    collectLon(coords);
+
+    if (!values.length) return 0;
+
+    const sum = values.reduce((a, b) => a + b, 0);
+    return sum / values.length;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function getBestLonOffsetForFeature(feature, referenceLon) {
+  const baseLon = getFeatureRepresentativeLon(feature);
+  const candidates = [-360, 0, 360];
+
+  let bestOffset = 0;
+  let bestDiff = Infinity;
+
+  candidates.forEach(offset => {
+    const shiftedLon = baseLon + offset;
+    const diff = Math.abs(shiftedLon - referenceLon);
+
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestOffset = offset;
+    }
+  });
+
+  return bestOffset;
+}
 /*******************************************************
  * FIR World Copy Helper
  * 중요:
@@ -2075,6 +2047,38 @@ function getFirHoverStyle() {
 function cloneGeoJsonWithLonOffset(data, lonOffset) {
   const cloned = JSON.parse(JSON.stringify(data));
 
+function buildFirGeoJsonNearestWorldCopy(data) {
+  const cloned = JSON.parse(JSON.stringify(data));
+  const referenceLon = Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)
+    ? window.__ROUTE_RENDER_REFERENCE_LON
+    : map.getCenter().lng;
+
+  function shiftCoords(coords, lonOffset) {
+    if (!Array.isArray(coords)) return coords;
+
+    if (
+      coords.length >= 2 &&
+      typeof coords[0] === "number" &&
+      typeof coords[1] === "number"
+    ) {
+      return [coords[0] + lonOffset, coords[1]];
+    }
+
+    return coords.map(child => shiftCoords(child, lonOffset));
+  }
+
+  if (cloned.features && Array.isArray(cloned.features)) {
+    cloned.features.forEach(feature => {
+      if (!feature.geometry || !feature.geometry.coordinates) return;
+
+      const lonOffset = getBestLonOffsetForFeature(feature, referenceLon);
+      feature.geometry.coordinates = shiftCoords(feature.geometry.coordinates, lonOffset);
+    });
+  }
+
+  return cloned;
+}
+  
   function shiftCoords(coords) {
     if (!Array.isArray(coords)) return coords;
 
@@ -2169,12 +2173,56 @@ async function loadFirGeojson() {
 
   firLayer.clearLayers();
 
-  // 중요:
-  // FIR polygon을 개별 좌표 보정하지 않고,
-  // 세계 복사본을 -360 / 0 / +360으로 표시해서 180도선 꼬임 방지
-  addFirGeoJsonCopy(data, -360);
-  addFirGeoJsonCopy(data, 0);
-  addFirGeoJsonCopy(data, 360);
+async function loadFirGeojson() {
+  if (firLoaded) return;
+
+  const res = await fetch("world_fir.geojson?v=" + Date.now(), {
+    cache: "no-store"
+  });
+
+  if (!res.ok) {
+    throw new Error("world_fir.geojson load failed: " + res.status);
+  }
+
+  const originalData = await res.json();
+  const data = buildFirGeoJsonNearestWorldCopy(originalData);
+
+  firLayer.clearLayers();
+
+  firGeoJsonLayer = L.geoJSON(data, {
+    style: function () {
+      return getFirStyle();
+    },
+
+    onEachFeature: function (feature, layer) {
+      const p = feature.properties || {};
+      const code = getFirCode(p);
+      const name = getFirName(p, code);
+
+      layer.bindPopup(
+        "<b>" + escapeHtml((code || "UNKNOWN") + " / " + (name || "-")) + "</b>"
+      );
+
+      layer.bindTooltip(code || name || "FIR", {
+        permanent: false,
+        direction: "center",
+        className: "fir-label",
+        opacity: 1
+      });
+
+      layer.on("mouseover", function () {
+        if (layer.setStyle) layer.setStyle(getFirHoverStyle());
+      });
+
+      layer.on("mouseout", function () {
+        if (layer.setStyle) layer.setStyle(getFirStyle());
+      });
+    }
+  });
+
+  firGeoJsonLayer.addTo(firLayer);
+  firLoaded = true;
+}
 
   firLoaded = true;
 }
