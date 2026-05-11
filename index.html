@@ -585,9 +585,19 @@
 }
 
 /* 빨간 positioning dot 아이콘 */
+/* 빨간 positioning dot 아이콘 */
 .positioning-dot-icon {
   background: transparent !important;
   border: none !important;
+}
+
+.positioning-hitbox {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
 }
 
 .positioning-dot {
@@ -3307,13 +3317,17 @@ function renderPositioningMarkers(positions) {
 
     const lon = shiftLonNearReference(rawLon, referenceLon);
 
-    const posIcon = L.divIcon({
-      className: "positioning-dot-icon",
-      html: `<div class="positioning-dot"></div>`,
-      iconSize: [12, 12],
-      iconAnchor: [6, 6],
-      popupAnchor: [0, -8]
-    });
+const posIcon = L.divIcon({
+  className: "positioning-dot-icon",
+  html: `
+    <div class="positioning-hitbox">
+      <div class="positioning-dot"></div>
+    </div>
+  `,
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+  popupAnchor: [0, -16]
+});
 
     const marker = L.marker([lat, lon], {
       icon: posIcon,
@@ -3321,12 +3335,19 @@ function renderPositioningMarkers(positions) {
       keyboard: false
     });
 
-    marker.bindPopup(buildPositioningPopup(pos), {
-      ...POPUP_OPTIONS,
-      autoPan: true
-    });
+marker.bindPopup(buildPositioningPopup(pos), {
+  ...POPUP_OPTIONS,
+  autoPan: true
+});
 
-    marker.addTo(positioningLayer);
+marker.on("click touchstart", function (e) {
+  if (e && e.originalEvent) {
+    L.DomEvent.stop(e.originalEvent);
+  }
+  marker.openPopup();
+});
+
+marker.addTo(positioningLayer);
 
     marker.bindTooltip(
       buildPositionSummaryBoxHtml(pos),
