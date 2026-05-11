@@ -765,8 +765,10 @@ const routeBoundsGroup = L.featureGroup();
 const firLayer = L.featureGroup();
 
 /* ===== Aircraft Positioning 설정 시작 ===== */
-const POSITIONING_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxmr_gEXFcQEWA29rHwVB7pSs_Aqxm5SFSlJfF4x9sD80rJLFaBq3IGuCR5bx7vnxyupQ/exec";
+const POSITIONING_BACKEND_URL = "https://script.google.com/macros/s/AKfycbz1HgMPU-LjbiZ68Q_x9-g3BEZaiTwuSfL5BCFzKiehpJ9xvIY5_p-7NRTNBHOEXrphAQ/exec";
 const POSITIONING_WEBAPP_KEY = "SK_POSITION_20260511";
+
+    let POSITIONING_FORCE_GMAIL_ONCE = true;
 
 const positioningLayer = L.featureGroup().addTo(map);
 /* ===== Aircraft Positioning 설정 끝 ===== */
@@ -3247,11 +3249,14 @@ async function loadPositioningFromGmail(labelName, startUtc) {
   btn.textContent = "불러오는 중...";
 
   try {
-    const data = await callAppsScriptJsonp({
-      key: POSITIONING_WEBAPP_KEY,
-      label: labelName,
-      startUtc: startUtc
-    });
+const data = await callAppsScriptJsonp({
+  key: POSITIONING_WEBAPP_KEY,
+  label: labelName,
+  startUtc: startUtc,
+  force: POSITIONING_FORCE_GMAIL_ONCE ? "1" : "0"
+});
+
+POSITIONING_FORCE_GMAIL_ONCE = false;
 
     if (!data.ok) {
       throw new Error(data.error || "Positioning load failed");
