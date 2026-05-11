@@ -359,7 +359,8 @@
   color: #ffffff;
 }
 
-    /* ===== Aircraft Positioning Panel 시작 ===== */
+
+/* ===== Aircraft Positioning Panel 시작 ===== */
 .positioning-panel {
   position: absolute;
   top: 118px;
@@ -437,17 +438,32 @@
   display: none !important;
 }
 
-.positioning-marker-label-text {
+.positioning-marker-box {
   display: inline-block;
+  min-width: 82px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  text-align: left;
+  line-height: 1.25;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+}
+
+.positioning-marker-aircraft {
+  font-size: 10px;
+  font-weight: 700;
+  color: #facc15;
+  margin-bottom: 3px;
   white-space: nowrap;
-  color: #ff0000;
-  font-size: 12px;
+  text-align: center;
+}
+
+.positioning-marker-line {
+  font-size: 11px;
   font-weight: 800;
-  -webkit-text-stroke: 0.6px #000000;
-  paint-order: stroke fill;
-  text-shadow: none;
-  pointer-events: none;
-  user-select: none;
+  white-space: nowrap;
 }
 
 @media (max-width: 767px) {
@@ -472,7 +488,16 @@
     font-size: 10px;
   }
 
-  .positioning-marker-label-text {
+  .positioning-marker-box {
+    min-width: 74px;
+    padding: 4px 6px;
+  }
+
+  .positioning-marker-aircraft {
+    font-size: 9px;
+  }
+
+  .positioning-marker-line {
     font-size: 10px;
   }
 }
@@ -487,6 +512,7 @@
     }
   </style>
 </head>
+<body>
 <body>
   <div id="map"></div>
 
@@ -573,16 +599,16 @@
       collapsed: false
     }).addTo(map);
 
-    const drawn = L.featureGroup().addTo(map);
-    const acjNdbLayer = L.featureGroup();
-    const routeBoundsGroup = L.featureGroup();
-    const firLayer = L.featureGroup();
-    /* ===== Aircraft Positioning 설정 시작 ===== */
-    const POSITIONING_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyjbXNt0tYr2aRo9iWvnHO0FRLUNZQYC0glBGBRNEqofnrt0DljAhB2mmrufE2JLXjcWA/exec";
-    const POSITIONING_WEBAPP_KEY = "SK_POSITION_20260511";
+  const drawn = L.featureGroup().addTo(map);
+const acjNdbLayer = L.featureGroup();
+const routeBoundsGroup = L.featureGroup();
+const firLayer = L.featureGroup();
 
-    const positioningLayer = L.featureGroup().addTo(map);
-/* ===== Aircraft Positioning 설정 끝 ===== */ 
+/* ===== Aircraft Positioning 설정 시작 ===== */
+const POSITIONING_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyjbXNt0tYr2aRo9iWvnHO0FRLUNZQYC0glBGBRNEqofnrt0DljAhB2mmrufE2JLXjcWA/exec";
+const POSITIONING_WEBAPP_KEY = "SK_POSITION_20260511";
+const positioningLayer = L.featureGroup().addTo(map);
+/* ===== Aircraft Positioning 설정 끝 ===== */
     
 let firVisible = false;
 let firLoaded = false;
@@ -2994,7 +3020,7 @@ createFirToggleControl().addTo(map);
 createArtccToggleControl().addTo(map);
 createRefreshControl().addTo(map);
 
-    /*******************************************************
+/*******************************************************
  * Aircraft Positioning from Gmail Apps Script
  *******************************************************/
 function initPositioningControl() {
@@ -3131,24 +3157,18 @@ function renderPositioningMarkers(positions) {
       color: "#7f1d1d",
       weight: 2,
       fillColor: "#ef4444",
-      fillOpacity: 1,
-      zIndexOffset: 5000
+      fillOpacity: 1
     });
 
     marker.bindPopup(buildPositioningPopup(pos), POPUP_OPTIONS);
     marker.addTo(positioningLayer);
 
-    const labelText = [
-      pos.aircraft || "ACFT",
-      pos.nextWaypoint ? " → " + pos.nextWaypoint : ""
-    ].join("");
-
     marker.bindTooltip(
-      `<span class="positioning-marker-label-text">${escapeHtml(labelText)}</span>`,
+      buildPositionSummaryBoxHtml(pos),
       {
         permanent: true,
         direction: "right",
-        offset: [8, 0],
+        offset: [10, 0],
         className: "positioning-marker-label",
         opacity: 1
       }
@@ -3167,19 +3187,35 @@ function renderPositioningMarkers(positions) {
   }
 }
 
+function buildPositionSummaryBoxHtml(pos) {
+  const aircraft = escapeHtml(pos.aircraft || "ACFT");
+  const reportTime = escapeHtml(formatPositionReportTime(pos));
+  const altitude = escapeHtml(formatPositionAltitude(pos));
+  const fuel = escapeHtml(formatPositionFuel(pos));
+
+  return `
+    <div class="positioning-marker-box">
+      <div class="positioning-marker-aircraft">${aircraft}</div>
+      <div class="positioning-marker-line">• ${reportTime}</div>
+      <div class="positioning-marker-line">• ${altitude}</div>
+      <div class="positioning-marker-line">• ${fuel}</div>
+    </div>
+  `;
+}
+
 function buildPositioningPopup(pos) {
   return `
     <div class="popup-body">
       <div class="popup-title">${escapeHtml(pos.aircraft || "UNKNOWN")}</div>
+      <div class="popup-section" style="font-size:13px; font-weight:700; line-height:1.5;">
+        ${escapeHtml(formatPositionReportTime(pos))}<br>
+        ${escapeHtml(formatPositionAltitude(pos))}<br>
+        ${escapeHtml(formatPositionFuel(pos))}
+      </div>
       <div class="popup-section">
         <table>
-          <tr><td>POS TIME</td><td>${escapeHtml(formatUtcForPopup(pos.reportTimeUtc))}</td></tr>
-          <tr><td>RECEIVED</td><td>${escapeHtml(formatUtcForPopup(pos.receivedAtUtc))}</td></tr>
-          <tr><td>ETA</td><td>${escapeHtml(formatUtcForPopup(pos.etaUtc))}</td></tr>
-          <tr><td>ALT</td><td>${escapeHtml(pos.altitude || "-")}</td></tr>
           <tr><td>NEXT</td><td>${escapeHtml(pos.nextWaypoint || "-")}</td></tr>
           <tr><td>ETA NEXT</td><td>${escapeHtml(pos.etaNext || "-")}</td></tr>
-          <tr><td>FUEL</td><td>${escapeHtml(pos.fuel || "-")}</td></tr>
           <tr><td>POS</td><td>${escapeHtml(pos.positionText || "-")}</td></tr>
         </table>
       </div>
@@ -3187,18 +3223,59 @@ function buildPositioningPopup(pos) {
   `;
 }
 
-function formatUtcForPopup(iso) {
-  if (!iso) return "-";
+function formatPositionReportTime(pos) {
+  if (pos.reportTimeUtc) {
+    const d = new Date(pos.reportTimeUtc);
+    if (!isNaN(d.getTime())) {
+      const hh = String(d.getUTCHours()).padStart(2, "0");
+      const mm = String(d.getUTCMinutes()).padStart(2, "0");
+      return `${hh}${mm}Z`;
+    }
+  }
 
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
+  if (pos.reportTime) {
+    return String(pos.reportTime).replace(/\s*UTC/i, "Z");
+  }
 
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  const mon = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getUTCMonth()];
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return "-";
+}
 
-  return `${dd}${mon} ${hh}${mm}Z`;
+function formatPositionAltitude(pos) {
+  const raw = String(pos.altitude || "").trim();
+
+  if (!raw) return "-";
+
+  if (/^FL\d+$/i.test(raw)) {
+    return raw.toUpperCase();
+  }
+
+  const num = raw.replace(/[^\d]/g, "");
+  if (!num) return "-";
+
+  if (num.length === 3) {
+    return `FL${num}`;
+  }
+
+  if (num.length === 2) {
+    return `${num}00ft`;
+  }
+
+  return `${num}ft`;
+}
+
+function formatPositionFuel(pos) {
+  const aircraft = String(pos.aircraft || "").toUpperCase().trim();
+  const raw = String(pos.fuel || "").trim().replace(/[^\d]/g, "");
+
+  if (!raw) return "-";
+
+  let fuelValue = raw;
+
+  if (aircraft === "HL8080") {
+    fuelValue = raw + "00";
+  }
+
+  return `${fuelValue} lbs`;
 }
 
 function getUtcDateTimeLocalValueMinusHours(hours) {
