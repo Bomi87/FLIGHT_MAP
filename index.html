@@ -527,8 +527,13 @@
       <option value="POSITION(HL8372)">HL8372</option>
     </select>
 
-    <label for="positionStartUtc">Start UTC</label>
-    <input id="positionStartUtc" type="datetime-local" />
+   <label for="positionStartUtc">Start UTC</label>
+<input
+  id="positionStartUtc"
+  type="text"
+  inputmode="numeric"
+  placeholder="2026-05-11 00:00"
+/>
 
     <button id="loadPositionBtn" type="button">Positioning 표시</button>
     <button id="clearPositionBtn" type="button">지우기</button>
@@ -3052,8 +3057,14 @@ function initPositioningControl() {
       return;
     }
 
-    const startUtc = startValue + ":00Z";
-    await loadPositioningFromGmail(labelName, startUtc);
+ const startUtc = parseStartUtcInput(startValue);
+
+if (!startUtc) {
+  alert("Start UTC 형식이 올바르지 않습니다.\n예: 2026-05-11 05:07");
+  return;
+}
+
+await loadPositioningFromGmail(labelName, startUtc);
   });
 
   clearBtn.addEventListener("click", () => {
@@ -3221,6 +3232,20 @@ function buildPositioningPopup(pos) {
   `;
 }
 
+    function formatUtcForPopup(iso) {
+  if (!iso) return "-";
+
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mon = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getUTCMonth()];
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+
+  return `${dd}${mon} ${hh}${mm}Z`;
+}
+
 function formatPositionReportTime(pos) {
   if (pos.reportTimeUtc) {
     const d = new Date(pos.reportTimeUtc);
@@ -3276,6 +3301,30 @@ function formatPositionFuel(pos) {
   return `${fuelValue} lbs`;
 }
 
+    function parseStartUtcInput(value) {
+  const text = String(value || "").trim();
+
+  // 허용 형식:
+  // 2026-05-11 05:07
+  // 2026-05-11T05:07
+  const m = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/);
+
+  if (!m) return "";
+
+  const yyyy = m[1];
+  const mm = m[2];
+  const dd = m[3];
+  const hh = m[4];
+  const mi = m[5];
+
+  const hour = Number(hh);
+  const minute = Number(mi);
+
+  if (hour < 0 || hour > 23) return "";
+  if (minute < 0 || minute > 59) return "";
+
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:00Z`;
+}
 function getUtcDateTimeLocalValueMinusHours(hours) {
   const d = new Date(Date.now() - hours * 60 * 60 * 1000);
 
@@ -3285,7 +3334,7 @@ function getUtcDateTimeLocalValueMinusHours(hours) {
   const hh = String(d.getUTCHours()).padStart(2, "0");
   const mi = String(d.getUTCMinutes()).padStart(2, "0");
 
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
 async function loadByFilename(filename) {
