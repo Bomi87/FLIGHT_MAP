@@ -358,6 +358,126 @@
   background: #5b21b6;
   color: #ffffff;
 }
+
+    /* ===== Aircraft Positioning Panel 시작 ===== */
+.positioning-panel {
+  position: absolute;
+  top: 118px;
+  left: 10px;
+  z-index: 1000;
+  width: 210px;
+  padding: 9px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.35);
+  font-family: Arial, sans-serif;
+}
+
+.positioning-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 7px;
+  color: #111827;
+}
+
+.positioning-panel label {
+  display: block;
+  font-size: 10.5px;
+  color: #374151;
+  margin: 6px 0 3px;
+}
+
+.positioning-panel input,
+.positioning-panel select {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 11.5px;
+  padding: 5px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+}
+
+.positioning-panel button {
+  width: 100%;
+  height: 26px;
+  margin-top: 6px;
+  border: none;
+  border-radius: 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.positioning-panel button:hover {
+  background: #b91c1c;
+}
+
+.positioning-panel button#clearPositionBtn {
+  background: #6b7280;
+}
+
+.positioning-panel button#clearPositionBtn:hover {
+  background: #4b5563;
+}
+
+.positioning-panel button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.positioning-marker-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.positioning-marker-label:before {
+  display: none !important;
+}
+
+.positioning-marker-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  color: #ff0000;
+  font-size: 12px;
+  font-weight: 800;
+  -webkit-text-stroke: 0.6px #000000;
+  paint-order: stroke fill;
+  text-shadow: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (max-width: 767px) {
+  .positioning-panel {
+    top: 88px;
+    left: 8px;
+    width: 185px;
+    padding: 8px;
+  }
+
+  .positioning-title {
+    font-size: 11px;
+  }
+
+  .positioning-panel input,
+  .positioning-panel select {
+    font-size: 11px;
+  }
+
+  .positioning-panel button {
+    height: 25px;
+    font-size: 10px;
+  }
+
+  .positioning-marker-label-text {
+    font-size: 10px;
+  }
+}
+/* ===== Aircraft Positioning Panel 끝 ===== */
+    
     @media (min-width: 768px) {
       .waypoint-label-text,
       .triangle-label-text,
@@ -369,6 +489,22 @@
 </head>
 <body>
   <div id="map"></div>
+
+  <div class="positioning-panel">
+    <div class="positioning-title">Aircraft Positioning</div>
+
+    <label for="positionAircraftSelect">Aircraft</label>
+    <select id="positionAircraftSelect">
+      <option value="POSITION(HL8080)">HL8080</option>
+      <option value="POSITION(HL8372)">HL8372</option>
+    </select>
+
+    <label for="positionStartUtc">Start UTC</label>
+    <input id="positionStartUtc" type="datetime-local" />
+
+    <button id="loadPositionBtn" type="button">Positioning 표시</button>
+    <button id="clearPositionBtn" type="button">지우기</button>
+  </div>
 
   <script>
     const map = L.map("map", {
@@ -440,7 +576,14 @@
     const drawn = L.featureGroup().addTo(map);
     const acjNdbLayer = L.featureGroup();
     const routeBoundsGroup = L.featureGroup();
-const firLayer = L.featureGroup();
+    const firLayer = L.featureGroup();
+    /* ===== Aircraft Positioning 설정 시작 ===== */
+    const POSITIONING_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyjbXNt0tYr2aRo9iWvnHO0FRLUNZQYC0glBGBRNEqofnrt0DljAhB2mmrufE2JLXjcWA/exec";
+    const POSITIONING_WEBAPP_KEY = "SK_POSITION_20260511";
+
+    const positioningLayer = L.featureGroup().addTo(map);
+/* ===== Aircraft Positioning 설정 끝 ===== */ 
+    
 let firVisible = false;
 let firLoaded = false;
 let firGeoJsonLayer = null;
@@ -2851,6 +2994,225 @@ createFirToggleControl().addTo(map);
 createArtccToggleControl().addTo(map);
 createRefreshControl().addTo(map);
 
+    /*******************************************************
+ * Aircraft Positioning from Gmail Apps Script
+ *******************************************************/
+function initPositioningControl() {
+  const aircraftSelect = document.getElementById("positionAircraftSelect");
+  const startInput = document.getElementById("positionStartUtc");
+  const loadBtn = document.getElementById("loadPositionBtn");
+  const clearBtn = document.getElementById("clearPositionBtn");
+
+  if (!aircraftSelect || !startInput || !loadBtn || !clearBtn) {
+    console.warn("Positioning control elements not found.");
+    return;
+  }
+
+  startInput.value = getUtcDateTimeLocalValueMinusHours(8);
+
+  loadBtn.addEventListener("click", async () => {
+    const labelName = aircraftSelect.value;
+    const startValue = startInput.value;
+
+    if (!labelName) {
+      alert("Aircraft를 선택해주세요.");
+      return;
+    }
+
+    if (!startValue) {
+      alert("Start UTC 시간을 선택해주세요.");
+      return;
+    }
+
+    const startUtc = startValue + ":00Z";
+    await loadPositioningFromGmail(labelName, startUtc);
+  });
+
+  clearBtn.addEventListener("click", () => {
+    clearPositioningMarkers();
+  });
+}
+
+async function loadPositioningFromGmail(labelName, startUtc) {
+  const btn = document.getElementById("loadPositionBtn");
+
+  btn.disabled = true;
+  btn.textContent = "불러오는 중...";
+
+  try {
+    const data = await callAppsScriptJsonp({
+      key: POSITIONING_WEBAPP_KEY,
+      label: labelName,
+      startUtc: startUtc
+    });
+
+    if (!data.ok) {
+      throw new Error(data.error || "Positioning load failed");
+    }
+
+    clearPositioningMarkers();
+    renderPositioningMarkers(data.positions || []);
+
+    alert(
+      "Positioning " + (data.count || 0) + "건 표시 완료" +
+      (data.fromCache ? " (cache)" : "")
+    );
+
+  } catch (err) {
+    console.error(err);
+    alert("Positioning 조회 중 오류가 발생했습니다.\n" + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Positioning 표시";
+  }
+}
+
+function callAppsScriptJsonp(params) {
+  return new Promise((resolve, reject) => {
+    const callbackName =
+      "positioningCallback_" +
+      Date.now() +
+      "_" +
+      Math.floor(Math.random() * 100000);
+
+    const query = new URLSearchParams({
+      ...params,
+      callback: callbackName
+    });
+
+    const script = document.createElement("script");
+    script.src = POSITIONING_BACKEND_URL + "?" + query.toString();
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Apps Script request timeout"));
+    }, 30000);
+
+    window[callbackName] = function(data) {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = function() {
+      cleanup();
+      reject(new Error("Apps Script request failed"));
+    };
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[callbackName];
+
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    }
+
+    document.body.appendChild(script);
+  });
+}
+
+function clearPositioningMarkers() {
+  positioningLayer.clearLayers();
+}
+
+function renderPositioningMarkers(positions) {
+  if (!Array.isArray(positions)) return;
+
+  const bounds = [];
+
+  positions.forEach(pos => {
+    const lat = Number(pos.lat);
+    const lon = Number(pos.lon);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+    const marker = L.circleMarker([lat, lon], {
+      radius: 6,
+      color: "#7f1d1d",
+      weight: 2,
+      fillColor: "#ef4444",
+      fillOpacity: 1,
+      zIndexOffset: 5000
+    });
+
+    marker.bindPopup(buildPositioningPopup(pos), POPUP_OPTIONS);
+    marker.addTo(positioningLayer);
+
+    const labelText = [
+      pos.aircraft || "ACFT",
+      pos.nextWaypoint ? " → " + pos.nextWaypoint : ""
+    ].join("");
+
+    marker.bindTooltip(
+      `<span class="positioning-marker-label-text">${escapeHtml(labelText)}</span>`,
+      {
+        permanent: true,
+        direction: "right",
+        offset: [8, 0],
+        className: "positioning-marker-label",
+        opacity: 1
+      }
+    );
+
+    bounds.push([lat, lon]);
+  });
+
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, {
+      padding: [40, 40],
+      maxZoom: 7
+    });
+
+    refreshMapSize();
+  }
+}
+
+function buildPositioningPopup(pos) {
+  return `
+    <div class="popup-body">
+      <div class="popup-title">${escapeHtml(pos.aircraft || "UNKNOWN")}</div>
+      <div class="popup-section">
+        <table>
+          <tr><td>POS TIME</td><td>${escapeHtml(formatUtcForPopup(pos.reportTimeUtc))}</td></tr>
+          <tr><td>RECEIVED</td><td>${escapeHtml(formatUtcForPopup(pos.receivedAtUtc))}</td></tr>
+          <tr><td>ETA</td><td>${escapeHtml(formatUtcForPopup(pos.etaUtc))}</td></tr>
+          <tr><td>ALT</td><td>${escapeHtml(pos.altitude || "-")}</td></tr>
+          <tr><td>NEXT</td><td>${escapeHtml(pos.nextWaypoint || "-")}</td></tr>
+          <tr><td>ETA NEXT</td><td>${escapeHtml(pos.etaNext || "-")}</td></tr>
+          <tr><td>FUEL</td><td>${escapeHtml(pos.fuel || "-")}</td></tr>
+          <tr><td>POS</td><td>${escapeHtml(pos.positionText || "-")}</td></tr>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function formatUtcForPopup(iso) {
+  if (!iso) return "-";
+
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mon = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getUTCMonth()];
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+
+  return `${dd}${mon} ${hh}${mm}Z`;
+}
+
+function getUtcDateTimeLocalValueMinusHours(hours) {
+  const d = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mi = String(d.getUTCMinutes()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
 async function loadByFilename(filename) {
   const ext = getExtension(filename);
   if (!ext) {
@@ -2980,6 +3342,7 @@ setInterval(() => {
   refreshRouteOnly();
 }, ROUTE_REFRESH_MS);
 
+initPositioningControl();
 init();
   </script>
 
