@@ -565,25 +565,42 @@
   display: none !important;
 }
 
+.positioning-marker-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
 .positioning-marker-box {
-  display: inline-block;
-  min-width: 0;
-  width: max-content;
-  padding: 2px 4px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: max-content !important;
+  padding: 1px 3px;
   border-radius: 5px;
   background: rgba(0, 0, 0, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: #ffffff;
   text-align: left;
-  line-height: 1.12;
+  line-height: 1.08;
   box-shadow: 0 1px 3px rgba(0,0,0,0.32);
 }
 
 .positioning-marker-line {
-  font-size: 8.5px;
+  display: block;
+  width: auto;
+  font-size: 7.5px;
   font-weight: 700;
   white-space: nowrap;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.3px;
 }
 
 /* 빨간 positioning dot 아이콘 */
