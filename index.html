@@ -567,14 +567,14 @@
 
 .positioning-marker-box {
   display: inline-block;
-  min-width: 48px;
-  padding: 3px 5px;
+  min-width: 78px;
+  padding: 4px 6px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: #ffffff;
-  text-align: center;
-  line-height: 1.15;
+  text-align: left;
+  line-height: 1.25;
   box-shadow: 0 1px 4px rgba(0,0,0,0.35);
 }
 
@@ -3375,10 +3375,14 @@ marker.addTo(positioningLayer);
 
 function buildPositionSummaryBoxHtml(pos) {
   const reportTime = escapeHtml(formatPositionReportTime(pos));
+  const altitude = escapeHtml(formatPositionAltitude(pos));
+  const fuel = escapeHtml(formatPositionFuel(pos));
 
   return `
     <div class="positioning-marker-box">
-      <div class="positioning-marker-line">${reportTime}</div>
+      <div class="positioning-marker-line">• ${reportTime}</div>
+      <div class="positioning-marker-line">• ${altitude}</div>
+      <div class="positioning-marker-line">• ${fuel}</div>
     </div>
   `;
 }
