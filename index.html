@@ -440,30 +440,32 @@
 
 .positioning-marker-box {
   display: inline-block;
-  min-width: 82px;
-  padding: 5px 7px;
+  min-width: 54px;
+  padding: 3px 6px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: #ffffff;
-  text-align: left;
-  line-height: 1.25;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
-}
-
-.positioning-marker-aircraft {
-  font-size: 10px;
-  font-weight: 700;
-  color: #facc15;
-  margin-bottom: 3px;
-  white-space: nowrap;
   text-align: center;
+  line-height: 1.15;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
 }
 
 .positioning-marker-line {
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .positioning-marker-box {
+    min-width: 48px;
+    padding: 3px 5px;
+  }
+
+  .positioning-marker-line {
+    font-size: 10px;
+  }
 }
 
 @media (max-width: 767px) {
@@ -3169,16 +3171,16 @@ const marker = L.circleMarker([lat, lon], {
     marker.bindPopup(buildPositioningPopup(pos), POPUP_OPTIONS);
     marker.addTo(positioningLayer);
 
-    marker.bindTooltip(
-      buildPositionSummaryBoxHtml(pos),
-      {
-        permanent: true,
-        direction: "right",
-        offset: [10, 0],
-        className: "positioning-marker-label",
-        opacity: 1
-      }
-    );
+marker.bindTooltip(
+  buildPositionSummaryBoxHtml(pos),
+  {
+    permanent: true,
+    direction: "top",
+    offset: [0, -8],
+    className: "positioning-marker-label",
+    opacity: 1
+  }
+);
 
     bounds.push([lat, lon]);
   });
@@ -3194,17 +3196,11 @@ const marker = L.circleMarker([lat, lon], {
 }
 
 function buildPositionSummaryBoxHtml(pos) {
-  const aircraft = escapeHtml(pos.aircraft || "ACFT");
   const reportTime = escapeHtml(formatPositionReportTime(pos));
-  const altitude = escapeHtml(formatPositionAltitude(pos));
-  const fuel = escapeHtml(formatPositionFuel(pos));
 
   return `
     <div class="positioning-marker-box">
-      <div class="positioning-marker-aircraft">${aircraft}</div>
-      <div class="positioning-marker-line">• ${reportTime}</div>
-      <div class="positioning-marker-line">• ${altitude}</div>
-      <div class="positioning-marker-line">• ${fuel}</div>
+      <div class="positioning-marker-line">${reportTime}</div>
     </div>
   `;
 }
@@ -3213,16 +3209,12 @@ function buildPositioningPopup(pos) {
   return `
     <div class="popup-body">
       <div class="popup-title">${escapeHtml(pos.aircraft || "UNKNOWN")}</div>
-      <div class="popup-section" style="font-size:13px; font-weight:700; line-height:1.5;">
-        ${escapeHtml(formatPositionReportTime(pos))}<br>
-        ${escapeHtml(formatPositionAltitude(pos))}<br>
-        ${escapeHtml(formatPositionFuel(pos))}
-      </div>
       <div class="popup-section">
         <table>
-          <tr><td>NEXT</td><td>${escapeHtml(pos.nextWaypoint || "-")}</td></tr>
-          <tr><td>ETA NEXT</td><td>${escapeHtml(pos.etaNext || "-")}</td></tr>
-          <tr><td>POS</td><td>${escapeHtml(pos.positionText || "-")}</td></tr>
+          <tr><td>POS TIME</td><td>${escapeHtml(formatUtcForPopup(pos.reportTimeUtc))}</td></tr>
+          <tr><td>ALT</td><td>${escapeHtml(formatPositionAltitude(pos))}</td></tr>
+          <tr><td>FUEL</td><td>${escapeHtml(formatPositionFuel(pos))}</td></tr>
+          <tr><td>ETA</td><td>${escapeHtml(formatUtcForPopup(pos.etaUtc))}</td></tr>
         </table>
       </div>
     </div>
