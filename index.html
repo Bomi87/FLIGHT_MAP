@@ -515,7 +515,7 @@
   </style>
 </head>
 <body>
-<body>
+
   <div id="map"></div>
 
   <div class="positioning-panel">
@@ -527,13 +527,8 @@
       <option value="POSITION(HL8372)">HL8372</option>
     </select>
 
-   <label for="positionStartUtc">Start UTC</label>
-<input
-  id="positionStartUtc"
-  type="text"
-  inputmode="numeric"
-  placeholder="2026-05-11 00:00"
-/>
+<label for="positionStartUtc">Date UTC</label>
+<input id="positionStartUtc" type="date" />
 
     <button id="loadPositionBtn" type="button">Positioning 표시</button>
     <button id="clearPositionBtn" type="button">지우기</button>
@@ -614,6 +609,11 @@ const firLayer = L.featureGroup();
 /* ===== Aircraft Positioning 설정 시작 ===== */
 const POSITIONING_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyjbXNt0tYr2aRo9iWvnHO0FRLUNZQYC0glBGBRNEqofnrt0DljAhB2mmrufE2JLXjcWA/exec";
 const POSITIONING_WEBAPP_KEY = "SK_POSITION_20260511";
+
+map.createPane("positioningPane");
+map.getPane("positioningPane").style.zIndex = 680;
+map.getPane("positioningPane").style.pointerEvents = "auto";
+
 const positioningLayer = L.featureGroup().addTo(map);
 /* ===== Aircraft Positioning 설정 끝 ===== */
     
@@ -3041,7 +3041,7 @@ function initPositioningControl() {
     return;
   }
 
-  startInput.value = getUtcDateTimeLocalValueMinusHours(8);
+startInput.value = getTodayUtcDateValue();
 
   loadBtn.addEventListener("click", async () => {
     const labelName = aircraftSelect.value;
@@ -3057,10 +3057,10 @@ function initPositioningControl() {
       return;
     }
 
- const startUtc = parseStartUtcInput(startValue);
+const startUtc = parseStartUtcDateInput(startValue);
 
 if (!startUtc) {
-  alert("Start UTC 형식이 올바르지 않습니다.\n예: 2026-05-11 05:07");
+  alert("Date UTC를 선택해주세요.");
   return;
 }
 
@@ -3092,10 +3092,7 @@ async function loadPositioningFromGmail(labelName, startUtc) {
     clearPositioningMarkers();
     renderPositioningMarkers(data.positions || []);
 
-    alert(
-      "Positioning " + (data.count || 0) + "건 표시 완료" +
-      (data.fromCache ? " (cache)" : "")
-    );
+   
 
   } catch (err) {
     console.error(err);
@@ -3172,14 +3169,18 @@ const referenceLon = Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)
 const lon = shiftLonNearReference(rawLon, referenceLon);
 
 const marker = L.circleMarker([lat, lon], {
-      radius: 6,
-      color: "#7f1d1d",
-      weight: 2,
-      fillColor: "#ef4444",
-      fillOpacity: 1
-    });
+  pane: "positioningPane",
+  radius: 6,
+  color: "#7f1d1d",
+  weight: 2,
+  fillColor: "#ef4444",
+  fillOpacity: 1
+});
 
-    marker.bindPopup(buildPositioningPopup(pos), POPUP_OPTIONS);
+  marker.bindPopup(buildPositioningPopup(pos), {
+  ...POPUP_OPTIONS,
+  pane: "positioningPane"
+});
     marker.addTo(positioningLayer);
 
 marker.bindTooltip(
@@ -3189,7 +3190,8 @@ marker.bindTooltip(
     direction: "top",
     offset: [0, -8],
     className: "positioning-marker-label",
-    opacity: 1
+    opacity: 1,
+    pane: "positioningPane"
   }
 );
 
@@ -3232,7 +3234,7 @@ function buildPositioningPopup(pos) {
   `;
 }
 
-    function formatUtcForPopup(iso) {
+function formatUtcForPopup(iso) {
   if (!iso) return "-";
 
   const d = new Date(iso);
@@ -3243,7 +3245,7 @@ function buildPositioningPopup(pos) {
   const hh = String(d.getUTCHours()).padStart(2, "0");
   const mm = String(d.getUTCMinutes()).padStart(2, "0");
 
-  return `${dd}${mon} ${hh}${mm}Z`;
+  return `${hh}${mm}Z, ${dd}${mon}`;
 }
 
 function formatPositionReportTime(pos) {
@@ -3301,6 +3303,15 @@ function formatPositionFuel(pos) {
   return `${fuelValue} lbs`;
 }
 
+    function parseStartUtcDateInput(value) {
+  const text = String(value || "").trim();
+
+  // input type="date" 값: 2026-05-11
+  const m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+
+  return `${m[1]}-${m[2]}-${m[3]}T00:00:00Z`;
+}
     function parseStartUtcInput(value) {
   const text = String(value || "").trim();
 
@@ -3325,18 +3336,17 @@ function formatPositionFuel(pos) {
 
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}:00Z`;
 }
-function getUtcDateTimeLocalValueMinusHours(hours) {
-  const d = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+function getTodayUtcDateValue() {
+  const d = new Date();
 
   const yyyy = d.getUTCFullYear();
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(d.getUTCDate()).padStart(2, "0");
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mi = String(d.getUTCMinutes()).padStart(2, "0");
 
-return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  return `${yyyy}-${mm}-${dd}`;
 }
-
+    
 async function loadByFilename(filename) {
   const ext = getExtension(filename);
   if (!ext) {
