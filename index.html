@@ -3362,8 +3362,6 @@ function clearPositioningMarkers() {
 function renderPositioningMarkers(positions) {
   if (!Array.isArray(positions)) return;
 
-  const bounds = [];
-
   const referenceLon = Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)
     ? window.__ROUTE_RENDER_REFERENCE_LON
     : map.getCenter().lng;
@@ -3376,17 +3374,17 @@ function renderPositioningMarkers(positions) {
 
     const lon = shiftLonNearReference(rawLon, referenceLon);
 
-const posIcon = L.divIcon({
-  className: "positioning-dot-icon",
-  html: `
-    <div class="positioning-hitbox">
-      <div class="positioning-dot"></div>
-    </div>
-  `,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-  popupAnchor: [0, -16]
-});
+    const posIcon = L.divIcon({
+      className: "positioning-dot-icon",
+      html: `
+        <div class="positioning-hitbox">
+          <div class="positioning-dot"></div>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -16]
+    });
 
     const marker = L.marker([lat, lon], {
       icon: posIcon,
@@ -3394,19 +3392,19 @@ const posIcon = L.divIcon({
       keyboard: false
     });
 
-marker.bindPopup(buildPositioningPopup(pos), {
-  ...POPUP_OPTIONS,
-  autoPan: true
-});
+    marker.bindPopup(buildPositioningPopup(pos), {
+      ...POPUP_OPTIONS,
+      autoPan: true
+    });
 
-marker.on("click touchstart", function (e) {
-  if (e && e.originalEvent) {
-    L.DomEvent.stop(e.originalEvent);
-  }
-  marker.openPopup();
-});
+    marker.on("click touchstart", function (e) {
+      if (e && e.originalEvent) {
+        L.DomEvent.stop(e.originalEvent);
+      }
+      marker.openPopup();
+    });
 
-marker.addTo(positioningLayer);
+    marker.addTo(positioningLayer);
 
     marker.bindTooltip(
       buildPositionSummaryBoxHtml(pos),
@@ -3418,19 +3416,12 @@ marker.addTo(positioningLayer);
         opacity: 1
       }
     );
-
-    bounds.push([lat, lon]);
   });
 
-  if (bounds.length > 0) {
-    map.fitBounds(bounds, {
-      padding: [40, 40],
-      maxZoom: 7
-    });
-
-    refreshMapSize();
-  }
+  // POSITION 표시 후 현재 지도 위치/줌 유지
+  refreshMapSize();
 }
+
 
 function buildPositionSummaryBoxHtml(pos) {
   const reportTime = escapeHtml(formatPositionReportTime(pos));
