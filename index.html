@@ -842,6 +842,17 @@ let artccLoaded = false;
 
     const ALWAYS_KML_FILES = ["ACJ_NDB.kml"];
 
+    function getDefaultPositionAircraftFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const fileParam = params.get("file") || "";
+
+  // 예: live/HL8372.kml 또는 HL8372.kml
+  const match = fileParam.match(/(?:^|\/)(HL\d{4})\.kml/i);
+
+  if (!match) return "";
+
+  return "POSITION(" + match[1].toUpperCase() + ")";
+}
     function getRequestedFiles() {
       const params = new URLSearchParams(location.search);
       const file = params.get("file") || "";
@@ -3203,6 +3214,7 @@ function initPositioningControl() {
 
   const loadBtn = document.getElementById("loadPositionBtn");
   const clearBtn = document.getElementById("clearPositionBtn");
+  
     const posBtn = document.getElementById("posFloatingBtn");
   const posPanel = document.getElementById("positioningPanel");
 
@@ -3211,6 +3223,11 @@ function initPositioningControl() {
     return;
   }
 
+  const defaultAircraft = getDefaultPositionAircraftFromUrl();
+
+if (defaultAircraft && aircraftSelect.querySelector(`option[value="${defaultAircraft}"]`)) {
+  aircraftSelect.value = defaultAircraft;
+}
 startInput.value = getTodayUtcDateValue();
 
 
