@@ -3295,7 +3295,7 @@ function callAppsScriptJsonp(params) {
     const timeout = setTimeout(() => {
       cleanup();
       reject(new Error("Apps Script request timeout"));
-    }, 30000);
+    }, 90000);
 
     window[callbackName] = function(data) {
       cleanup();
