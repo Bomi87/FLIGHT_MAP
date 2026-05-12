@@ -765,10 +765,12 @@ const routeBoundsGroup = L.featureGroup();
 const firLayer = L.featureGroup();
 
 /* ===== Aircraft Positioning 설정 시작 ===== */
-const POSITIONING_BACKEND_URL = "https://script.google.com/macros/s/AKfycbznSP2VT3rTtaLCcxOrXEeSZdqghSk16NhoUqY8fg3X_7qMZy89zB9jGvMqy1ptXeqSug/exec";
+const POSITIONING_BACKEND_URL = "https://script.google.com/macros/s/AKfycbyrxLmC6V7bCBye2xVLs-bmi0CZa70SdVUs9qzZXPf2-ab8pU0ahIZicEQKQQLIkYyb7Q/exec";
 const POSITIONING_WEBAPP_KEY = "SK_POSITION_20260511";
 
     let POSITIONING_FORCE_GMAIL_ONCE = true;
+    let isPositioningLoading = false;
+let isRouteRefreshing = false;
 
 const positioningLayer = L.featureGroup().addTo(map);
 /* ===== Aircraft Positioning 설정 끝 ===== */
@@ -3157,22 +3159,28 @@ function createRefreshControl() {
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
 
-    L.DomEvent.on(button, "click", async function (e) {
-      L.DomEvent.stop(e);
+  L.DomEvent.on(button, "click", async function (e) {
+  L.DomEvent.stop(e);
 
-      button.disabled = true;
-      button.textContent = "Updating...";
+  if (isPositioningLoading || isRouteRefreshing) {
+    console.log("Positioning 또는 Route 작업 중이라 Refresh 생략");
+    return;
+  }
 
-      try {
-        await refreshRouteOnly();
-      } catch (err) {
-        console.error(err);
-      } finally {
-        button.disabled = false;
-        button.textContent = "Refresh";
-      }
-    });
+  button.disabled = true;
+  button.textContent = "Updating...";
 
+  try {
+    isRouteRefreshing = true;
+    await refreshRouteOnly();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    isRouteRefreshing = false;
+    button.disabled = false;
+    button.textContent = "Refresh";
+  }
+});
     return container;
   };
 
@@ -3243,10 +3251,16 @@ await loadPositioningFromGmail(labelName, startUtc);
   }
 }
 async function loadPositioningFromGmail(labelName, startUtc) {
+  if (isPositioningLoading) return;
+
+  isPositioningLoading = true;
+
   const btn = document.getElementById("loadPositionBtn");
 
-  btn.disabled = true;
-  btn.textContent = "불러오는 중...";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "불러오는 중...";
+  }
 
   try {
 const data = await callAppsScriptJsonp({
@@ -3271,8 +3285,12 @@ POSITIONING_FORCE_GMAIL_ONCE = false;
     console.error(err);
     alert("Positioning 조회 중 오류가 발생했습니다.\n" + err.message);
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Positioning 표시";
+    isPositioningLoading = false;
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Positioning 표시";
+    }
   }
 }
 
@@ -3665,8 +3683,20 @@ map.on("moveend zoomend", function () {
 
 const ROUTE_REFRESH_MS = 60000;
 
-setInterval(() => {
-  refreshRouteOnly();
+setInterval(async () => {
+  if (isPositioningLoading || isRouteRefreshing) {
+    console.log("Positioning 또는 Route 작업 중이라 자동 Refresh 생략");
+    return;
+  }
+
+  try {
+    isRouteRefreshing = true;
+    await refreshRouteOnly();
+  } catch (err) {
+    console.error("Auto route refresh failed:", err);
+  } finally {
+    isRouteRefreshing = false;
+  }
 }, ROUTE_REFRESH_MS);
 
 initPositioningControl();
