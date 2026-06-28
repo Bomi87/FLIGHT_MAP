@@ -30,14 +30,15 @@ if (multiHexes.length) {
   }];
 }
 
-/* 최대 12대 */
-TARGETS = TARGETS.slice(0, 12);
+/* 최대 13대 */
+TARGETS = TARGETS.slice(0, 13);
 
 /* ------------------ HEX DESCRIPTION ------------------ */
 
 const HEX_INFO_MAP = {
   "71c550": "현대(G650)",
   "71c290": "현대(BBJ)",
+  "71c551": "현대(B38M)",
   "71c299": "LG(G650)",
   "71ba27": "한화(BBJ)",
   "71c080": "SK(ACJ)",
