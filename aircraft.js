@@ -30,8 +30,8 @@ if (multiHexes.length) {
   }];
 }
 
-/* 최대 13대 */
-TARGETS = TARGETS.slice(0, 13);
+/* 최대 14대 */
+TARGETS = TARGETS.slice(0, 14);
 
 /* ------------------ HEX DESCRIPTION ------------------ */
 
@@ -48,7 +48,8 @@ const HEX_INFO_MAP = {
   "71c068": "KE(G650)",
   "71c222": "KE(BBJ)",
   "71c229": "KE(GLEX)",
-  "71be43": "CD1(B748)"
+  "71be43": "CD1(B748)",
+  "71c566": "CD2(B38M)"
 };
 
 function getHexDescription(hex) {
