@@ -3567,24 +3567,42 @@ function getTodayUtcDateValue() {
 }
     
 async function loadByFilename(filename) {
+  console.log("▶ Loading:", filename);
+
   const ext = getExtension(filename);
+
   if (!ext) {
-    throw new Error("Only .gpx or .kml supported");
+    throw new Error("Only .gpx or .kml supported: " + filename);
   }
 
   const targetLayer = getTargetLayer(filename);
   const text = await fetchTextFile(filename);
 
+  console.log("▶ Response:", filename, {
+    length: text.length,
+    first200: text.slice(0, 200)
+  });
+
   if (ext === "gpx") {
     const points = parseGPX(text);
+
+    console.log("▶ GPX points:", filename, points.length);
+
     drawGPXRoute(points, filename, targetLayer);
     return;
   }
 
   if (ext === "kml") {
     const features = extractKMLFeatures(text);
+
+    console.log("▶ KML features:", filename, features.length);
+
+    if (!features.length) {
+      console.error("❌ Invalid KML file:", filename);
+      console.error("KML preview:", text.slice(0, 500));
+    }
+
     drawKMLFeatures(features, filename, targetLayer);
-    return;
   }
 }
 
