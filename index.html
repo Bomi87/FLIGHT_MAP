@@ -917,7 +917,84 @@ let artccLoaded = false;
       }
     }
 
-    async function fetchTextFile(filename) {
+    // 브라우저 새로고침(F5/Reload)인지 확인한다.
+    // 일반적인 새 탭/재접속은 false이며, 새로고침일 때만 정적 데이터를 강제 갱신한다.
+    const IS_PAGE_RELOAD = (() => {
+      try {
+        const nav = performance.getEntriesByType("navigation")[0];
+        if (nav) return nav.type === "reload";
+
+        // 구형 브라우저 대응
+        return performance.navigation &&
+          performance.navigation.type === performance.navigation.TYPE_RELOAD;
+      } catch (_) {
+        return false;
+      }
+    })();
+
+    const STATIC_CACHE_NAME = "flight-route-static-v1";
+    const STATIC_CACHE_DATE_PREFIX = "flightRouteStaticDate:";
+
+    function getLocalDateKey() {
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    async function fetchStaticFileOncePerDay(filename) {
+      const absoluteUrl = new URL(filename, location.href).href;
+      const dateStorageKey = STATIC_CACHE_DATE_PREFIX + absoluteUrl;
+      const today = getLocalDateKey();
+
+      // 일반 재접속이고 오늘 이미 받은 파일이면 Cache Storage에서 사용한다.
+      if (!IS_PAGE_RELOAD && "caches" in window) {
+        try {
+          const savedDate = localStorage.getItem(dateStorageKey);
+
+          if (savedDate === today) {
+            const cache = await caches.open(STATIC_CACHE_NAME);
+            const cachedResponse = await cache.match(absoluteUrl);
+
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+          }
+        } catch (err) {
+          console.warn("Static cache read failed:", filename, err);
+        }
+      }
+
+      // 당일 최초 접속 또는 브라우저 새로고침이면 서버에서 다시 받는다.
+      const separator = absoluteUrl.includes("?") ? "&" : "?";
+      const networkUrl = absoluteUrl + separator + "staticRefresh=" + Date.now();
+      const response = await fetch(networkUrl, { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error(filename + " load failed: " + response.status);
+      }
+
+      // 쿼리 없는 고정 URL을 키로 저장하여 다음 일반 접속에서 재사용한다.
+      if ("caches" in window) {
+        try {
+          const cache = await caches.open(STATIC_CACHE_NAME);
+          await cache.put(absoluteUrl, response.clone());
+          localStorage.setItem(dateStorageKey, today);
+        } catch (err) {
+          console.warn("Static cache save failed:", filename, err);
+        }
+      }
+
+      return response;
+    }
+
+    async function fetchTextFile(filename, options = {}) {
+      if (options.staticDaily) {
+        const res = await fetchStaticFileOncePerDay(filename);
+        return await res.text();
+      }
+
       const version = getVersionParam();
       const url = filename + (filename.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(version);
 
@@ -2758,9 +2835,7 @@ function drawFirFeature(feature, referenceLon) {
 async function loadFirGeojson() {
   if (firLoaded) return;
 
-  const res = await fetch("world_fir.geojson?v=" + Date.now(), {
-    cache: "no-store"
-  });
+  const res = await fetchStaticFileOncePerDay("world_fir.geojson");
 
   if (!res.ok) {
     throw new Error("world_fir.geojson load failed: " + res.status);
@@ -2974,9 +3049,9 @@ function drawArtccFeature(feature, referenceLon) {
   addArtccLabel(feature, referenceLon);
 }
 async function loadArtccGeojson() {
-  const res = await fetch("artcc.geojson?v=" + Date.now(), {
-    cache: "no-store"
-  });
+  if (artccLoaded) return;
+
+  const res = await fetchStaticFileOncePerDay("artcc.geojson");
 
   if (!res.ok) {
     throw new Error("artcc.geojson load failed: " + res.status);
@@ -2996,7 +3071,7 @@ async function loadArtccGeojson() {
     drawArtccFeature(feature, referenceLon);
   });
 
-
+  artccLoaded = true;
 }
 function getArtccRenderReferenceLon() {
   if (Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)) {
@@ -3566,7 +3641,7 @@ function getTodayUtcDateValue() {
   return `${yyyy}-${mm}-${dd}`;
 }
     
-async function loadByFilename(filename) {
+async function loadByFilename(filename, options = {}) {
   console.log("▶ Loading:", filename);
 
   const ext = getExtension(filename);
@@ -3576,7 +3651,7 @@ async function loadByFilename(filename) {
   }
 
   const targetLayer = getTargetLayer(filename);
-  const text = await fetchTextFile(filename);
+  const text = await fetchTextFile(filename, options);
 
   console.log("▶ Response:", filename, {
     length: text.length,
@@ -3637,51 +3712,34 @@ async function refreshRouteOnly() {
       return;
     }
 
+    // 실제 항로 레이어만 삭제한다.
+    // NDB, FIR, U.S. ARTCC 정적 데이터는 유지한다.
     clearRouteOnly();
 
-const requestedFiles = getRequestedFiles();
+    const requestedFiles = getRequestedFiles();
 
-const filesToLoad = [
-  ...ALWAYS_KML_FILES,
-  ...requestedFiles
-];
-
-for (const file of [...new Set(filesToLoad)]) {
-  try {
-    await loadByFilename(file);
-  } catch (err) {
-    console.error("File load failed:", file, err);
-
-    // ACJ_NDB.kml 같은 보조 파일 실패는 무시하고 계속 진행
-    if (isAlwaysKmlFile(file)) {
-      continue;
+    if (requestedFiles.length) {
+      for (const file of [...new Set(requestedFiles)]) {
+        try {
+          await loadByFilename(file);
+        } catch (err) {
+          console.error("Route file load failed:", file, err);
+          throw err;
+        }
+      }
+    } else {
+      await autoLoadDefault();
     }
 
-    // 실제 항로 파일 실패는 상위로 전달
-    throw err;
-  }
-}
-
-    setTimeout(async () => {
+    setTimeout(() => {
       refreshMapSize();
       scheduleRouteTextUpdate(20);
       scheduleAirspaceLabelUpdate(20);
-      scheduleRedrawNDB();
 
-      if (firVisible) {
-        firLayer.clearLayers();
-        firLoaded = false;
-        firGeoJsonLayer = null;
-
-        try {
-          await loadFirGeojson();
-
-          if (!map.hasLayer(firLayer)) {
-            map.addLayer(firLayer);
-          }
-        } catch (err) {
-          console.error("FIR reload failed:", err);
-        }
+      // 항로 기준 경도가 달라질 수 있으므로 저장된 NDB를 다시 그리기만 한다.
+      // ACJ_NDB.kml 재다운로드는 발생하지 않는다.
+      if (ndbVisible) {
+        scheduleRedrawNDB();
       }
     }, 80);
 
@@ -3692,8 +3750,32 @@ for (const file of [...new Set(filesToLoad)]) {
 
 async function init() {
   try {
+    // NDB/FIR/ARTCC는 같은 브라우저에서 하루 한 번만 다운로드한다.
+    // 단, 사용자가 브라우저 새로고침(F5/Reload)을 하면 즉시 다시 받아 캐시를 갱신한다.
+    // 토글이 Off 상태라면 데이터만 준비하고 지도에는 표시하지 않는다.
+
+    try {
+      await loadByFilename("ACJ_NDB.kml", { staticDaily: true });
+    } catch (err) {
+      console.error("Initial NDB load failed:", err);
+    }
+
+    try {
+      await loadFirGeojson();
+    } catch (err) {
+      console.error("Initial FIR load failed:", err);
+    }
+
+    try {
+      await loadArtccGeojson();
+    } catch (err) {
+      console.error("Initial ARTCC load failed:", err);
+    }
+
+    // 실제 항로만 로드하며 이후 1분마다 이 항로만 갱신한다.
     await refreshRouteOnly();
     fitAllLoadedBounds();
+
   } catch (err) {
     console.error(err);
     alert("Error: " + (err.message || err));
