@@ -30,8 +30,8 @@ if (multiHexes.length) {
   }];
 }
 
-/* 최대 14대 */
-TARGETS = TARGETS.slice(0, 14);
+/* 최대 15대 */
+TARGETS = TARGETS.slice(0, 15);
 
 /* ------------------ HEX DESCRIPTION ------------------ */
 
@@ -49,7 +49,8 @@ const HEX_INFO_MAP = {
   "71c222": "KE(BBJ)",
   "71c229": "KE(GLEX)",
   "71be43": "CD1(B748)",
-  "71c566": "CD2(B38M)"
+  "71c566": "CD2(B38M)",
+  "4076E5": "G-KELT(A320)"
 };
 
 function getHexDescription(hex) {
