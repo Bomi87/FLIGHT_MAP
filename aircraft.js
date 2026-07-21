@@ -50,7 +50,7 @@ const HEX_INFO_MAP = {
   "71c229": "KE(GLEX)",
   "71be43": "CD1(B748)",
   "71c566": "CD2(B38M)",
-  "4076E5": "G-KELT(A320)"
+  "4076e5": "G-KELT(A320)"
 };
 
 function getHexDescription(hex) {
