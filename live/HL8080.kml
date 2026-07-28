@@ -1,396 +1,344 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
 <Document>
-<name>HL8080 EINN-LICJ PLAN</name>
+<name>HL8080 LICJ-LTBA PLAN</name>
 <open>0</open>
 <Style id="style_2">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>EINN</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>KURUM3B</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>46 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>138610 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>35300 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>17</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>None</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00.00</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>13:35Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>4400 ft</font></span><br><br>]]></description>
+  <name>LICJ</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>LURON7A</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>43 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>122010 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>19300 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>27</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>None</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00.00</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:45Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6400 ft</font></span><br><br>]]></description>
   <styleUrl>#style_2</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-8.925000,52.701667,14.0208</coordinates>
+    <coordinates>13.100000,38.181667,13.1064</coordinates>
   </Point>
 </Placemark>
 <Style id="style_3">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>DER24</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>KURUM3B</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>400 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>138521 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>35211 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>17</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>152</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>19</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:01</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>13:36Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 3KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>4</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>4400 ft</font></span><br><br>]]></description>
+  <name>SASLI</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>LURON7A</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL113</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>120965 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>18255 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>15</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>237</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>22</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:04</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:49Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 15KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6400 ft</font></span><br><br>]]></description>
   <styleUrl>#style_3</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-8.943333,52.693333,121.92</coordinates>
+    <coordinates>13.118333,38.470000,3444.24</coordinates>
   </Point>
 </Placemark>
 <Style id="style_4">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>ADARU</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>KURUM3B</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>3800 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>137999 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>34689 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>13</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>176</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>16</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:03</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>13:38Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 46kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>4400 ft</font></span><br><br>]]></description>
+  <name>FIZZY</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>LURON7A</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL154</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>120708 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>17998 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>347</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>17</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:06</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:51Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 15KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6400 ft</font></span><br><br>]]></description>
   <styleUrl>#style_4</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-8.931667,52.593333,1158.24</coordinates>
+    <coordinates>13.135000,38.596667,4693.92</coordinates>
   </Point>
 </Placemark>
 <Style id="style_5">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>KURUM</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL160</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>137093 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>33783 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>5</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>315</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>17</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:07</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>13:42Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 51kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>4400 ft</font></span><br><br>]]></description>
+  <name>LURON</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL215</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>120275 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>17565 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-6</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>377</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>12</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:08</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:53Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 10KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6400 ft</font></span><br><br>]]></description>
   <styleUrl>#style_5</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-8.665000,52.228333,4876.8</coordinates>
+    <coordinates>13.115000,38.858333,6553.2</coordinates>
   </Point>
 </Placemark>
 <Style id="style_6">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>GINGI</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL227</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>136529 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>33219 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-9</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>381</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>10</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:11</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>13:46Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 49kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>4400 ft</font></span><br><br>]]></description>
+  <name>AMANO</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL345</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>119235 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>48565 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>46165 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>16525 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-29</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>433</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-4</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:15</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>17:00Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 19KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6400 ft</font></span><br><br>]]></description>
   <styleUrl>#style_6</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-8.331667,51.898333,6918.96</coordinates>
+    <coordinates>13.796667,39.421667,10515.6</coordinates>
   </Point>
 </Placemark>
 <Style id="style_7">
-  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
+  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>LEDGO</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL321</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>135603 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>30552 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>30552 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>32293 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-28</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>432</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-3</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:17</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>13:52Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 47kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>2900 ft</font></span><br><br>]]></description>
+  <name>-TOC-</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL380</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>118981 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>36419 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>22119 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>16271 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-50</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>455</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-22</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:17</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>17:02Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 17KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1500 ft</font></span><br><br>]]></description>
   <styleUrl>#style_7</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-7.568333,51.240000,9784.08</coordinates>
+    <coordinates>14.021667,39.581667,11582.4</coordinates>
   </Point>
 </Placemark>
 <Style id="style_8">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>EVCOR</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL366</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>135200 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>28695 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>18695 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>31890 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-46</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>457</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-19</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:20</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>13:55Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 43kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1900 ft</font></span><br><br>]]></description>
+  <name>NAXES</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL380</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>118686 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>36714 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>22414 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>15976 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-54</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:21</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>17:06Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 13KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1500 ft</font></span><br><br>]]></description>
   <styleUrl>#style_8</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-7.115000,50.936667,11155.68</coordinates>
+    <coordinates>14.458333,39.888333,11582.4</coordinates>
   </Point>
 </Placemark>
 <Style id="style_9">
-  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href></Icon></IconStyle>
+  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>-TOC-</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>134944 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>11591 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>-2009 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>31634 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>449</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:22</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>13:57Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 39kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>2400 ft</font></span><br><br>]]></description>
+  <name>BUMOK</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL380</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>117897 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>37503 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>23203 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>15187 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-54</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:32</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>17:17Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 5KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>8900 ft</font></span><br><br>]]></description>
   <styleUrl>#style_9</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-6.783333,50.711667,11887.2</coordinates>
+    <coordinates>15.670000,40.715000,11582.4</coordinates>
   </Point>
 </Placemark>
 <Style id="style_10">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>DOLUR</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>133947 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>13148 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>-452 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>30637 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-56</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>454</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-28</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:34</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:09Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 23kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>4</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>2400 ft</font></span><br><br>]]></description>
+  <name>LUXIL</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL380</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>117332 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>37998 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>23698 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>14622 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:39</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>17:24Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 2kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>9500 ft</font></span><br><br>]]></description>
   <styleUrl>#style_10</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-5.056667,49.485000,11887.2</coordinates>
+    <coordinates>16.870000,40.820000,11582.4</coordinates>
   </Point>
 </Placemark>
 <Style id="style_11">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>TERKU</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>132883 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>14212 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>612 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>29573 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-55</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>455</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-27</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:47</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:22Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 23kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>6</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3500 ft</font></span><br><br>]]></description>
+  <name>PAPIZ</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL380</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>116379 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>38496 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>24196 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>13669 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>457</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-25</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:52</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>17:37Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 15kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>9500 ft</font></span><br><br>]]></description>
   <styleUrl>#style_11</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-3.616667,48.030000,11887.2</coordinates>
+    <coordinates>18.951667,40.891667,11582.4</coordinates>
   </Point>
 </Placemark>
 <Style id="style_12">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>KORER</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UM616</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>132327 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>15573 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>1973 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>29017 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-54</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:54</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:29Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 15KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>8</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3500 ft</font></span><br><br>]]></description>
+  <name>DISOR</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL380</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>114693 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>39062 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>24762 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>11983 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-52</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>457</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-25</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:14</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>17:59Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 47kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>11100 ft</font></span><br><br>]]></description>
   <styleUrl>#style_12</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-2.500000,47.685000,11887.2</coordinates>
+    <coordinates>22.758333,41.246667,11582.4</coordinates>
   </Point>
 </Placemark>
 <Style id="style_13">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>TERPO</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UM616</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>131995 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>15835 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>2235 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>28685 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-52</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>458</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-24</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00:58</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:33Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 2kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>7</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3500 ft</font></span><br><br>]]></description>
+  <name>PEREN</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UN644</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL370</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>114071 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>48089 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>32989 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>11361 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-49</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>460</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-21</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:22</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:07Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 24kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>11600 ft</font></span><br><br>]]></description>
   <styleUrl>#style_13</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-1.928333,47.348333,11887.2</coordinates>
+    <coordinates>23.968333,40.596667,11277.6</coordinates>
   </Point>
 </Placemark>
 <Style id="style_14">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>NTS</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UM616</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>131810 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>16055 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>2455 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>28500 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-50</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>460</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-22</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:00</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:35Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 1kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>7</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3500 ft</font></span><br><br>]]></description>
+  <name>ASPIV</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UN644</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL370</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>113732 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>47868 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>32768 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>11022 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-48</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>462</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-19</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:27</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:12Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 40kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>9300 ft</font></span><br><br>]]></description>
   <styleUrl>#style_14</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-1.613333,47.161667,11887.2</coordinates>
+    <coordinates>24.706667,40.768333,11277.6</coordinates>
   </Point>
 </Placemark>
 <Style id="style_15">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>USODA</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UM616</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>131648 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>16042 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>2442 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>28338 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-49</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>461</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-21</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:02</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:37Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 6kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>6</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3500 ft</font></span><br><br>]]></description>
+  <name>PIBOM</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UN644</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL370</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>113460 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>48070 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>32970 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>10750 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-48</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>462</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-19</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:30</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:15Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 42kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>9300 ft</font></span><br><br>]]></description>
   <styleUrl>#style_15</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-1.365000,46.971667,11887.2</coordinates>
+    <coordinates>25.308333,40.905000,11277.6</coordinates>
   </Point>
 </Placemark>
 <Style id="style_16">
-  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
+  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>LUGEN</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UM616</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>131316 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>16339 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>2739 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>28006 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-48</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>462</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-19</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:06</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:41Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 7kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>5</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3500 ft</font></span><br><br>]]></description>
+  <name>-TOD-</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UN644</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL370</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>113298 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>48197 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>33097 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>10588 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-48</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>462</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-19</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:32</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:17Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 43kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>8500 ft</font></span><br><br>]]></description>
   <styleUrl>#style_16</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-0.861667,46.583333,11887.2</coordinates>
+    <coordinates>25.668333,40.985000,11277.6</coordinates>
   </Point>
 </Placemark>
 <Style id="style_17">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>TUPAR</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>131184 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>16541 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>2941 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>27874 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-47</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>463</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-18</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:08</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:43Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 5kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>4</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3500 ft</font></span><br><br>]]></description>
+  <name>DIGTI</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>UT162</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL243</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>113184 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>10474 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-36</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>457</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-8</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:36</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:21Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 45kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>8500 ft</font></span><br><br>]]></description>
   <styleUrl>#style_17</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-0.663333,46.430000,11887.2</coordinates>
+    <coordinates>26.321667,41.125000,7406.64</coordinates>
   </Point>
 </Placemark>
 <Style id="style_18">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>CNA</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>130676 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>16979 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>3379 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>27366 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-47</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>463</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-18</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:14</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:49Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 7kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3500 ft</font></span><br><br>]]></description>
+  <name>DRAMO</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DRAMO1Q</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL190</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>113116 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>10406 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-14</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>424</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>9</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:38</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:23Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 35kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6200 ft</font></span><br><br>]]></description>
   <styleUrl>#style_18</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>-0.311667,45.660000,11887.2</coordinates>
+    <coordinates>26.611667,41.035000,5791.2</coordinates>
   </Point>
 </Placemark>
 <Style id="style_19">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>SECHE</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>129812 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>18088 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>4488 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>26502 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-45</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>465</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-16</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:24</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>14:59Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>H.W 6KT</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3600 ft</font></span><br><br>]]></description>
+  <name>BARPE</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DRAMO1Q</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL190</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>112791 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>10081 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-7</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>470</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>21</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:40</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:25Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 35kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6500 ft</font></span><br><br>]]></description>
   <styleUrl>#style_19</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>0.515000,44.438333,11887.2</coordinates>
+    <coordinates>26.978333,40.926667,5791.2</coordinates>
   </Point>
 </Placemark>
 <Style id="style_20">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>SOVET</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>129224 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>17556 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>3956 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>25914 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-46</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>465</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-17</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:31</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>15:06Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 32kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>4100 ft</font></span><br><br>]]></description>
+  <name>BA356</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DRAMO1Q</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL190</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>112598 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>9888 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-7</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>470</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>21</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:42</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:27Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 28kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6700 ft</font></span><br><br>]]></description>
   <styleUrl>#style_20</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>1.781667,44.138333,11887.2</coordinates>
+    <coordinates>27.166667,40.821667,5791.2</coordinates>
   </Point>
 </Placemark>
 <Style id="style_21">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>FJR</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>128222 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>17928 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>4328 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>24912 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-49</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>462</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-21</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:44</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>15:19Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 50kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>8500 ft</font></span><br><br>]]></description>
+  <name>GUBUL</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DRAMO1Q</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL190</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>112448 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>9738 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-7</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>470</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>21</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:43</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:28Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 28kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6700 ft</font></span><br><br>]]></description>
   <styleUrl>#style_21</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>3.975000,43.578333,11887.2</coordinates>
+    <coordinates>27.313333,40.738333,5791.2</coordinates>
   </Point>
 </Placemark>
 <Style id="style_22">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>AMFAC</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>127592 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>18908 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>5308 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>24282 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-51</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>459</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-23</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:52</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>15:27Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 40kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>4</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6700 ft</font></span><br><br>]]></description>
+  <name>BA357</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DRAMO1Q</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL161</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>112338 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>9628 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-5</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>421</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>17</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:44</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:29Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 39kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6700 ft</font></span><br><br>]]></description>
   <styleUrl>#style_22</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>5.050000,42.875000,11887.2</coordinates>
+    <coordinates>27.556667,40.713333,4907.28</coordinates>
   </Point>
 </Placemark>
 <Style id="style_23">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>BATIV</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>126877 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>19063 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>5463 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>23567 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-52</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>458</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-24</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 02:01</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>15:36Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 56kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>3</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>1000 ft</font></span><br><br>]]></description>
+  <name>BA358</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DRAMO1Q</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL124</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>112258 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>9548 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>385</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>20</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:46</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:31Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 40kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6700 ft</font></span><br><br>]]></description>
   <styleUrl>#style_23</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>6.410000,42.123333,11887.2</coordinates>
+    <coordinates>27.786667,40.711667,3779.52</coordinates>
   </Point>
 </Placemark>
 <Style id="style_24">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>PELOS</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>125978 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>20137 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>6537 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>22668 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>457</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-25</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 02:12</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>15:47Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 51kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>9800 ft</font></span><br><br>]]></description>
+  <name>ABNIN</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DRAMO1Q</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL60</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>112086 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>9376 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>7</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>323</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>20</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:50</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:35Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 41kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>7700 ft</font></span><br><br>]]></description>
   <styleUrl>#style_24</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>8.161667,41.161667,11887.2</coordinates>
+    <coordinates>28.248333,40.781667,1828.8</coordinates>
   </Point>
 </Placemark>
 <Style id="style_25">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>IPROM</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>125931 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>20849 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>7249 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>22621 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 02:13</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>15:48Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 32kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>9800 ft</font></span><br><br>]]></description>
+  <name>TETPU</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DRAMO1Q</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>4700 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>111876 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>9166 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>16</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>279</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>26</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:52</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:37Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 41kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>7700 ft</font></span><br><br>]]></description>
   <styleUrl>#style_25</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>8.220000,41.090000,11887.2</coordinates>
+    <coordinates>28.490000,40.836667,1432.56</coordinates>
   </Point>
 </Placemark>
 <Style id="style_26">
-  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/shapes/marina.png</href></Icon></IconStyle>
+  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>-TOD-</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL390</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>124420 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight :</b> <font color='blue'>22010 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Buffer Weight(+2000 ft) :</b> <font color='blue'>8410 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>21110 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-53</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>456</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-26</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 02:32</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:07Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 42kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>9800 ft</font></span><br><br>]]></description>
+  <name>WISNE</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DRAMO1Q</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>3000 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>111844 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>9134 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>19</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>274</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>28</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:53</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:38Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 41kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>7700 ft</font></span><br><br>]]></description>
   <styleUrl>#style_26</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>11.270000,39.511667,11887.2</coordinates>
+    <coordinates>28.573333,40.855000,914.4</coordinates>
   </Point>
 </Placemark>
 <Style id="style_27">
   <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
 </Style>
 <Placemark>
-  <name>GIANO</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>GIANO5B</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL162</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>124108 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>20798 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>-31</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>435</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>-6</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 02:40</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:15Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 45kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>5</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>9800 ft</font></span><br><br>]]></description>
+  <name>LTBA</name>
+  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>94 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>111622 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>8912 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>21</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>266</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>29</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 01:56</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>18:41Z, 28</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 39kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>7700 ft</font></span><br><br>]]></description>
   <styleUrl>#style_27</styleUrl>
   <Point>
     <extrude>1</extrude>
     <altitudeMode>absolute</altitudeMode>
-    <coordinates>12.446667,38.870000,4937.76</coordinates>
-  </Point>
-</Placemark>
-<Style id="style_28">
-  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
-</Style>
-<Placemark>
-  <name>RONDI</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>GIANO5B</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL84</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>123896 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>20586 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>5</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>357</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>21</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 02:44</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:19Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 38kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>5500 ft</font></span><br><br>]]></description>
-  <styleUrl>#style_28</styleUrl>
-  <Point>
-    <extrude>1</extrude>
-    <altitudeMode>absolute</altitudeMode>
-    <coordinates>12.773333,38.511667,2560.32</coordinates>
-  </Point>
-</Placemark>
-<Style id="style_29">
-  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
-</Style>
-<Placemark>
-  <name>SALAP</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>GIANO5B</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>FL58</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>123811 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>20501 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>19</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>292</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>29</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 02:46</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:21Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 37kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>6</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>5500 ft</font></span><br><br>]]></description>
-  <styleUrl>#style_29</styleUrl>
-  <Point>
-    <extrude>1</extrude>
-    <altitudeMode>absolute</altitudeMode>
-    <coordinates>12.896667,38.375000,1767.84</coordinates>
-  </Point>
-</Placemark>
-<Style id="style_30">
-  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
-</Style>
-<Placemark>
-  <name>PRS</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>GIANO5B</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>400 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>123679 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>20369 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>23</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>273</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>32</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 02:49</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:24Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 36kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>2</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6400 ft</font></span><br><br>]]></description>
-  <styleUrl>#style_30</styleUrl>
-  <Point>
-    <extrude>1</extrude>
-    <altitudeMode>absolute</altitudeMode>
-    <coordinates>13.080000,38.171667,121.92</coordinates>
-  </Point>
-</Placemark>
-<Style id="style_31">
-  <IconStyle><scale>1.2</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/ylw-diamond.png</href></Icon></IconStyle>
-</Style>
-<Placemark>
-  <name>LICJ</name>
-  <description><![CDATA[<span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>43 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>123667 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>20357 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>28</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>261</font></span><br><br><span style='white-space: nowrap;'>-<b>TAT :</b> <font color='blue'>36</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 02:49</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>16:24Z, 25</font></span><br><br><span style='white-space: nowrap;'>-<b>Wind factor :</b> <font color='blue'>T.W 27kt</font></span><br><br><span style='white-space: nowrap;'>-<b>Shear rate :</b> <font color='blue'>1</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>6400 ft</font></span><br><br>]]></description>
-  <styleUrl>#style_31</styleUrl>
-  <Point>
-    <extrude>1</extrude>
-    <altitudeMode>absolute</altitudeMode>
-    <coordinates>13.100000,38.181667,13.1064</coordinates>
+    <coordinates>28.815000,40.976667,28.6512</coordinates>
   </Point>
 </Placemark>
 <Style id="style_10002">
@@ -402,8 +350,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -8.925000,52.701667,14.0208
-      -8.943333,52.693333,121.92
+      13.100000,38.181667,13.1064
+      13.118333,38.470000,3444.24
     </coordinates>
   </LineString>
 </Placemark>
@@ -416,8 +364,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -8.943333,52.693333,121.92
-      -8.931667,52.593333,1158.24
+      13.118333,38.470000,3444.24
+      13.135000,38.596667,4693.92
     </coordinates>
   </LineString>
 </Placemark>
@@ -430,8 +378,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -8.931667,52.593333,1158.24
-      -8.665000,52.228333,4876.8
+      13.135000,38.596667,4693.92
+      13.115000,38.858333,6553.2
     </coordinates>
   </LineString>
 </Placemark>
@@ -444,8 +392,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -8.665000,52.228333,4876.8
-      -8.331667,51.898333,6918.96
+      13.115000,38.858333,6553.2
+      13.796667,39.421667,10515.6
     </coordinates>
   </LineString>
 </Placemark>
@@ -458,8 +406,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -8.331667,51.898333,6918.96
-      -7.568333,51.240000,9784.08
+      13.796667,39.421667,10515.6
+      14.021667,39.581667,11582.4
     </coordinates>
   </LineString>
 </Placemark>
@@ -472,8 +420,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -7.568333,51.240000,9784.08
-      -7.115000,50.936667,11155.68
+      14.021667,39.581667,11582.4
+      14.458333,39.888333,11582.4
     </coordinates>
   </LineString>
 </Placemark>
@@ -486,8 +434,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -7.115000,50.936667,11155.68
-      -6.783333,50.711667,11887.2
+      14.458333,39.888333,11582.4
+      15.670000,40.715000,11582.4
     </coordinates>
   </LineString>
 </Placemark>
@@ -500,8 +448,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -6.783333,50.711667,11887.2
-      -5.056667,49.485000,11887.2
+      15.670000,40.715000,11582.4
+      16.870000,40.820000,11582.4
     </coordinates>
   </LineString>
 </Placemark>
@@ -514,8 +462,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -5.056667,49.485000,11887.2
-      -3.616667,48.030000,11887.2
+      16.870000,40.820000,11582.4
+      18.951667,40.891667,11582.4
     </coordinates>
   </LineString>
 </Placemark>
@@ -528,13 +476,13 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -3.616667,48.030000,11887.2
-      -2.500000,47.685000,11887.2
+      18.951667,40.891667,11582.4
+      22.758333,41.246667,11582.4
     </coordinates>
   </LineString>
 </Placemark>
 <Style id="style_10012">
-  <LineStyle><color>ff9314ff</color><width>3</width></LineStyle>
+  <LineStyle><color>ff00ffff</color><width>3</width></LineStyle>
 </Style>
 <Placemark>
   <styleUrl>#style_10012</styleUrl>
@@ -542,13 +490,13 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -2.500000,47.685000,11887.2
-      -1.928333,47.348333,11887.2
+      22.758333,41.246667,11582.4
+      23.968333,40.596667,11277.6
     </coordinates>
   </LineString>
 </Placemark>
 <Style id="style_10013">
-  <LineStyle><color>ff9314ff</color><width>3</width></LineStyle>
+  <LineStyle><color>ff00ffff</color><width>3</width></LineStyle>
 </Style>
 <Placemark>
   <styleUrl>#style_10013</styleUrl>
@@ -556,13 +504,13 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -1.928333,47.348333,11887.2
-      -1.613333,47.161667,11887.2
+      23.968333,40.596667,11277.6
+      24.706667,40.768333,11277.6
     </coordinates>
   </LineString>
 </Placemark>
 <Style id="style_10014">
-  <LineStyle><color>ff9314ff</color><width>3</width></LineStyle>
+  <LineStyle><color>ff00ffff</color><width>3</width></LineStyle>
 </Style>
 <Placemark>
   <styleUrl>#style_10014</styleUrl>
@@ -570,8 +518,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -1.613333,47.161667,11887.2
-      -1.365000,46.971667,11887.2
+      24.706667,40.768333,11277.6
+      25.308333,40.905000,11277.6
     </coordinates>
   </LineString>
 </Placemark>
@@ -584,8 +532,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -1.365000,46.971667,11887.2
-      -0.861667,46.583333,11887.2
+      25.308333,40.905000,11277.6
+      25.668333,40.985000,11277.6
     </coordinates>
   </LineString>
 </Placemark>
@@ -598,8 +546,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -0.861667,46.583333,11887.2
-      -0.663333,46.430000,11887.2
+      25.668333,40.985000,11277.6
+      26.321667,41.125000,7406.64
     </coordinates>
   </LineString>
 </Placemark>
@@ -612,8 +560,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -0.663333,46.430000,11887.2
-      -0.311667,45.660000,11887.2
+      26.321667,41.125000,7406.64
+      26.611667,41.035000,5791.2
     </coordinates>
   </LineString>
 </Placemark>
@@ -626,8 +574,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      -0.311667,45.660000,11887.2
-      0.515000,44.438333,11887.2
+      26.611667,41.035000,5791.2
+      26.978333,40.926667,5791.2
     </coordinates>
   </LineString>
 </Placemark>
@@ -640,8 +588,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      0.515000,44.438333,11887.2
-      1.781667,44.138333,11887.2
+      26.978333,40.926667,5791.2
+      27.166667,40.821667,5791.2
     </coordinates>
   </LineString>
 </Placemark>
@@ -654,8 +602,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      1.781667,44.138333,11887.2
-      3.975000,43.578333,11887.2
+      27.166667,40.821667,5791.2
+      27.313333,40.738333,5791.2
     </coordinates>
   </LineString>
 </Placemark>
@@ -668,8 +616,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      3.975000,43.578333,11887.2
-      5.050000,42.875000,11887.2
+      27.313333,40.738333,5791.2
+      27.556667,40.713333,4907.28
     </coordinates>
   </LineString>
 </Placemark>
@@ -682,8 +630,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      5.050000,42.875000,11887.2
-      6.410000,42.123333,11887.2
+      27.556667,40.713333,4907.28
+      27.786667,40.711667,3779.52
     </coordinates>
   </LineString>
 </Placemark>
@@ -696,8 +644,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      6.410000,42.123333,11887.2
-      8.161667,41.161667,11887.2
+      27.786667,40.711667,3779.52
+      28.248333,40.781667,1828.8
     </coordinates>
   </LineString>
 </Placemark>
@@ -710,8 +658,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      8.161667,41.161667,11887.2
-      8.220000,41.090000,11887.2
+      28.248333,40.781667,1828.8
+      28.490000,40.836667,1432.56
     </coordinates>
   </LineString>
 </Placemark>
@@ -724,8 +672,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      8.220000,41.090000,11887.2
-      11.270000,39.511667,11887.2
+      28.490000,40.836667,1432.56
+      28.573333,40.855000,914.4
     </coordinates>
   </LineString>
 </Placemark>
@@ -738,8 +686,8 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      11.270000,39.511667,11887.2
-      12.446667,38.870000,4937.76
+      28.573333,40.855000,914.4
+      28.815000,40.976667,28.6512
     </coordinates>
   </LineString>
 </Placemark>
@@ -752,13 +700,13 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      12.446667,38.870000,4937.76
-      12.773333,38.511667,2560.32
+      28.815000,40.976667,28.6512
+      0,0,0
     </coordinates>
   </LineString>
 </Placemark>
 <Style id="style_10028">
-  <LineStyle><color>ff00ffff</color><width>3</width></LineStyle>
+  <LineStyle><color>ffffffff</color><width>2</width></LineStyle>
 </Style>
 <Placemark>
   <styleUrl>#style_10028</styleUrl>
@@ -766,13 +714,13 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      12.773333,38.511667,2560.32
-      12.896667,38.375000,1767.84
+      0,0,0
+      0,0,0
     </coordinates>
   </LineString>
 </Placemark>
 <Style id="style_10029">
-  <LineStyle><color>ff00ffff</color><width>3</width></LineStyle>
+  <LineStyle><color>ffffffff</color><width>2</width></LineStyle>
 </Style>
 <Placemark>
   <styleUrl>#style_10029</styleUrl>
@@ -780,13 +728,13 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      12.896667,38.375000,1767.84
-      13.080000,38.171667,121.92
+      0,0,0
+      0,0,0
     </coordinates>
   </LineString>
 </Placemark>
 <Style id="style_10030">
-  <LineStyle><color>ff00ffff</color><width>3</width></LineStyle>
+  <LineStyle><color>ffffffff</color><width>2</width></LineStyle>
 </Style>
 <Placemark>
   <styleUrl>#style_10030</styleUrl>
@@ -794,13 +742,13 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      13.080000,38.171667,121.92
-      13.100000,38.181667,13.1064
+      0,0,0
+      0,0,0
     </coordinates>
   </LineString>
 </Placemark>
 <Style id="style_10031">
-  <LineStyle><color>ff00ffff</color><width>3</width></LineStyle>
+  <LineStyle><color>ffffffff</color><width>2</width></LineStyle>
 </Style>
 <Placemark>
   <styleUrl>#style_10031</styleUrl>
@@ -808,7 +756,7 @@
     <tessellate>1</tessellate>
     <altitudeMode>absolute</altitudeMode>
     <coordinates>
-      13.100000,38.181667,13.1064
+      0,0,0
       0,0,0
     </coordinates>
   </LineString>
