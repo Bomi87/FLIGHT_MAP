@@ -713,11 +713,13 @@
        Base Maps
     ----------------------------- */
 
+    // CARTO 공개 타일은 API KEY REQUIRED 워터마크가 표시될 수 있어
+    // 키가 필요 없는 OpenStreetMap 기본 타일로 변경
     const streetMap = L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
       {
-        maxZoom: 18,
-        attribution: "&copy; OpenStreetMap &copy; CARTO"
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
       }
     );
 
@@ -3074,10 +3076,23 @@ async function loadArtccGeojson() {
   artccLoaded = true;
 }
 function getArtccRenderReferenceLon() {
-  if (Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)) {
-    return window.__ROUTE_RENDER_REFERENCE_LON;
+  let routeRef = Number.isFinite(window.__ROUTE_RENDER_REFERENCE_LON)
+    ? window.__ROUTE_RENDER_REFERENCE_LON
+    : map.getCenter().lng;
+
+  /*
+   * U.S. ARTCC는 원본 GeoJSON이 대체로 서경(-180 ~ -60) 기준이다.
+   * 항로가 동반구(한국/아시아/유럽 쪽)에 있을 때 그대로 그리면
+   * 미국이 지도의 왼쪽 world copy에 표시된다.
+   *
+   * 이 경우 ARTCC 전용 기준 경도를 동쪽으로 180도 이동시켜
+   * 미국 경도를 +360 world copy 쪽(태평양 건너 오른쪽)에 배치한다.
+   */
+  if (routeRef >= 0) {
+    return routeRef + 180;
   }
-  return map.getCenter().lng;
+
+  return routeRef;
 }
     
     function createNdbToggleControl() {
