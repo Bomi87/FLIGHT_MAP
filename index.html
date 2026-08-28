@@ -713,15 +713,23 @@
        Base Maps
     ----------------------------- */
 
-    // CARTO 공개 타일은 API KEY REQUIRED 워터마크가 표시될 수 있어
-    // 키가 필요 없는 OpenStreetMap 기본 타일로 변경
-    const streetMap = L.tileLayer(
-      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors"
-      }
-    );
+const streetMap = L.layerGroup([
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    {
+      maxZoom: 16,
+      attribution: "Tiles &copy; Esri"
+    }
+  ),
+
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    {
+      maxZoom: 16,
+      attribution: "Labels &copy; Esri"
+    }
+  )
+]);
 
     const satelliteMap = L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
