@@ -1,57 +1,65 @@
-const params = new URLSearchParams(window.location.search);
+/* ------------------ AIRCRAFT LIST ------------------ */
 
-/* ------------------ TARGET PARSE ------------------ */
-
-function parseCsvParam(name) {
-  return (params.get(name) || "")
-    .split(",")
-    .map(x => x.trim())
-    .filter(Boolean);
-}
-
-const singleHex = (params.get("hex") || "").toLowerCase().trim();
-
-const multiHexes = [
-  ...parseCsvParam("hexes"),
-  ...parseCsvParam("hexs")
-].map(x => x.toLowerCase());
+const MAX_AIRCRAFT_COUNT = 20;
 
 let TARGETS = [];
+let HEX_INFO_MAP = {};
 
-if (multiHexes.length) {
-  TARGETS = multiHexes.map(hex => ({
-    key: `hex:${hex}`,
-    hex
-  }));
-} else if (singleHex) {
-  TARGETS = [{
-    key: `hex:${singleHex}`,
-    hex: singleHex
-  }];
+async function loadAircraftList() {
+  const url =
+    `${SCRIPT_URL}?action=aircraftlist&_=${Date.now()}`;
+
+  const data = await fetchJson(url);
+
+  if (
+    !data ||
+    !data.ok ||
+    !Array.isArray(data.aircraft)
+  ) {
+    throw new Error(
+      data?.error ||
+      "항공기 목록을 불러오지 못했습니다."
+    );
+  }
+
+  const seenHexes = new Set();
+
+  const aircraftList = data.aircraft
+    .map(item => ({
+      order: Number(item.order) || 9999,
+      hex: String(item.hex || "")
+        .trim()
+        .toLowerCase(),
+      label: String(item.label || "")
+        .trim()
+    }))
+    .filter(item => {
+      if (
+        !item.hex ||
+        seenHexes.has(item.hex)
+      ) {
+        return false;
+      }
+
+      seenHexes.add(item.hex);
+      return true;
+    })
+    .sort((a, b) => a.order - b.order)
+    .slice(0, MAX_AIRCRAFT_COUNT);
+
+  HEX_INFO_MAP = {};
+
+  TARGETS = aircraftList.map(item => {
+    HEX_INFO_MAP[item.hex] = item.label;
+
+    return {
+      key: `hex:${item.hex}`,
+      hex: item.hex
+    };
+  });
 }
 
-/* 최대 16대 */
-TARGETS = TARGETS.slice(0, 20);
-
 /* ------------------ HEX DESCRIPTION ------------------ */
-
-const HEX_INFO_MAP = {
-  "71c550": "현대(G650)",
-  "71c290": "현대(BBJ)",
-  "71c551": "현대(B38M)",
-  "71c299": "LG(G650)",
-  "71ba27": "한화(BBJ)",
-  "71c080": "SK(ACJ)",
-  "71c372": "SK(G650)",
-  "71c508": "삼성(B788)",
-  "71c230": "KE(GLEX)",
-  "71c068": "KE(G650)",
-  "71c222": "KE(BBJ)",
-  "71c229": "KE(GLEX)",
-  "71be43": "CD1(B748)",
-  "71c566": "CD2(B38M)"
- 
-};
 
 function getHexDescription(hex) {
   const normalized = String(hex || "").trim().toLowerCase();
@@ -214,8 +222,6 @@ function initAircraftStates() {
     });
   });
 }
-
-initAircraftStates();
 
 /* ------------------ UTILS ------------------ */
 
@@ -2093,7 +2099,21 @@ function startGpsTracking() {
 
 /* ------------------ INIT ------------------ */
 
-function initAircraftTracking() {
+async function initAircraftTracking() {
+  try {
+    await loadAircraftList();
+    initAircraftStates();
+  } catch (err) {
+    console.error(
+      "항공기 목록 로딩 실패:",
+      err
+    );
+
+    alert(
+      "항공기 목록을 불러오지 못했습니다."
+    );
+  }
+
   injectAircraftUiCss();
 
   if (map && map.zoomControl) {
