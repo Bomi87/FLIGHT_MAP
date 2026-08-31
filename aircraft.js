@@ -31,7 +31,7 @@ if (multiHexes.length) {
 }
 
 /* 최대 16대 */
-TARGETS = TARGETS.slice(0, 16);
+TARGETS = TARGETS.slice(0, 20);
 
 /* ------------------ HEX DESCRIPTION ------------------ */
 
