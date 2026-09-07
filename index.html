@@ -654,11 +654,21 @@
 
 /* 모바일: 검색창을 A/C LIST 위로 올리고 폭을 더 작게 표시 */
 @media (max-width: 767px) {
+  /* A/C LIST(z-index:99999)보다 위에서 검색 버튼 터치를 받는다. */
+  .leaflet-bottom.leaflet-right {
+    z-index: 100001;
+    pointer-events: none;
+  }
+
   .leaflet-control-search-stack {
     width: 150px;
     max-width: calc(100vw - 16px);
-    margin-bottom: calc(170px + env(safe-area-inset-bottom, 0px)) !important;
+    margin-bottom: max(
+      calc(230px + env(safe-area-inset-bottom, 0px)),
+      calc(28vh + env(safe-area-inset-bottom, 0px))
+    ) !important;
     gap: 5px;
+    pointer-events: none;
   }
 
   .leaflet-control-search-stack .leaflet-control-airspace-search,
@@ -666,6 +676,7 @@
     width: 150px;
     padding: 5px;
     display: none;
+    pointer-events: auto;
   }
 
   .leaflet-control-search-stack.search-open .leaflet-control-airspace-search,
@@ -727,17 +738,20 @@
   .mobile-search-toggle {
     display: block;
     align-self: flex-end;
-    width: 48px;
-    height: 27px;
+    width: 60px;
+    height: 42px;
     padding: 0 7px;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     background: #111827;
     color: #ffffff;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 800;
     cursor: pointer;
+    pointer-events: auto;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .mobile-search-toggle.search-on {
