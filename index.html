@@ -404,6 +404,12 @@
   width: 100%;
   margin: 0 !important;
   box-sizing: border-box;
+  display: none;
+}
+
+.leaflet-control-search-stack.search-open .leaflet-control-airspace-search,
+.leaflet-control-search-stack.search-open .leaflet-control-airport-search {
+  display: block;
 }
 
 .leaflet-control-airspace-search {
@@ -774,7 +780,7 @@
 }
 /* ===== ICAO 공항 검색 CSS 끝 ===== */
 
-/* 모바일: 검색창을 A/C LIST 위로 올리고 폭을 더 작게 표시 */
+/* 모바일: 검색 컨트롤 위치/폭만 별도 보정 (접힘/펼침 동작은 PC와 공통) */
 @media (max-width: 767px) {
   /* A/C LIST(z-index:99999)보다 위에서 검색 버튼 터치를 받는다. */
   .leaflet-bottom.leaflet-right {
@@ -797,13 +803,7 @@
   .leaflet-control-search-stack .leaflet-control-airport-search {
     width: 150px;
     padding: 5px;
-    display: none;
     pointer-events: auto;
-  }
-
-  .leaflet-control-search-stack.search-open .leaflet-control-airspace-search,
-  .leaflet-control-search-stack.search-open .leaflet-control-airport-search {
-    display: block;
   }
 
   .airspace-search-title,
@@ -861,54 +861,48 @@
 }
 
 .mobile-search-toggle {
-  display: none;
+  display: block;
+  align-self: flex-end;
+  width: 44px;
+  height: 42px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: #111827;
+  color: #ffffff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-@media (max-width: 767px) {
-  .mobile-search-toggle {
-    display: block;
-    align-self: flex-end;
-    width: 44px;
-    height: 42px;
-    padding: 0;
-    border: none;
-    border-radius: 8px;
-    background: #111827;
-    color: #ffffff;
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
-    cursor: pointer;
-    pointer-events: auto;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-  }
+.mobile-search-toggle-icon {
+  position: relative;
+  display: block;
+  width: 17px;
+  height: 17px;
+  margin: 0 auto;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
 
-  .mobile-search-toggle-icon {
-    position: relative;
-    display: block;
-    width: 17px;
-    height: 17px;
-    margin: 0 auto;
-    border: 2px solid currentColor;
-    border-radius: 50%;
-    box-sizing: border-box;
-  }
+.mobile-search-toggle-icon::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  bottom: -3px;
+  width: 7px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: rotate(45deg);
+  transform-origin: left center;
+}
 
-  .mobile-search-toggle-icon::after {
-    content: "";
-    position: absolute;
-    right: -6px;
-    bottom: -3px;
-    width: 7px;
-    height: 2px;
-    border-radius: 2px;
-    background: currentColor;
-    transform: rotate(45deg);
-    transform-origin: left center;
-  }
-
-  .mobile-search-toggle.search-on {
-    background: #334155;
-  }
+.mobile-search-toggle.search-on {
+  background: #334155;
 }
 
 
