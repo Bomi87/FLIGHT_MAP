@@ -498,17 +498,33 @@
 }
 
 .openaip-airspace-label {
-  padding: 2px 5px !important;
-  border: 1px solid rgba(255, 255, 255, 0.8) !important;
-  border-radius: 4px !important;
-  background: rgba(15, 23, 42, 0.82) !important;
-  color: #ffffff !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45) !important;
-  font-size: 10px !important;
-  font-weight: 800 !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .openaip-airspace-label:before {
+  display: none !important;
+}
+
+.openaip-airspace-label-text {
+  display: inline-block;
+  white-space: nowrap;
+  padding: 2px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  font-size: 10px;
+  font-weight: 800;
+  transform: scale(var(--openaip-label-scale, 1));
+  transform-origin: center center;
+  transition: transform 80ms linear;
+}
+
+.airspace-search-labels-hidden .openaip-airspace-label {
   display: none !important;
 }
 
@@ -635,6 +651,66 @@
   }
 }
 /* ===== ICAO 공항 검색 CSS 끝 ===== */
+
+/* 모바일: 검색창을 A/C LIST 위로 올리고 폭을 더 작게 표시 */
+@media (max-width: 767px) {
+  .leaflet-control-search-stack {
+    width: 150px;
+    max-width: calc(100vw - 16px);
+    margin-bottom: calc(170px + env(safe-area-inset-bottom, 0px)) !important;
+    gap: 5px;
+  }
+
+  .leaflet-control-airspace-search,
+  .leaflet-control-airport-search {
+    width: 150px;
+    padding: 5px;
+  }
+
+  .airspace-search-title,
+  .airport-search-title {
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+
+  .airspace-search-row,
+  .airport-search-row {
+    gap: 3px;
+  }
+
+  .airspace-search-row input,
+  .airport-search-row input {
+    height: 26px;
+    padding: 0 3px;
+    font-size: 11px;
+  }
+
+  .airspace-search-row button,
+  .airport-search-row button {
+    width: 38px;
+    height: 26px;
+    font-size: 10px;
+  }
+
+  .airspace-search-status,
+  .airport-search-status {
+    min-height: 13px;
+    margin-top: 3px;
+    font-size: 9px;
+  }
+
+  .airspace-search-items {
+    max-height: 44px;
+    margin-top: 3px;
+    font-size: 9px;
+  }
+
+  .airspace-clear-all {
+    height: 26px;
+    margin-top: 4px;
+    font-size: 10px;
+  }
+}
 
 
 /* ===== Aircraft Positioning Panel 시작 ===== */
@@ -3563,12 +3639,15 @@ function addSearchedAirspaceToMap(item, key) {
   const polygon = L.polygon(polygonRings, style).addTo(group);
 
   polygon.bindPopup(buildSearchedAirspacePopup(item), POPUP_OPTIONS);
-  polygon.bindTooltip(escapeHtml(item.name || item.identifier || "AIRSPACE"), {
+  polygon.bindTooltip(
+    `<span class="openaip-airspace-label-text">${escapeHtml(item.name || item.identifier || "AIRSPACE")}</span>`,
+    {
     permanent: true,
     direction: "center",
     className: "openaip-airspace-label",
     opacity: 0.95
-  });
+    }
+  );
 
   polygon.on("mouseover", function () {
     polygon.setStyle({ weight: style.weight + 2, fillOpacity: 0.35 });
@@ -3635,9 +3714,15 @@ function formatOpenAipCountry(country) {
   const countryCodes = Array.isArray(country) ? country : [country];
 
   return countryCodes
-    .map(code => String(code || "").trim().toUpperCase())
+    .map(code => String(code || "").trim())
     .filter(Boolean)
-    .map(code => {
+    .map(rawCountry => {
+      if (!/^[A-Za-z]{2}$/.test(rawCountry)) {
+        return rawCountry;
+      }
+
+      const code = rawCountry.toUpperCase();
+
       try {
         if (typeof Intl.DisplayNames === "function") {
           const regionNames = new Intl.DisplayNames(["ko"], { type: "region" });
@@ -3698,6 +3783,28 @@ function fitSearchedAirspaceKeys(keys) {
   if (bounds.isValid()) {
     map.fitBounds(bounds.pad(0.12), { maxZoom: 9 });
   }
+}
+
+function updateSearchedAirspaceLabelZoom() {
+  const zoom = map.getZoom();
+  const mapContainer = map.getContainer();
+
+  // 멀리 축소한 상태에서는 폴리곤만 남기고 고정 라벨은 숨긴다.
+  mapContainer.classList.toggle(
+    "airspace-search-labels-hidden",
+    zoom <= 5
+  );
+
+  let scale = 1;
+
+  if (zoom === 6) scale = 0.60;
+  else if (zoom === 7) scale = 0.75;
+  else if (zoom === 8) scale = 0.88;
+
+  mapContainer.style.setProperty(
+    "--openaip-label-scale",
+    String(scale)
+  );
 }
 
 function saveSearchedAirspacesToSession() {
@@ -3861,7 +3968,9 @@ async function searchAirportOnTrackingMap(rawIcao) {
       throw new Error("공항 좌표가 올바르지 않습니다.");
     }
 
-    const lon = shiftLonNearReference(rawLon, map.getCenter().lng);
+    // 항로·공역과 동일한 world copy를 사용한다.
+    // 예: 미국 서경 -77°는 +283°로 이동해 태평양 항로 기준 오른쪽에 표시.
+    const lon = shiftLonNearReference(rawLon, GLOBAL_WORLD_REFERENCE_LON);
     const latlng = [lat, lon];
 
     airportSearchLayer.clearLayers();
@@ -4186,6 +4295,7 @@ function createRefreshControl() {
   return control;
 }
 createTrackingSearchStackControl().addTo(map);
+updateSearchedAirspaceLabelZoom();
 createNdbToggleControl().addTo(map);
 createFirToggleControl().addTo(map);
 createArtccToggleControl().addTo(map);
@@ -4709,6 +4819,7 @@ map.on("moveend zoomend", function () {
   scheduleRouteTextUpdate(20);
   scheduleAirspaceLabelUpdate(20);
   scheduleRedrawNDB();
+  updateSearchedAirspaceLabelZoom();
 });
 
 const ROUTE_REFRESH_MS = 60000;
