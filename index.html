@@ -3217,7 +3217,7 @@ function getArtccRenderReferenceLon() {
  * openAIP 제한/위험/금지/군 공역 검색
  * ========================================================= */
 function createAirspaceSearchControl() {
-  const control = L.control({ position: "topleft" });
+  const control = L.control({ position: "bottomright" });
 
   control.onAdd = function () {
     const container = L.DomUtil.create(
@@ -3493,10 +3493,35 @@ function formatOpenAipVerticalLimit(limit) {
   return value.toLocaleString() + " " + unitText + " " + datumText;
 }
 
+function formatOpenAipCountry(country) {
+  const countryCodes = Array.isArray(country) ? country : [country];
+
+  return countryCodes
+    .map(code => String(code || "").trim().toUpperCase())
+    .filter(Boolean)
+    .map(code => {
+      try {
+        if (typeof Intl.DisplayNames === "function") {
+          const regionNames = new Intl.DisplayNames(["ko"], { type: "region" });
+          return regionNames.of(code) || code;
+        }
+      } catch (_) {}
+
+      const fallbackNames = {
+        MY: "말레이시아",
+        SG: "싱가포르",
+        KR: "대한민국",
+        US: "미국",
+        JP: "일본"
+      };
+
+      return fallbackNames[code] || code;
+    })
+    .join(", ") || "-";
+}
+
 function buildSearchedAirspacePopup(item) {
-  const countries = Array.isArray(item.country)
-    ? item.country.join(", ")
-    : String(item.country || "-");
+  const countries = formatOpenAipCountry(item.country);
 
   const activation = [
     item.byNotam ? "BY NOTAM" : "",
