@@ -1,23 +1,91 @@
 /* ------------------ AIRCRAFT LIST ------------------ */
 
 const MAX_AIRCRAFT_COUNT = 20;
+const AIRCRAFT_LIST_CACHE_KEY = "trackingAircraftList_v1";
+const AIRCRAFT_LIST_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const AIRCRAFT_LIST_RETRY_DELAYS_MS = [0, 1000, 2500];
 
 let TARGETS = [];
 let HEX_INFO_MAP = {};
 
 async function loadAircraftList() {
-  const url =
-    `${SCRIPT_URL}?action=aircraftlist&_=${Date.now()}`;
+  let data = null;
+  let lastError = null;
 
-  const data = await fetchJson(url);
+  for (let attempt = 0; attempt < AIRCRAFT_LIST_RETRY_DELAYS_MS.length; attempt++) {
+    const delayMs = AIRCRAFT_LIST_RETRY_DELAYS_MS[attempt];
 
-  if (
-    !data ||
-    !data.ok ||
-    !Array.isArray(data.aircraft)
-  ) {
-    throw new Error(
-      data?.error ||
+    if (delayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+
+    try {
+      const url =
+        `${SCRIPT_URL}?action=aircraftlist&_=${Date.now()}`;
+      const response = await fetchJson(url, 10000);
+
+      if (
+        !response ||
+        !response.ok ||
+        !Array.isArray(response.aircraft)
+      ) {
+        throw new Error(
+          response?.error ||
+          "항공기 목록 응답 형식이 올바르지 않습니다."
+        );
+      }
+
+      data = response;
+
+      try {
+        localStorage.setItem(
+          AIRCRAFT_LIST_CACHE_KEY,
+          JSON.stringify({
+            savedAt: Date.now(),
+            aircraft: response.aircraft
+          })
+        );
+      } catch (cacheError) {
+        console.warn("항공기 목록 캐시 저장 실패:", cacheError);
+      }
+
+      break;
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        `항공기 목록 로딩 재시도 ${attempt + 1}/${AIRCRAFT_LIST_RETRY_DELAYS_MS.length} 실패:`,
+        err
+      );
+    }
+  }
+
+  if (!data) {
+    try {
+      const cached = JSON.parse(
+        localStorage.getItem(AIRCRAFT_LIST_CACHE_KEY) || "null"
+      );
+      const cacheAge = Date.now() - Number(cached?.savedAt || 0);
+
+      if (
+        cached &&
+        Array.isArray(cached.aircraft) &&
+        cacheAge >= 0 &&
+        cacheAge <= AIRCRAFT_LIST_CACHE_MAX_AGE_MS
+      ) {
+        data = {
+          ok: true,
+          aircraft: cached.aircraft,
+          fromCache: true
+        };
+        console.warn("일시적인 통신 실패로 저장된 항공기 목록을 사용합니다.");
+      }
+    } catch (cacheError) {
+      console.warn("저장된 항공기 목록을 읽지 못했습니다:", cacheError);
+    }
+  }
+
+  if (!data) {
+    throw lastError || new Error(
       "항공기 목록을 불러오지 못했습니다."
     );
   }
