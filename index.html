@@ -661,10 +661,16 @@
     gap: 5px;
   }
 
-  .leaflet-control-airspace-search,
-  .leaflet-control-airport-search {
+  .leaflet-control-search-stack .leaflet-control-airspace-search,
+  .leaflet-control-search-stack .leaflet-control-airport-search {
     width: 150px;
     padding: 5px;
+    display: none;
+  }
+
+  .leaflet-control-search-stack.search-open .leaflet-control-airspace-search,
+  .leaflet-control-search-stack.search-open .leaflet-control-airport-search {
+    display: block;
   }
 
   .airspace-search-title,
@@ -682,7 +688,8 @@
   .airport-search-row input {
     height: 26px;
     padding: 0 3px;
-    font-size: 11px;
+    /* iOS Safari는 16px 미만 input에 포커스할 때 화면을 자동 확대한다. */
+    font-size: 16px;
   }
 
   .airspace-search-row button,
@@ -709,6 +716,32 @@
     height: 26px;
     margin-top: 4px;
     font-size: 10px;
+  }
+}
+
+.mobile-search-toggle {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .mobile-search-toggle {
+    display: block;
+    align-self: flex-end;
+    width: 48px;
+    height: 27px;
+    padding: 0 7px;
+    border: none;
+    border-radius: 6px;
+    background: #111827;
+    color: #ffffff;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
+    font-size: 10px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .mobile-search-toggle.search-on {
+    background: #334155;
   }
 }
 
@@ -4085,13 +4118,32 @@ function createTrackingSearchStackControl() {
 
     const airspacePanel = createAirspaceSearchControl().onAdd(map);
     const airportPanel = createAirportSearchControl().onAdd(map);
+    const mobileToggle = L.DomUtil.create(
+      "button",
+      "mobile-search-toggle",
+      stack
+    );
+    mobileToggle.type = "button";
+    mobileToggle.textContent = "검색";
+    mobileToggle.setAttribute("aria-label", "공역 및 공항 검색창 열기");
+    mobileToggle.setAttribute("aria-expanded", "false");
 
     // 두 패널을 하나의 세로 컨테이너에 넣어 겹침과 화면 밖 밀림을 방지한다.
     airspacePanel.classList.remove("leaflet-control");
     airportPanel.classList.remove("leaflet-control");
 
-    stack.appendChild(airspacePanel);
-    stack.appendChild(airportPanel);
+    stack.insertBefore(airspacePanel, mobileToggle);
+    stack.insertBefore(airportPanel, mobileToggle);
+
+    mobileToggle.addEventListener("click", () => {
+      const isOpen = stack.classList.toggle("search-open");
+      mobileToggle.classList.toggle("search-on", isOpen);
+      mobileToggle.setAttribute("aria-expanded", String(isOpen));
+      mobileToggle.setAttribute(
+        "aria-label",
+        isOpen ? "공역 및 공항 검색창 닫기" : "공역 및 공항 검색창 열기"
+      );
+    });
 
     L.DomEvent.disableClickPropagation(stack);
     L.DomEvent.disableScrollPropagation(stack);
@@ -4844,6 +4896,6 @@ initPositioningControl();
 init();
   </script>
 
-  <script src="aircraft.js?v=7"></script>
+  <script src="aircraft.js?v=8"></script>
 </body>
 </html>
