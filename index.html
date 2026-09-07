@@ -390,9 +390,25 @@
 }
 
 /* ===== openAIP 공역 검색 CSS 시작 ===== */
+.leaflet-control-search-stack {
+  width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px !important;
+  font-family: Arial, sans-serif;
+}
+
+.leaflet-control-search-stack .leaflet-control-airspace-search,
+.leaflet-control-search-stack .leaflet-control-airport-search {
+  width: 100%;
+  margin: 0 !important;
+  box-sizing: border-box;
+}
+
 .leaflet-control-airspace-search {
-  width: 250px;
-  padding: 8px;
+  width: 180px;
+  padding: 6px;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.38);
@@ -415,7 +431,7 @@
   min-width: 0;
   flex: 1;
   height: 28px;
-  padding: 0 7px;
+  padding: 0 5px;
   border: 1px solid #94a3b8;
   border-radius: 5px;
   font-size: 12px;
@@ -434,7 +450,7 @@
 }
 
 .airspace-search-row button {
-  width: 48px;
+  width: 42px;
   background: #b91c1c;
 }
 
@@ -497,12 +513,128 @@
 }
 
 @media (max-width: 767px) {
+  .leaflet-control-search-stack {
+    width: 180px;
+    max-width: calc(100vw - 20px);
+  }
+
   .leaflet-control-airspace-search {
-    width: 218px;
-    padding: 7px;
+    width: 180px;
+    padding: 6px;
   }
 }
 /* ===== openAIP 공역 검색 CSS 끝 ===== */
+
+/* ===== ICAO 공항 검색 CSS 시작 ===== */
+.leaflet-control-airport-search {
+  width: 180px;
+  padding: 6px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.38);
+  font-family: Arial, sans-serif;
+}
+
+.airport-search-title {
+  margin-bottom: 6px;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.airport-search-row {
+  display: flex;
+  gap: 4px;
+}
+
+.airport-search-row input {
+  min-width: 0;
+  flex: 1;
+  height: 28px;
+  padding: 0 5px;
+  border: 1px solid #94a3b8;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.airport-search-row button {
+  width: 42px;
+  height: 28px;
+  border: none;
+  border-radius: 5px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.airport-search-row button:disabled {
+  background: #94a3b8;
+  cursor: default;
+}
+
+.airport-search-status {
+  min-height: 15px;
+  margin-top: 5px;
+  color: #475569;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.airport-search-status.error {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.tracking-airport-marker {
+  position: relative;
+  width: 42px;
+  height: 46px;
+}
+
+.tracking-airport-arrow {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  color: #111827;
+  font-size: 29px;
+  line-height: 1;
+  font-weight: 950;
+  text-shadow:
+    -2px -2px 0 #ffffff,
+     2px -2px 0 #ffffff,
+    -2px  2px 0 #ffffff,
+     2px  2px 0 #ffffff,
+     0 2px 5px rgba(0, 0, 0, 0.35);
+}
+
+.tracking-airport-label {
+  padding: 2px 5px !important;
+  border: none !important;
+  border-radius: 4px !important;
+  background: #111827 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+}
+
+.tracking-airport-label:before {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .leaflet-control-airport-search {
+    width: 180px;
+    padding: 6px;
+  }
+}
+/* ===== ICAO 공항 검색 CSS 끝 ===== */
 
 
 /* ===== Aircraft Positioning Panel 시작 ===== */
@@ -911,6 +1043,12 @@ const searchedAirspaceLayers = new Map();
 let airspaceSearchUi = null;
 let isAirspaceSearching = false;
 /* ===== openAIP 공역 검색 설정 끝 ===== */
+
+/* ===== ICAO 공항 검색 설정 시작 ===== */
+const airportSearchLayer = L.featureGroup().addTo(map);
+let airportSearchUi = null;
+let isAirportSearching = false;
+/* ===== ICAO 공항 검색 설정 끝 ===== */
     
 let firVisible = false;
 let firLoaded = false;
@@ -3226,7 +3364,7 @@ function createAirspaceSearchControl() {
     );
 
     container.innerHTML = `
-      <div class="airspace-search-title">R / D / P / MIL AREA</div>
+      <div class="airspace-search-title">공역검색</div>
       <div class="airspace-search-row">
         <input type="search" maxlength="60" placeholder="예: WSD14" aria-label="공역명 검색" />
         <button type="button">검색</button>
@@ -3634,6 +3772,226 @@ function updateAirspaceSearchUi() {
     })
     .join("");
 }
+
+/* =========================================================
+ * openAIP ICAO 공항 검색
+ * ========================================================= */
+function createAirportSearchControl() {
+  const control = L.control({ position: "bottomright" });
+
+  control.onAdd = function () {
+    const container = L.DomUtil.create(
+      "div",
+      "leaflet-control leaflet-control-airport-search"
+    );
+
+    container.innerHTML = `
+      <div class="airport-search-title">공항검색</div>
+      <div class="airport-search-row">
+        <input type="search" maxlength="4" placeholder="예: RKSS" aria-label="ICAO 공항 검색" />
+        <button type="button">검색</button>
+      </div>
+      <div class="airport-search-status">ICAO 4자리 공항코드를 입력하세요.</div>
+    `;
+
+    const input = container.querySelector("input");
+    const button = container.querySelector("button");
+    const status = container.querySelector(".airport-search-status");
+
+    airportSearchUi = { input, button, status };
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    L.DomEvent.on(button, "click", function (event) {
+      L.DomEvent.stop(event);
+      searchAirportOnTrackingMap(input.value);
+    });
+
+    L.DomEvent.on(input, "keydown", function (event) {
+      if (event.key === "Enter") {
+        L.DomEvent.stop(event);
+        searchAirportOnTrackingMap(input.value);
+      }
+    });
+
+    L.DomEvent.on(input, "input", function () {
+      input.value = input.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+    });
+
+    return container;
+  };
+
+  return control;
+}
+
+async function searchAirportOnTrackingMap(rawIcao) {
+  if (isAirportSearching) return;
+
+  const icao = String(rawIcao || "").trim().toUpperCase();
+
+  if (!/^[A-Z]{4}$/.test(icao)) {
+    setAirportSearchStatus("ICAO 4자리 코드를 입력해주세요.", true);
+    return;
+  }
+
+  isAirportSearching = true;
+  updateAirportSearchUi();
+  setAirportSearchStatus(icao + " 검색 중...", false);
+
+  try {
+    const data = await callAirportSearchJsonp(icao);
+
+    if (!data || !data.ok) {
+      throw new Error((data && data.error) || "공항 조회에 실패했습니다.");
+    }
+
+    const airport = data.airport;
+    const coordinates = airport && airport.geometry && airport.geometry.coordinates;
+
+    if (!airport || !Array.isArray(coordinates)) {
+      setAirportSearchStatus(icao + " 공항을 찾지 못했습니다.", true);
+      return;
+    }
+
+    const lat = Number(coordinates[1]);
+    const rawLon = Number(coordinates[0]);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(rawLon)) {
+      throw new Error("공항 좌표가 올바르지 않습니다.");
+    }
+
+    const lon = shiftLonNearReference(rawLon, map.getCenter().lng);
+    const latlng = [lat, lon];
+
+    airportSearchLayer.clearLayers();
+
+    const icon = L.divIcon({
+      className: "",
+      html: `
+        <div class="tracking-airport-marker">
+          <div class="tracking-airport-arrow">▼</div>
+        </div>
+      `,
+      iconSize: [42, 46],
+      iconAnchor: [21, 42]
+    });
+
+    const marker = L.marker(latlng, {
+      icon,
+      zIndexOffset: 5000
+    }).addTo(airportSearchLayer);
+
+    marker.bindTooltip(icao, {
+      permanent: true,
+      direction: "top",
+      offset: [0, -11],
+      className: "tracking-airport-label"
+    });
+
+    map.setView(latlng, 10, { animate: false });
+
+    const countryName = formatOpenAipCountry(airport.country);
+    const airportName = String(airport.name || "").trim();
+
+    setAirportSearchStatus(
+      [icao, airportName, countryName].filter(Boolean).join(" · "),
+      false
+    );
+  } catch (err) {
+    console.error(err);
+    setAirportSearchStatus(err.message || String(err), true);
+  } finally {
+    isAirportSearching = false;
+    updateAirportSearchUi();
+  }
+}
+
+function callAirportSearchJsonp(icao) {
+  return new Promise((resolve, reject) => {
+    const callbackName =
+      "openAipAirportCallback_" +
+      Date.now() + "_" + Math.floor(Math.random() * 100000);
+
+    const params = new URLSearchParams({
+      action: "airportsearch",
+      icao: icao,
+      callback: callbackName,
+      _: String(Date.now())
+    });
+
+    const script = document.createElement("script");
+    script.src = AIRSPACE_SEARCH_BACKEND_URL + "?" + params.toString();
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("공항 조회 시간이 초과되었습니다."));
+    }, 30000);
+
+    window[callbackName] = function (data) {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = function () {
+      cleanup();
+      reject(new Error("공항 검색 백엔드에 연결할 수 없습니다."));
+    };
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[callbackName];
+
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    }
+
+    document.body.appendChild(script);
+  });
+}
+
+function setAirportSearchStatus(message, isError) {
+  if (!airportSearchUi) return;
+
+  airportSearchUi.status.textContent = message || "";
+  airportSearchUi.status.classList.toggle("error", Boolean(isError));
+}
+
+function updateAirportSearchUi() {
+  if (!airportSearchUi) return;
+
+  airportSearchUi.button.disabled = isAirportSearching;
+  airportSearchUi.button.textContent = isAirportSearching ? "..." : "검색";
+}
+
+function createTrackingSearchStackControl() {
+  const control = L.control({ position: "bottomright" });
+
+  control.onAdd = function () {
+    const stack = L.DomUtil.create(
+      "div",
+      "leaflet-control leaflet-control-search-stack"
+    );
+
+    const airspacePanel = createAirspaceSearchControl().onAdd(map);
+    const airportPanel = createAirportSearchControl().onAdd(map);
+
+    // 두 패널을 하나의 세로 컨테이너에 넣어 겹침과 화면 밖 밀림을 방지한다.
+    airspacePanel.classList.remove("leaflet-control");
+    airportPanel.classList.remove("leaflet-control");
+
+    stack.appendChild(airspacePanel);
+    stack.appendChild(airportPanel);
+
+    L.DomEvent.disableClickPropagation(stack);
+    L.DomEvent.disableScrollPropagation(stack);
+
+    return stack;
+  };
+
+  return control;
+}
     
     function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
@@ -3827,7 +4185,7 @@ function createRefreshControl() {
 
   return control;
 }
-createAirspaceSearchControl().addTo(map);
+createTrackingSearchStackControl().addTo(map);
 createNdbToggleControl().addTo(map);
 createFirToggleControl().addTo(map);
 createArtccToggleControl().addTo(map);
