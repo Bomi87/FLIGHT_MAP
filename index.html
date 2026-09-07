@@ -389,6 +389,121 @@
   color: #ffffff;
 }
 
+/* ===== openAIP 공역 검색 CSS 시작 ===== */
+.leaflet-control-airspace-search {
+  width: 250px;
+  padding: 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.38);
+  font-family: Arial, sans-serif;
+}
+
+.airspace-search-title {
+  margin-bottom: 6px;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.airspace-search-row {
+  display: flex;
+  gap: 4px;
+}
+
+.airspace-search-row input {
+  min-width: 0;
+  flex: 1;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid #94a3b8;
+  border-radius: 5px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.airspace-search-row button,
+.airspace-clear-all {
+  height: 28px;
+  border: none;
+  border-radius: 5px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.airspace-search-row button {
+  width: 48px;
+  background: #b91c1c;
+}
+
+.airspace-search-row button:disabled {
+  background: #94a3b8;
+  cursor: default;
+}
+
+.airspace-clear-all {
+  width: 100%;
+  margin-top: 6px;
+  background: #334155;
+}
+
+.airspace-clear-all:disabled {
+  background: #cbd5e1;
+  cursor: default;
+}
+
+.airspace-search-status {
+  min-height: 15px;
+  margin-top: 5px;
+  color: #475569;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.airspace-search-status.error {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.airspace-search-items {
+  max-height: 74px;
+  margin-top: 4px;
+  overflow-y: auto;
+  color: #1e293b;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.airspace-search-item {
+  padding: 2px 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.openaip-airspace-label {
+  padding: 2px 5px !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  border-radius: 4px !important;
+  background: rgba(15, 23, 42, 0.82) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45) !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+
+.openaip-airspace-label:before {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .leaflet-control-airspace-search {
+    width: 218px;
+    padding: 7px;
+  }
+}
+/* ===== openAIP 공역 검색 CSS 끝 ===== */
+
 
 /* ===== Aircraft Positioning Panel 시작 ===== */
 .position-date-wrap {
@@ -784,6 +899,18 @@ let isRouteRefreshing = false;
 
 const positioningLayer = L.featureGroup().addTo(map);
 /* ===== Aircraft Positioning 설정 끝 ===== */
+
+/* ===== openAIP 공역 검색 설정 시작 ===== */
+const AIRSPACE_SEARCH_BACKEND_URL = "https://script.google.com/macros/s/AKfycbza0ZkypGKes-TkOFJDk4lOScMzJ1NzzLrCGRpekQvS4QaGlBG7rjD46XswYQkVJEMPhg/exec";
+const AIRSPACE_SESSION_STORAGE_KEY = "openaipSelectedAirspaces_v1";
+const AIRSPACE_MAX_STORED_COUNT = 30;
+
+const searchedAirspaceLayer = L.featureGroup().addTo(map);
+const searchedAirspaceItems = new Map();
+const searchedAirspaceLayers = new Map();
+let airspaceSearchUi = null;
+let isAirspaceSearching = false;
+/* ===== openAIP 공역 검색 설정 끝 ===== */
     
 let firVisible = false;
 let firLoaded = false;
@@ -3085,6 +3212,403 @@ async function loadArtccGeojson() {
 function getArtccRenderReferenceLon() {
   return GLOBAL_WORLD_REFERENCE_LON;
 }
+
+/* =========================================================
+ * openAIP 제한/위험/금지/군 공역 검색
+ * ========================================================= */
+function createAirspaceSearchControl() {
+  const control = L.control({ position: "topleft" });
+
+  control.onAdd = function () {
+    const container = L.DomUtil.create(
+      "div",
+      "leaflet-control leaflet-control-airspace-search"
+    );
+
+    container.innerHTML = `
+      <div class="airspace-search-title">R / D / P / MIL AREA</div>
+      <div class="airspace-search-row">
+        <input type="search" maxlength="60" placeholder="예: WSD14" aria-label="공역명 검색" />
+        <button type="button">검색</button>
+      </div>
+      <div class="airspace-search-status">공역명을 입력하세요.</div>
+      <div class="airspace-search-items"></div>
+      <button type="button" class="airspace-clear-all">전체 지우기</button>
+    `;
+
+    const input = container.querySelector("input");
+    const searchButton = container.querySelector(".airspace-search-row button");
+    const clearButton = container.querySelector(".airspace-clear-all");
+    const status = container.querySelector(".airspace-search-status");
+    const items = container.querySelector(".airspace-search-items");
+
+    airspaceSearchUi = {
+      input,
+      searchButton,
+      clearButton,
+      status,
+      items
+    };
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    L.DomEvent.on(searchButton, "click", function (event) {
+      L.DomEvent.stop(event);
+      searchAndAddAirspace(input.value);
+    });
+
+    L.DomEvent.on(input, "keydown", function (event) {
+      if (event.key === "Enter") {
+        L.DomEvent.stop(event);
+        searchAndAddAirspace(input.value);
+      }
+    });
+
+    L.DomEvent.on(clearButton, "click", function (event) {
+      L.DomEvent.stop(event);
+      clearAllSearchedAirspaces();
+    });
+
+    updateAirspaceSearchUi();
+    return container;
+  };
+
+  return control;
+}
+
+async function searchAndAddAirspace(rawQuery) {
+  if (isAirspaceSearching) return;
+
+  const query = String(rawQuery || "").trim().toUpperCase();
+
+  if (query.length < 2) {
+    setAirspaceSearchStatus("공역명을 2자 이상 입력해주세요.", true);
+    return;
+  }
+
+  isAirspaceSearching = true;
+  updateAirspaceSearchUi();
+  setAirspaceSearchStatus(query + " 검색 중...", false);
+
+  try {
+    const data = await callAirspaceSearchJsonp(query);
+
+    if (!data || !data.ok) {
+      throw new Error((data && data.error) || "공역 조회에 실패했습니다.");
+    }
+
+    const results = Array.isArray(data.items) ? data.items : [];
+
+    if (!results.length) {
+      setAirspaceSearchStatus(
+        query + "에 해당하는 R/D/P/MIL 공역을 찾지 못했습니다.",
+        true
+      );
+      return;
+    }
+
+    const newlyAdded = [];
+    const matchedKeys = [];
+
+    results.forEach(item => {
+      const key = getSearchedAirspaceKey(item);
+      matchedKeys.push(key);
+
+      if (searchedAirspaceItems.has(key)) return;
+      if (searchedAirspaceItems.size >= AIRSPACE_MAX_STORED_COUNT) return;
+
+      if (addSearchedAirspaceToMap(item, key)) {
+        searchedAirspaceItems.set(key, item);
+        newlyAdded.push(key);
+      }
+    });
+
+    saveSearchedAirspacesToSession();
+    updateAirspaceSearchUi();
+
+    const focusKeys = newlyAdded.length ? newlyAdded : matchedKeys;
+    fitSearchedAirspaceKeys(focusKeys);
+
+    if (newlyAdded.length) {
+      setAirspaceSearchStatus(
+        newlyAdded.length + "개 추가 · 총 " + searchedAirspaceItems.size + "개 표시 중",
+        false
+      );
+    } else if (searchedAirspaceItems.size >= AIRSPACE_MAX_STORED_COUNT) {
+      setAirspaceSearchStatus(
+        "최대 " + AIRSPACE_MAX_STORED_COUNT + "개까지 표시할 수 있습니다.",
+        true
+      );
+    } else {
+      setAirspaceSearchStatus("이미 지도에 표시된 공역입니다.", false);
+    }
+  } catch (err) {
+    console.error(err);
+    setAirspaceSearchStatus(err.message || String(err), true);
+  } finally {
+    isAirspaceSearching = false;
+    updateAirspaceSearchUi();
+  }
+}
+
+function callAirspaceSearchJsonp(query) {
+  return new Promise((resolve, reject) => {
+    const callbackName =
+      "openAipAirspaceCallback_" +
+      Date.now() + "_" + Math.floor(Math.random() * 100000);
+
+    const params = new URLSearchParams({
+      action: "airspacesearch",
+      query: query,
+      callback: callbackName,
+      _: String(Date.now())
+    });
+
+    const script = document.createElement("script");
+    script.src = AIRSPACE_SEARCH_BACKEND_URL + "?" + params.toString();
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("공역 조회 시간이 초과되었습니다."));
+    }, 30000);
+
+    window[callbackName] = function (data) {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = function () {
+      cleanup();
+      reject(new Error("공역 검색 백엔드에 연결할 수 없습니다."));
+    };
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[callbackName];
+
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    }
+
+    document.body.appendChild(script);
+  });
+}
+
+function getSearchedAirspaceKey(item) {
+  if (item && item._id) return String(item._id);
+
+  return [
+    item && item.name,
+    item && item.type,
+    JSON.stringify(item && item.geometry)
+  ].join("|");
+}
+
+function addSearchedAirspaceToMap(item, key) {
+  if (!item || !item.geometry || item.geometry.type !== "Polygon") {
+    return false;
+  }
+
+  const rings = getGeoJsonRings(item.geometry);
+  if (!rings.length) return false;
+
+  const polygonRings = rings
+    .map(ring => normalizeGeoJsonRingToLatLng(ring, GLOBAL_WORLD_REFERENCE_LON))
+    .filter(ring => ring.length >= 3);
+
+  if (!polygonRings.length) return false;
+
+  const group = L.featureGroup();
+  const style = getSearchedAirspaceStyle(item.type);
+  const polygon = L.polygon(polygonRings, style).addTo(group);
+
+  polygon.bindPopup(buildSearchedAirspacePopup(item), POPUP_OPTIONS);
+  polygon.bindTooltip(escapeHtml(item.name || item.identifier || "AIRSPACE"), {
+    permanent: true,
+    direction: "center",
+    className: "openaip-airspace-label",
+    opacity: 0.95
+  });
+
+  polygon.on("mouseover", function () {
+    polygon.setStyle({ weight: style.weight + 2, fillOpacity: 0.35 });
+  });
+
+  polygon.on("mouseout", function () {
+    polygon.setStyle(style);
+  });
+
+  group.addTo(searchedAirspaceLayer);
+  searchedAirspaceLayers.set(key, group);
+  return true;
+}
+
+function getSearchedAirspaceStyle(type) {
+  const typeNumber = Number(type);
+  let color = "#7c3aed"; // Military
+
+  if (typeNumber === 1) color = "#f97316";       // Restricted
+  if (typeNumber === 2) color = "#eab308";       // Danger
+  if (typeNumber === 3) color = "#dc2626";       // Prohibited
+
+  return {
+    color,
+    weight: 3,
+    opacity: 0.95,
+    fillColor: color,
+    fillOpacity: 0.20,
+    dashArray: typeNumber === 2 ? "8 5" : null
+  };
+}
+
+function getSearchedAirspaceTypeName(type) {
+  const names = {
+    1: "RESTRICTED",
+    2: "DANGER",
+    3: "PROHIBITED",
+    14: "MILITARY ATZ (MATZ)",
+    16: "MILITARY TRAINING ROUTE (MTR)",
+    25: "MILITARY TRAINING AREA (MTA)",
+    30: "MILITARY ROUTE (MRT)",
+    36: "MILITARY CTR (MCTR)"
+  };
+
+  return names[Number(type)] || "MILITARY / SUA";
+}
+
+function formatOpenAipVerticalLimit(limit) {
+  if (!limit || !Number.isFinite(Number(limit.value))) return "-";
+
+  const value = Number(limit.value);
+  const unit = Number(limit.unit);
+  const datum = Number(limit.referenceDatum);
+
+  if (value === 0 && datum === 0) return "SFC";
+  if (unit === 6) return "FL" + value;
+
+  const unitText = unit === 0 ? "m" : "ft";
+  const datumText = datum === 0 ? "AGL" : datum === 1 ? "MSL" : "STD";
+  return value.toLocaleString() + " " + unitText + " " + datumText;
+}
+
+function buildSearchedAirspacePopup(item) {
+  const countries = Array.isArray(item.country)
+    ? item.country.join(", ")
+    : String(item.country || "-");
+
+  const activation = [
+    item.byNotam ? "BY NOTAM" : "",
+    item.onRequest ? "ON REQUEST" : "",
+    item.onDemand ? "ON DEMAND" : ""
+  ].filter(Boolean).join(" / ") || "-";
+
+  return `
+    <div class="popup-body">
+      <div class="popup-title">${escapeHtml(item.name || item.identifier || "AIRSPACE")}</div>
+      <div class="popup-section">
+        <table>
+          <tr><td>TYPE</td><td>${escapeHtml(getSearchedAirspaceTypeName(item.type))}</td></tr>
+          <tr><td>COUNTRY</td><td>${escapeHtml(countries)}</td></tr>
+          <tr><td>LOWER</td><td>${escapeHtml(formatOpenAipVerticalLimit(item.lowerLimit))}</td></tr>
+          <tr><td>UPPER</td><td>${escapeHtml(formatOpenAipVerticalLimit(item.upperLimit))}</td></tr>
+          <tr><td>ACTIVE</td><td>${escapeHtml(activation)}</td></tr>
+          ${item.remarks ? `<tr><td>REMARKS</td><td>${escapeHtml(item.remarks)}</td></tr>` : ""}
+        </table>
+      </div>
+      <div class="popup-section">Source: openAIP</div>
+    </div>
+  `;
+}
+
+function fitSearchedAirspaceKeys(keys) {
+  const focusGroup = L.featureGroup();
+
+  (keys || []).forEach(key => {
+    const layer = searchedAirspaceLayers.get(key);
+    if (layer) focusGroup.addLayer(layer);
+  });
+
+  const bounds = focusGroup.getBounds();
+
+  if (bounds.isValid()) {
+    map.fitBounds(bounds.pad(0.12), { maxZoom: 9 });
+  }
+}
+
+function saveSearchedAirspacesToSession() {
+  try {
+    sessionStorage.setItem(
+      AIRSPACE_SESSION_STORAGE_KEY,
+      JSON.stringify(Array.from(searchedAirspaceItems.values()))
+    );
+  } catch (err) {
+    console.warn("공역 sessionStorage 저장 실패:", err);
+  }
+}
+
+function restoreSearchedAirspacesFromSession() {
+  let savedItems = [];
+
+  try {
+    savedItems = JSON.parse(
+      sessionStorage.getItem(AIRSPACE_SESSION_STORAGE_KEY) || "[]"
+    );
+  } catch (_) {
+    savedItems = [];
+  }
+
+  if (!Array.isArray(savedItems)) return;
+
+  savedItems.slice(0, AIRSPACE_MAX_STORED_COUNT).forEach(item => {
+    const key = getSearchedAirspaceKey(item);
+
+    if (!searchedAirspaceItems.has(key) && addSearchedAirspaceToMap(item, key)) {
+      searchedAirspaceItems.set(key, item);
+    }
+  });
+
+  updateAirspaceSearchUi();
+
+  if (searchedAirspaceItems.size) {
+    fitSearchedAirspaceKeys(Array.from(searchedAirspaceItems.keys()));
+  }
+}
+
+function clearAllSearchedAirspaces() {
+  searchedAirspaceLayer.clearLayers();
+  searchedAirspaceItems.clear();
+  searchedAirspaceLayers.clear();
+
+  try {
+    sessionStorage.removeItem(AIRSPACE_SESSION_STORAGE_KEY);
+  } catch (_) {}
+
+  setAirspaceSearchStatus("표시된 공역을 모두 지웠습니다.", false);
+  updateAirspaceSearchUi();
+}
+
+function setAirspaceSearchStatus(message, isError) {
+  if (!airspaceSearchUi) return;
+
+  airspaceSearchUi.status.textContent = message || "";
+  airspaceSearchUi.status.classList.toggle("error", Boolean(isError));
+}
+
+function updateAirspaceSearchUi() {
+  if (!airspaceSearchUi) return;
+
+  airspaceSearchUi.searchButton.disabled = isAirspaceSearching;
+  airspaceSearchUi.searchButton.textContent = isAirspaceSearching ? "..." : "검색";
+  airspaceSearchUi.clearButton.disabled = searchedAirspaceItems.size === 0;
+
+  airspaceSearchUi.items.innerHTML = Array.from(searchedAirspaceItems.values())
+    .map(item => {
+      return `<div class="airspace-search-item">${escapeHtml(item.name || item.identifier || "AIRSPACE")} · ${escapeHtml(getSearchedAirspaceTypeName(item.type))}</div>`;
+    })
+    .join("");
+}
     
     function createNdbToggleControl() {
       const control = L.control({ position: "topright" });
@@ -3278,6 +3802,7 @@ function createRefreshControl() {
 
   return control;
 }
+createAirspaceSearchControl().addTo(map);
 createNdbToggleControl().addTo(map);
 createFirToggleControl().addTo(map);
 createArtccToggleControl().addTo(map);
@@ -3779,6 +4304,7 @@ async function init() {
     // 실제 항로만 로드하며 이후 1분마다 이 항로만 갱신한다.
     await refreshRouteOnly();
     fitAllLoadedBounds();
+    restoreSearchedAirspacesFromSession();
 
   } catch (err) {
     console.error(err);
