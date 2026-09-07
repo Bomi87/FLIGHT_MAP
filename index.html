@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
@@ -528,6 +528,128 @@
   display: none !important;
 }
 
+.airspace-candidate-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.airspace-candidate-backdrop[hidden] {
+  display: none !important;
+}
+
+.airspace-candidate-dialog {
+  width: min(520px, calc(100vw - 28px));
+  max-height: min(620px, calc(100vh - 28px));
+  overflow: hidden;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+  font-family: Arial, sans-serif;
+}
+
+.airspace-candidate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.airspace-candidate-close {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.airspace-candidate-list {
+  max-height: min(430px, calc(100vh - 175px));
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+.airspace-candidate-option {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 10px 4px;
+  border-bottom: 1px solid #e2e8f0;
+  cursor: pointer;
+}
+
+.airspace-candidate-option:last-child {
+  border-bottom: none;
+}
+
+.airspace-candidate-option input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+}
+
+.airspace-candidate-name {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.airspace-candidate-meta {
+  display: block;
+  margin-top: 3px;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.airspace-candidate-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.airspace-candidate-actions button {
+  min-height: 40px;
+  border: none;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.airspace-candidate-add {
+  flex: 1;
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+.airspace-candidate-cancel {
+  width: 76px;
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
 @media (max-width: 767px) {
   .leaflet-control-search-stack {
     width: 180px;
@@ -700,7 +822,15 @@
     height: 26px;
     padding: 0 3px;
     /* iOS Safari는 16px 미만 input에 포커스할 때 화면을 자동 확대한다. */
-    font-size: 16px;
+    font-size: 16px !important;
+    line-height: normal;
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .airspace-search-row input:focus,
+  .airport-search-row input:focus {
+    font-size: 16px !important;
   }
 
   .airspace-search-row button,
@@ -738,20 +868,42 @@
   .mobile-search-toggle {
     display: block;
     align-self: flex-end;
-    width: 60px;
+    width: 44px;
     height: 42px;
-    padding: 0 7px;
+    padding: 0;
     border: none;
     border-radius: 8px;
     background: #111827;
     color: #ffffff;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
-    font-size: 12px;
-    font-weight: 800;
     cursor: pointer;
     pointer-events: auto;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-search-toggle-icon {
+    position: relative;
+    display: block;
+    width: 17px;
+    height: 17px;
+    margin: 0 auto;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+
+  .mobile-search-toggle-icon::after {
+    content: "";
+    position: absolute;
+    right: -6px;
+    bottom: -3px;
+    width: 7px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    transform: rotate(45deg);
+    transform-origin: left center;
   }
 
   .mobile-search-toggle.search-on {
@@ -1165,6 +1317,8 @@ const searchedAirspaceItems = new Map();
 const searchedAirspaceLayers = new Map();
 let airspaceSearchUi = null;
 let isAirspaceSearching = false;
+let pendingAirspaceCandidates = [];
+let airspaceCandidateDialog = null;
 /* ===== openAIP 공역 검색 설정 끝 ===== */
 
 /* ===== ICAO 공항 검색 설정 시작 ===== */
@@ -3569,41 +3723,18 @@ async function searchAndAddAirspace(rawQuery) {
       return;
     }
 
-    const newlyAdded = [];
-    const matchedKeys = [];
-
-    results.forEach(item => {
-      const key = getSearchedAirspaceKey(item);
-      matchedKeys.push(key);
-
-      if (searchedAirspaceItems.has(key)) return;
-      if (searchedAirspaceItems.size >= AIRSPACE_MAX_STORED_COUNT) return;
-
-      if (addSearchedAirspaceToMap(item, key)) {
-        searchedAirspaceItems.set(key, item);
-        newlyAdded.push(key);
-      }
-    });
-
-    saveSearchedAirspacesToSession();
-    updateAirspaceSearchUi();
-
-    const focusKeys = newlyAdded.length ? newlyAdded : matchedKeys;
-    fitSearchedAirspaceKeys(focusKeys);
-
-    if (newlyAdded.length) {
-      setAirspaceSearchStatus(
-        newlyAdded.length + "개 추가 · 총 " + searchedAirspaceItems.size + "개 표시 중",
-        false
-      );
-    } else if (searchedAirspaceItems.size >= AIRSPACE_MAX_STORED_COUNT) {
-      setAirspaceSearchStatus(
-        "최대 " + AIRSPACE_MAX_STORED_COUNT + "개까지 표시할 수 있습니다.",
-        true
-      );
-    } else {
-      setAirspaceSearchStatus("이미 지도에 표시된 공역입니다.", false);
+    // 정확한 결과가 하나면 바로 추가한다.
+    if (results.length === 1) {
+      addChosenAirspaceItems(results);
+      return;
     }
+
+    // 이름/부분 검색으로 여러 결과가 나오면 사용자가 하나를 선택한다.
+    showAirspaceCandidateDialog(results, query);
+    setAirspaceSearchStatus(
+      results.length + "개의 검색 결과 중 하나를 선택해주세요.",
+      false
+    );
   } catch (err) {
     console.error(err);
     setAirspaceSearchStatus(err.message || String(err), true);
@@ -3611,6 +3742,144 @@ async function searchAndAddAirspace(rawQuery) {
     isAirspaceSearching = false;
     updateAirspaceSearchUi();
   }
+}
+
+function addChosenAirspaceItems(items) {
+  const newlyAdded = [];
+  const matchedKeys = [];
+
+  (items || []).forEach(item => {
+    const key = getSearchedAirspaceKey(item);
+    matchedKeys.push(key);
+
+    if (searchedAirspaceItems.has(key)) return;
+    if (searchedAirspaceItems.size >= AIRSPACE_MAX_STORED_COUNT) return;
+
+    if (addSearchedAirspaceToMap(item, key)) {
+      searchedAirspaceItems.set(key, item);
+      newlyAdded.push(key);
+    }
+  });
+
+  saveSearchedAirspacesToSession();
+  updateAirspaceSearchUi();
+
+  const focusKeys = newlyAdded.length ? newlyAdded : matchedKeys;
+  fitSearchedAirspaceKeys(focusKeys);
+
+  if (newlyAdded.length) {
+    setAirspaceSearchStatus(
+      newlyAdded.length + "개 추가 · 총 " + searchedAirspaceItems.size + "개 표시 중",
+      false
+    );
+  } else if (searchedAirspaceItems.size >= AIRSPACE_MAX_STORED_COUNT) {
+    setAirspaceSearchStatus(
+      "최대 " + AIRSPACE_MAX_STORED_COUNT + "개까지 표시할 수 있습니다.",
+      true
+    );
+  } else {
+    setAirspaceSearchStatus("이미 지도에 표시된 공역입니다.", false);
+  }
+}
+
+function ensureAirspaceCandidateDialog() {
+  if (airspaceCandidateDialog) return airspaceCandidateDialog;
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "airspace-candidate-backdrop";
+  backdrop.hidden = true;
+  backdrop.innerHTML = `
+    <div class="airspace-candidate-dialog" role="dialog" aria-modal="true" aria-labelledby="airspaceCandidateTitle">
+      <div class="airspace-candidate-header">
+        <span id="airspaceCandidateTitle">공역 검색 결과</span>
+        <button type="button" class="airspace-candidate-close" aria-label="선택창 닫기">×</button>
+      </div>
+      <div class="airspace-candidate-list" role="radiogroup" aria-label="검색된 공역"></div>
+      <div class="airspace-candidate-actions">
+        <button type="button" class="airspace-candidate-add">선택 공역 추가</button>
+        <button type="button" class="airspace-candidate-cancel">취소</button>
+      </div>
+    </div>
+  `;
+
+  const closeButton = backdrop.querySelector(".airspace-candidate-close");
+  const cancelButton = backdrop.querySelector(".airspace-candidate-cancel");
+  const addButton = backdrop.querySelector(".airspace-candidate-add");
+
+  closeButton.addEventListener("click", closeAirspaceCandidateDialog);
+  cancelButton.addEventListener("click", closeAirspaceCandidateDialog);
+
+  addButton.addEventListener("click", function () {
+    const selected = backdrop.querySelector('input[name="airspaceCandidate"]:checked');
+    if (!selected) return;
+
+    const index = Number(selected.value);
+    const item = pendingAirspaceCandidates[index];
+    if (!item) return;
+
+    closeAirspaceCandidateDialog();
+    addChosenAirspaceItems([item]);
+  });
+
+  backdrop.addEventListener("click", function (event) {
+    if (event.target === backdrop) closeAirspaceCandidateDialog();
+  });
+
+  document.body.appendChild(backdrop);
+  airspaceCandidateDialog = backdrop;
+  return backdrop;
+}
+
+function showAirspaceCandidateDialog(items, query) {
+  const dialog = ensureAirspaceCandidateDialog();
+  const title = dialog.querySelector("#airspaceCandidateTitle");
+  const list = dialog.querySelector(".airspace-candidate-list");
+
+  pendingAirspaceCandidates = Array.isArray(items) ? items.slice() : [];
+  title.textContent = query + " 검색 결과 · " + pendingAirspaceCandidates.length + "개";
+
+  list.innerHTML = pendingAirspaceCandidates.map((item, index) => {
+    const identifier = getAirspaceCandidateIdentifier(item);
+    const name = String(item.name || identifier || "AIRSPACE");
+    const location = String(item.fir || "").trim() || formatOpenAipCountry(item.country);
+    const type = getSearchedAirspaceTypeName(item.type);
+    const lower = formatOpenAipVerticalLimit(item.lowerLimit);
+    const upper = formatOpenAipVerticalLimit(item.upperLimit);
+    const checked = index === 0 ? " checked" : "";
+
+    return `
+      <label class="airspace-candidate-option">
+        <input type="radio" name="airspaceCandidate" value="${index}"${checked} />
+        <span>
+          <span class="airspace-candidate-name">${escapeHtml(identifier)}${identifier && name !== identifier ? " · " : ""}${name !== identifier ? escapeHtml(name) : ""}</span>
+          <span class="airspace-candidate-meta">FIR/국가: ${escapeHtml(location)} · ${escapeHtml(type)} · ${escapeHtml(lower)}–${escapeHtml(upper)}</span>
+        </span>
+      </label>
+    `;
+  }).join("");
+
+  dialog.hidden = false;
+  document.body.style.overflow = "hidden";
+
+  const firstRadio = dialog.querySelector('input[name="airspaceCandidate"]');
+  if (firstRadio) firstRadio.focus({ preventScroll: true });
+}
+
+function closeAirspaceCandidateDialog() {
+  if (!airspaceCandidateDialog) return;
+
+  airspaceCandidateDialog.hidden = true;
+  pendingAirspaceCandidates = [];
+  document.body.style.overflow = "";
+}
+
+function getAirspaceCandidateIdentifier(item) {
+  const explicit = String(item && item.identifier || "").trim().toUpperCase();
+  if (explicit) return explicit;
+
+  const name = String(item && item.name || "").trim().toUpperCase();
+  const match = name.match(/^([A-Z]{2,5}-?[A-Z]?\d+[A-Z]?)\b/);
+  return match ? match[1] : "";
 }
 
 function callAirspaceSearchJsonp(query) {
@@ -4138,7 +4407,7 @@ function createTrackingSearchStackControl() {
       stack
     );
     mobileToggle.type = "button";
-    mobileToggle.textContent = "검색";
+    mobileToggle.innerHTML = '<span class="mobile-search-toggle-icon" aria-hidden="true"></span>';
     mobileToggle.setAttribute("aria-label", "공역 및 공항 검색창 열기");
     mobileToggle.setAttribute("aria-expanded", "false");
 
