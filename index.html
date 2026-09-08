@@ -3623,7 +3623,7 @@ function getArtccRenderReferenceLon() {
 }
 
 /* =========================================================
- * openAIP 전체 공역 검색
+ * openAIP 제한/위험/금지/군 공역 검색
  * ========================================================= */
 function createAirspaceSearchControl() {
   const control = L.control({ position: "bottomright" });
@@ -3978,23 +3978,11 @@ function addSearchedAirspaceToMap(item, key) {
 
 function getSearchedAirspaceStyle(type) {
   const typeNumber = Number(type);
-  let color = "#7c3aed"; // 기타 / Military / SUA
-  let dashArray = null;
+  let color = "#7c3aed"; // Military
 
   if (typeNumber === 1) color = "#f97316";       // Restricted
-  if (typeNumber === 2) {                         // Danger
-    color = "#eab308";
-    dashArray = "8 5";
-  }
+  if (typeNumber === 2) color = "#eab308";       // Danger
   if (typeNumber === 3) color = "#dc2626";       // Prohibited
-  if (typeNumber === 17) {                        // Alert
-    color = "#0284c7";
-    dashArray = "4 4";
-  }
-  if (typeNumber === 18) {                        // Warning
-    color = "#f59e0b";
-    dashArray = "10 6";
-  }
 
   return {
     color,
@@ -4002,7 +3990,7 @@ function getSearchedAirspaceStyle(type) {
     opacity: 0.95,
     fillColor: color,
     fillOpacity: 0.20,
-    dashArray
+    dashArray: typeNumber === 2 ? "8 5" : null
   };
 }
 
@@ -4025,7 +4013,6 @@ function getSearchedAirspaceTypeName(type) {
     return names[typeNumber];
   }
 
-  // 새 type이 openAIP에 추가되더라도 검색/지도 표시는 막지 않는다.
   return Number.isFinite(typeNumber)
     ? "AIRSPACE TYPE " + typeNumber
     : "AIRSPACE";
@@ -4093,11 +4080,8 @@ function buildSearchedAirspacePopup(item) {
       <div class="popup-title">${escapeHtml(item.name || item.identifier || "AIRSPACE")}</div>
       <div class="popup-section">
         <table>
-          ${item.identifier ? `<tr><td>ID</td><td>${escapeHtml(item.identifier)}</td></tr>` : ""}
           <tr><td>TYPE</td><td>${escapeHtml(getSearchedAirspaceTypeName(item.type))}</td></tr>
-          ${item.fir ? `<tr><td>FIR</td><td>${escapeHtml(item.fir)}</td></tr>` : ""}
           <tr><td>COUNTRY</td><td>${escapeHtml(countries)}</td></tr>
-          ${item.icaoClass !== undefined && item.icaoClass !== null ? `<tr><td>ICAO CLASS</td><td>${escapeHtml(String(item.icaoClass))}</td></tr>` : ""}
           <tr><td>LOWER</td><td>${escapeHtml(formatOpenAipVerticalLimit(item.lowerLimit))}</td></tr>
           <tr><td>UPPER</td><td>${escapeHtml(formatOpenAipVerticalLimit(item.upperLimit))}</td></tr>
           <tr><td>ACTIVE</td><td>${escapeHtml(activation)}</td></tr>
