@@ -5560,70 +5560,6 @@
 			</Icon>
 		</IconStyle>
 	</Style>
-	<Document>
-		<name>NTM.kml</name>
-		<open>1</open>
-		<Placemark>
-			<name>ntm1</name>
-			<Style>
-				<PolyStyle>
-					<color>7f00ff00</color>
-					<outline>1</outline>
-				</PolyStyle>
-			</Style>
-			<Polygon>
-				<extrude>1</extrude>
-				<altitudeMode>relativeToGround</altitudeMode>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							134.997222222222,37.0030555555556,152400 135.663611111111,37.3697222222222,152400 135.663611111111,37.0363888888889,152400 134.997222222222,36.6697222222222,152400 134.997222222222,37.0030555555556,152400 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>ntm2</name>
-			<Style>
-				<PolyStyle>
-					<color>7f00ff00</color>
-					<outline>1</outline>
-				</PolyStyle>
-			</Style>
-			<Polygon>
-				<extrude>1</extrude>
-				<altitudeMode>relativeToGround</altitudeMode>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							119.007222222222,17.575,152400 119.334722222222,17,152400 119.334722222222,14.7868361111111,152400 117.580555555556,16.3444444444444,152400 119.007222222222,17.575,152400 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-		<Placemark>
-			<name>ntm3</name>
-			<Style>
-				<PolyStyle>
-					<color>7f00ff00</color>
-					<outline>1</outline>
-				</PolyStyle>
-			</Style>
-			<Polygon>
-				<extrude>1</extrude>
-				<altitudeMode>relativeToGround</altitudeMode>
-				<outerBoundaryIs>
-					<LinearRing>
-						<coordinates>
-							105.274644444444,2.5,152400 106,2.5,152400 106,1.5,152400 104.872,1.5,152400 105.368055555556,2.31055555555556,152400 105.274644444444,2.5,152400 
-						</coordinates>
-					</LinearRing>
-				</outerBoundaryIs>
-			</Polygon>
-		</Placemark>
-	</Document>
 	<Placemark>
 		<name>WSSL</name>
 		<description><![CDATA[<span style='white-space: nowrap;'>-<b>Airway :</b> <font color='blue'>DCT</font></span><br><br><span style='white-space: nowrap;'>-<b>Altitude :</b> <font color='blue'>46 ft</font></span><br><br><span style='white-space: nowrap;'>-<b>Weight :</b> <font color='blue'>80906 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>Fuel :</b> <font color='blue'>23529 lbs</font></span><br><br><span style='white-space: nowrap;'>-<b>OAT :</b> <font color='blue'>28</font></span><br><br><span style='white-space: nowrap;'>-<b>TAS :</b> <font color='blue'>None</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 1 :</b> <font color='blue'>T/O + 00.00</font></span><br><br><span style='white-space: nowrap;'>-<b>Time 2 :</b> <font color='blue'>02:45Z, 18</font></span><br><br><span style='white-space: nowrap;'>-<b>MORA :</b> <font color='blue'>3400 ft</font></span><br><br>]]></description>
@@ -16234,5 +16170,89 @@
 			</coordinates>
 		</LineString>
 	</Placemark>
+	<Document>
+		<name>NTM.kml</name>
+		<open>1</open>
+		<Placemark>
+			<name>ntm1</name>
+			<Style>
+				<PolyStyle>
+					<color>7f00ff00</color>
+					<outline>1</outline>
+				</PolyStyle>
+			</Style>
+			<Polygon>
+				<extrude>1</extrude>
+				<altitudeMode>relativeToGround</altitudeMode>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							134.997222222222,37.0030555555556,152400 135.663611111111,37.3697222222222,152400 135.663611111111,37.0363888888889,152400 134.997222222222,36.6697222222222,152400 134.997222222222,37.0030555555556,152400 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark>
+			<name>ntm2</name>
+			<Style>
+				<PolyStyle>
+					<color>7f00ff00</color>
+					<outline>1</outline>
+				</PolyStyle>
+			</Style>
+			<Polygon>
+				<extrude>1</extrude>
+				<altitudeMode>relativeToGround</altitudeMode>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							119.007222222222,17.575,152400 119.334722222222,17,152400 119.334722222222,14.7868361111111,152400 117.580555555556,16.3444444444444,152400 119.007222222222,17.575,152400 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark>
+			<name>ntm3</name>
+			<Style>
+				<PolyStyle>
+					<color>7f00ff00</color>
+					<outline>1</outline>
+				</PolyStyle>
+			</Style>
+			<Polygon>
+				<extrude>1</extrude>
+				<altitudeMode>relativeToGround</altitudeMode>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							105.274644444444,2.5,152400 106,2.5,152400 106,1.5,152400 104.872,1.5,152400 105.368055555556,2.31055555555556,152400 105.274644444444,2.5,152400 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+		<Placemark>
+			<name>ntm4</name>
+			<Style>
+				<PolyStyle>
+					<color>7f00ff00</color>
+					<outline>1</outline>
+				</PolyStyle>
+			</Style>
+			<Polygon>
+				<extrude>1</extrude>
+				<altitudeMode>relativeToGround</altitudeMode>
+				<outerBoundaryIs>
+					<LinearRing>
+						<coordinates>
+							120.516666666667,24.1666666666667,152400 120.4,23.9,152400 120,23.5,152400 119.833333333333,23.6333333333333,152400 120.366666666667,24.1666666666667,152400 120.516666666667,24.1666666666667,152400 
+						</coordinates>
+					</LinearRing>
+				</outerBoundaryIs>
+			</Polygon>
+		</Placemark>
+	</Document>
 </Document>
 </kml>
