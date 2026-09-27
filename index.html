@@ -2021,6 +2021,166 @@
   background: #3b6fb6 !important;
 }
 
+
+
+/* ===== 우측 버튼 상태 대비 강화 v18 ===== */
+
+/* NON-WX : Green family
+   OFF = brighter emerald-green / ON = much darker forest */
+.leaflet-control-ndb-toggle button,
+.leaflet-control-fir-toggle button,
+.leaflet-control-artcc-toggle button {
+  background: #2f855a !important;
+  color: #ffffff !important;
+}
+
+.leaflet-control-ndb-toggle button:hover,
+.leaflet-control-fir-toggle button:hover,
+.leaflet-control-artcc-toggle button:hover {
+  background: #276f4b !important;
+}
+
+.leaflet-control-ndb-toggle button.ndb-on,
+.leaflet-control-fir-toggle button.fir-on,
+.leaflet-control-artcc-toggle button.artcc-on {
+  background: #123f2d !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.16),
+    0 1px 4px rgba(15,23,42,.28) !important;
+}
+
+.leaflet-control-ndb-toggle button.ndb-on:hover,
+.leaflet-control-fir-toggle button.fir-on:hover,
+.leaflet-control-artcc-toggle button.artcc-on:hover {
+  background: #0f3526 !important;
+}
+
+/* WX : Navy family
+   OFF = medium navy / ON = brighter cobalt-blue */
+.leaflet-control-typhoon button,
+.leaflet-control-vaac button,
+.leaflet-control-spc button,
+.leaflet-control-noaa-model .noaa-model-toggle {
+  background: #27496d !important;
+  color: #ffffff !important;
+}
+
+.leaflet-control-typhoon button:hover,
+.leaflet-control-vaac button:hover,
+.leaflet-control-spc button:hover,
+.leaflet-control-noaa-model .noaa-model-toggle:hover {
+  background: #1f3d5c !important;
+}
+
+.leaflet-control-typhoon button.typhoon-on,
+.leaflet-control-vaac button.vaac-on,
+.leaflet-control-spc button.spc-on,
+.leaflet-control-noaa-model .noaa-model-toggle.model-on {
+  background: #3d6fd1 !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.18),
+    0 1px 4px rgba(15,23,42,.28) !important;
+}
+
+.leaflet-control-typhoon button.typhoon-on:hover,
+.leaflet-control-vaac button.vaac-on:hover,
+.leaflet-control-spc button.spc-on:hover,
+.leaflet-control-noaa-model .noaa-model-toggle.model-on:hover {
+  background: #315fbd !important;
+}
+
+/* 그룹 rail도 버튼군과 함께 조금 더 선명하게 */
+.control-group-general::before {
+  background: #34a36f !important;
+}
+
+.control-group-weather::before {
+  background: #4f7ed8 !important;
+}
+
+
+
+/* ===== NOAA 일기도 펼침 패널 폭 수정 v19 ===== */
+/* 공통 버튼은 62px 유지하되, 일기도 ON 시 패널은 정상 폭으로 확장 */
+.leaflet-control-noaa-model.model-expanded {
+  width: 190px !important;
+  min-width: 190px !important;
+  max-width: 190px !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+/* 펼쳐진 패널 안의 본문/메타/시간 행은 패널 폭에 맞게 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-meta,
+.leaflet-control-noaa-model.model-expanded .noaa-model-time-row,
+.leaflet-control-noaa-model.model-expanded .noaa-model-product {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* 토글 버튼 자체는 계속 62px */
+.leaflet-control-noaa-model.model-expanded .noaa-model-toggle {
+  width: 62px !important;
+  min-width: 62px !important;
+  max-width: 62px !important;
+}
+
+/* 작은 화면에서 화면 밖으로 나가지 않게 최대폭 제한 */
+@media (max-width: 240px) {
+  .leaflet-control-noaa-model.model-expanded {
+    width: calc(100vw - 20px) !important;
+    min-width: 0 !important;
+    max-width: calc(100vw - 20px) !important;
+  }
+}
+
+
+
+/* ===== SPC 대류예보 펼침 패널 폭 수정 v20 ===== */
+/* 평소 버튼 폭은 62px 유지, ON 시 기간 선택/상세 패널은 정상 폭 사용 */
+.leaflet-control-spc.spc-expanded {
+  width: 190px !important;
+  min-width: 190px !important;
+  max-width: 190px !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+/* 토글 버튼 자체는 62px 유지 */
+.leaflet-control-spc.spc-expanded > button {
+  width: 62px !important;
+  min-width: 62px !important;
+  max-width: 62px !important;
+  margin-left: auto !important;
+}
+
+/* 펼쳐지는 기간 선택 영역은 패널 폭에 맞게 */
+.leaflet-control-spc.spc-expanded .spc-period-select-wrap {
+  width: 190px !important;
+  min-width: 190px !important;
+  max-width: 190px !important;
+  box-sizing: border-box !important;
+}
+
+/* 내부 select/본문도 잘리지 않게 */
+.leaflet-control-spc.spc-expanded .spc-period-select-wrap select,
+.leaflet-control-spc.spc-expanded .spc-period-select-wrap > * {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* 작은 화면에서는 화면 안쪽으로 제한 */
+@media (max-width: 240px) {
+  .leaflet-control-spc.spc-expanded,
+  .leaflet-control-spc.spc-expanded .spc-period-select-wrap {
+    width: calc(100vw - 20px) !important;
+    min-width: 0 !important;
+    max-width: calc(100vw - 20px) !important;
+  }
+}
+
 </style>
 </head>
 <body>
