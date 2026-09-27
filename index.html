@@ -6898,6 +6898,55 @@ async function spcFetchJsonWithRetry_(url, options = {}, maxRetries = 2) {
   throw lastError || new Error("SPC JSON fetch 실패");
 }
 
+
+function spcHtmlToStructuredText_(html) {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  const root = doc.querySelector("main, article, #content, .content") || doc.body;
+  if (!root) return "";
+
+  const blockTags = new Set([
+    "P", "DIV", "SECTION", "ARTICLE", "LI", "UL", "OL",
+    "TABLE", "TR", "BLOCKQUOTE", "PRE"
+  ]);
+
+  function walk(node) {
+    if (!node) return "";
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      return String(node.nodeValue || "");
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+
+    const tag = node.tagName;
+
+    if (/^H[1-6]$/.test(tag)) {
+      const level = Math.max(2, Math.min(6, Number(tag.slice(1)) || 2));
+      const content = Array.from(node.childNodes).map(walk).join("").trim();
+      return content ? `\n${"#".repeat(level)} ${content}\n` : "";
+    }
+
+    if (tag === "BR") return "\n";
+
+    // script/style/nav/footer는 상세예보 본문 구조에 필요하지 않음
+    if (["SCRIPT", "STYLE", "NOSCRIPT", "NAV", "FOOTER"].includes(tag)) return "";
+
+    const content = Array.from(node.childNodes).map(walk).join("");
+
+    if (blockTags.has(tag)) {
+      return `\n${content.trim()}\n\n`;
+    }
+
+    return content;
+  }
+
+  return walk(root)
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function fetchSevereWeatherPage(dateKey) {
   const cached = severeOutlookCache.get(dateKey);
   if (cached && Date.now() - cached.savedAt < SEVERE_OUTLOOK_CACHE_MS) return cached.promise;
@@ -6909,15 +6958,17 @@ async function fetchSevereWeatherPage(dateKey) {
   const promise = (async () => {
     let lastError = null;
 
-    // Jina Reader는 HTML을 읽기 쉬운 Markdown으로 바꿔 주며 브라우저 CORS 문제도 피하기 쉽다.
-    for (const url of [readerUrl, pageUrl]) {
+    // 실제 페이지 HTML을 먼저 시도한다.
+    // 성공하면 DOM의 문단(<p>/<div>/<br>) 구조를 살려서 빈 줄을 정확히 보존한다.
+    // CORS 등으로 직접 접근이 안 되면 Jina Reader로 fallback한다.
+    for (const url of [pageUrl, readerUrl]) {
       try {
         let body = await spcFetchTextWithRetry_(url, {}, 2);
 
-        // 직접 HTML 응답인 경우 텍스트로 변환한다. Reader 응답은 그대로 Markdown이다.
+        // 직접 HTML 응답이면 innerText로 평탄화하지 않는다.
+        // 원문 페이지의 실제 문단/빈 줄 구조를 보존한 Markdown 유사 텍스트로 변환한다.
         if (/^\s*<!doctype html|<html[\s>]/i.test(body)) {
-          const doc = new DOMParser().parseFromString(body, "text/html");
-          body = doc.body?.innerText || body;
+          body = spcHtmlToStructuredText_(body);
         }
 
         const parsed = parseSevereWeatherMarkdown(body, dateKey);
