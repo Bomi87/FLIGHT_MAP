@@ -2181,6 +2181,104 @@
   }
 }
 
+
+
+/* ===== 펼침 패널 위치/구분선 수정 v21 ===== */
+
+/* 공통: 펼쳐지는 컨트롤의 토글 버튼은 원래 우측 열 위치에 고정 */
+.leaflet-control-spc.spc-expanded,
+.leaflet-control-noaa-model.model-expanded {
+  position: relative !important;
+  width: 190px !important;
+  min-width: 190px !important;
+  max-width: 190px !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+/* 우측 버튼 열(62px)의 위치를 유지 */
+.leaflet-control-spc.spc-expanded > button,
+.leaflet-control-noaa-model.model-expanded .noaa-model-toggle {
+  position: relative !important;
+  display: block !important;
+  width: 62px !important;
+  min-width: 62px !important;
+  max-width: 62px !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+  z-index: 3 !important;
+}
+
+/* SPC 펼침 패널은 버튼 아래에서 왼쪽으로 확장 */
+.leaflet-control-spc.spc-expanded .spc-period-select-wrap {
+  width: 190px !important;
+  min-width: 190px !important;
+  max-width: 190px !important;
+  margin-top: 4px !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* NOAA: 컨테이너 패딩 때문에 버튼이 왼쪽으로 밀리지 않도록 제거 */
+.leaflet-control-noaa-model.model-expanded {
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* NOAA 펼침 내용만 별도 카드처럼 표시 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-product,
+.leaflet-control-noaa-model.model-expanded .noaa-model-meta,
+.leaflet-control-noaa-model.model-expanded .noaa-model-time-row {
+  width: 190px !important;
+  max-width: 190px !important;
+  box-sizing: border-box !important;
+}
+
+/* 첫 펼침 항목부터 카드 배경 시작 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-product {
+  margin-top: 4px !important;
+}
+
+/* 패널 전체를 한 장의 카드처럼 보이게: 기존 내부 요소 배경 유지 + 바깥 윤곽 */
+.leaflet-control-noaa-model.model-expanded::after {
+  content: "";
+  position: absolute;
+  top: 29px;
+  right: 0;
+  width: 190px;
+  bottom: 0;
+  border: 1px solid rgba(148,163,184,.55);
+  border-radius: 7px;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 4px 12px rgba(15,23,42,.18);
+  z-index: 0;
+  pointer-events: none;
+}
+.leaflet-control-noaa-model.model-expanded > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 핵심: 팝업 높이까지 왼쪽 구분선이 내려가지 않게
+   펼침 상태에서도 선은 '버튼 25px' 구간에만 표시 */
+.leaflet-control-spc.spc-expanded.control-group-weather::before,
+.leaflet-control-noaa-model.model-expanded.control-group-weather::before {
+  top: 0 !important;
+  bottom: auto !important;
+  height: 25px !important;
+}
+
+/* SPC/NOAA가 중간/끝 컨트롤이어도 이전 연장 규칙 무효화 */
+.leaflet-control-spc.spc-expanded.control-group-weather:not(.control-group-start):not(.control-group-end)::before,
+.leaflet-control-noaa-model.model-expanded.control-group-weather:not(.control-group-start):not(.control-group-end)::before,
+.leaflet-control-spc.spc-expanded.control-group-weather.control-group-end::before,
+.leaflet-control-noaa-model.model-expanded.control-group-weather.control-group-end::before {
+  top: 0 !important;
+  bottom: auto !important;
+  height: 25px !important;
+}
+
 </style>
 </head>
 <body>
