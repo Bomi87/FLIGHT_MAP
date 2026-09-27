@@ -1042,30 +1042,57 @@
    사용자가 원한 대로 지도 바탕이 비치지 않도록 100% opacity(1.0)로 표시한다. */
 
 .leaflet-control-noaa-model {
-  min-width: 250px;
-  max-width: 300px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255,255,255,.94);
-  box-shadow: 0 1px 6px rgba(0,0,0,.28);
-  font: 12px/1.35 Arial, sans-serif;
+  width:54px;
+  padding:0;
+  border-radius:4px;
+  background:transparent;
+  box-shadow:0 1px 5px rgba(0,0,0,.4);
+  font:12px/1.35 Arial,sans-serif;
+  overflow:visible;
+}
+.leaflet-control-noaa-model.model-expanded {
+  width:250px;
+  padding:0 8px 8px;
+  border-radius:7px;
+  background:rgba(255,255,255,.96);
 }
 .leaflet-control-noaa-model button {
-  cursor: pointer;
-  border: 1px solid #94a3b8;
-  border-radius: 6px;
-  background: #fff;
-  padding: 5px 8px;
-  font-weight: 700;
+  cursor:pointer;
+  border:1px solid #94a3b8;
+  border-radius:6px;
+  background:#fff;
+  font-weight:700;
 }
 .leaflet-control-noaa-model .noaa-model-toggle {
-  width: 100%;
-  margin-bottom: 6px;
+  display:block;
+  box-sizing:border-box;
+  width:54px;
+  height:24px;
+  margin:0;
+  padding:0 2px;
+  white-space:nowrap;
+  border:0;
+  border-radius:4px;
+  background:#2563eb;
+  color:#fff;
+  font:700 9px Arial,sans-serif;
+  text-align:center;
 }
-.leaflet-control-noaa-model .noaa-model-toggle.model-on {
-  background: #e0f2fe;
-  border-color: #0284c7;
-  color: #075985;
+.leaflet-control-noaa-model.model-expanded .noaa-model-toggle {
+  margin-bottom:6px;
+}
+.leaflet-control-noaa-model .noaa-model-toggle:hover {
+  background:#1d4ed8;
+}
+.leaflet-control-noaa-model .noaa-model-toggle.model-on,
+.leaflet-control-noaa-model .noaa-model-toggle.model-on:hover {
+  background:#0f766e;
+  color:#fff;
+}
+.leaflet-control-noaa-model:not(.model-expanded) .noaa-model-meta,
+.leaflet-control-noaa-model:not(.model-expanded) .noaa-model-time-row,
+.leaflet-control-noaa-model:not(.model-expanded) .noaa-model-status {
+  display:none;
 }
 .noaa-model-meta {
   margin: 3px 0;
@@ -1511,9 +1538,55 @@
 .leaflet-control-vaac button.vaac-on:hover { background:#b45309; }
 .leaflet-control-vaac button:disabled { cursor:default; }
 .leaflet-control-vaac select {
-  display:block; box-sizing:border-box; width:54px; height:24px; margin:0;
-  padding:0; border:1px solid #d1d5db; border-radius:0;
-  background:#fff; color:#172554; font:9px Arial,sans-serif; cursor:pointer;
+  display:block;
+  box-sizing:border-box;
+  width:54px;
+  height:26px;
+  margin:0;
+  padding:0 17px 0 6px;
+
+  appearance:none;
+  -webkit-appearance:none;
+
+  border:1px solid rgba(120,53,15,.42);
+  border-top:0;
+  border-radius:0 0 7px 7px;
+
+  background:
+    linear-gradient(45deg, transparent 50%, #92400e 50%) calc(100% - 10px) 10px/4px 4px no-repeat,
+    linear-gradient(135deg, #92400e 50%, transparent 50%) calc(100% - 6px) 10px/4px 4px no-repeat,
+    linear-gradient(180deg,#fff7ed 0%,#ffedd5 100%);
+
+  color:#78350f;
+  font:800 9px Arial,sans-serif;
+  text-align:left;
+  cursor:pointer;
+  outline:none;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.9),
+    0 1px 2px rgba(0,0,0,.12);
+}
+
+.leaflet-control-vaac select:hover {
+  border-color:#b45309;
+  background:
+    linear-gradient(45deg, transparent 50%, #78350f 50%) calc(100% - 10px) 10px/4px 4px no-repeat,
+    linear-gradient(135deg, #78350f 50%, transparent 50%) calc(100% - 6px) 10px/4px 4px no-repeat,
+    linear-gradient(180deg,#ffedd5 0%,#fed7aa 100%);
+}
+
+.leaflet-control-vaac select:focus {
+  border-color:#b45309;
+  box-shadow:
+    inset 0 0 0 1px rgba(180,83,9,.18),
+    0 0 0 2px rgba(251,146,60,.18);
+}
+
+.leaflet-control-vaac select option {
+  background:#fff7ed;
+  color:#78350f;
+  font-weight:700;
 }
 </style>
 </head>
@@ -6547,13 +6620,13 @@ function createNoaaModelControl() {
 
     const toggle = L.DomUtil.create("button", "noaa-model-toggle", container);
     toggle.type = "button";
-    toggle.textContent = "NOAA 일기도 OFF";
+    toggle.textContent = "일기도 OFF";
 
     const airportMeta = L.DomUtil.create("div", "noaa-model-meta", container);
     airportMeta.textContent = "공항검색에서 ICAO를 먼저 선택하세요.";
 
     const modelMeta = L.DomUtil.create("div", "noaa-model-meta", container);
-    modelMeta.textContent = "미국: NAM 3km 일기도 · 그 외: GFS 일기도";
+    modelMeta.textContent = "미국: NAM 1HR Precip Chart · 그 외: GFS 1HR Precip Chart";
 
     const timeRow = L.DomUtil.create("div", "noaa-model-time-row", container);
     const prev = L.DomUtil.create("button", "", timeRow);
@@ -6576,8 +6649,9 @@ function createNoaaModelControl() {
     L.DomEvent.on(toggle, "click", event => {
       L.DomEvent.stop(event);
       noaaModelEnabled = !noaaModelEnabled;
-      toggle.textContent = noaaModelEnabled ? "NOAA 일기도 ON" : "NOAA 일기도 OFF";
+      toggle.textContent = noaaModelEnabled ? "일기도 ON" : "일기도 OFF";
       toggle.classList.toggle("model-on", noaaModelEnabled);
+      container.classList.toggle("model-expanded", noaaModelEnabled);
 
       if (!noaaModelEnabled) {
         ++noaaModelRequestId;
@@ -6740,6 +6814,20 @@ function ensureNoaaChartPane() {
   return pane;
 }
 
+function fitMapToNoaaChartBounds_(data, referenceLon) {
+  const bounds = noaaModelShiftBounds(data.bounds, referenceLon);
+  if (!bounds) return;
+  try {
+    map.fitBounds(bounds, {
+      paddingTopLeft: [34, 34],
+      paddingBottomRight: [34, 34],
+      animate: true
+    });
+  } catch (err) {
+    console.warn('NOAA chart fitBounds failed:', err);
+  }
+}
+
 function createNoaaMagOverlay(data, referenceLon) {
   const bounds = noaaModelShiftBounds(data.bounds, referenceLon);
   if (!bounds) return null;
@@ -6791,6 +6879,9 @@ async function loadNoaaModelOverlay() {
     });
 
     noaaModelLayer.addTo(map);
+
+    // Fit the map so the full weather chart is visible at a glance.
+    fitMapToNoaaChartBounds_(data, refLon);
 
     if (noaaModelUi) {
       noaaModelUi.modelMeta.textContent =
@@ -6905,7 +6996,7 @@ function createTokyoVaacControl() {
     const button=L.DomUtil.create('button','',box); button.textContent='화산재 OFF'; button.type='button';
     const select=L.DomUtil.create('select','',box);
     select.style.display='none';
-    const choices=[[0,'현재'],[6,'+6hr'],[12,'+12hr'],[18,'+18hr']];
+    const choices=[[0,'OBS'],[6,'+6hr'],[12,'+12hr'],[18,'+18hr']];
     const updateChoices=()=>{
       const preferred=select.value || 'all';
       select.replaceChildren();
@@ -6920,7 +7011,7 @@ function createTokyoVaacControl() {
       if (availableHours.length) {
         const allOption=document.createElement('option');
         allOption.value='all';
-        allOption.textContent='전체 (현재 +6/+12/+18hr)';
+        allOption.textContent='전체';
         select.appendChild(allOption);
       }
 
