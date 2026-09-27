@@ -5299,6 +5299,12 @@ const severeTranslateCache = new Map();
 const SEVERE_OUTLOOK_CACHE_MS = 30 * 60 * 1000;
 
 function spcOutlookDate(properties) {
+  // SevereWeatherOutlook 메인 페이지에서 선택된 날짜를 최우선으로 사용한다.
+  // 지도 GeoJSON의 VALID_ISO와 상세 페이지 날짜가 서로 다른 사이클로 보이는 경우에도
+  // 팝업 본문은 드롭다운에서 선택한 사이트 날짜와 반드시 동일하게 맞춘다.
+  const siteDate = String(properties?.__SEVERE_DATE_KEY || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(siteDate)) return siteDate;
+
   const raw = properties?.VALID_ISO || properties?.ISSUE_ISO || "";
   const date = raw ? new Date(raw) : new Date();
   if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
@@ -5323,9 +5329,9 @@ function trimSpcOutlookTail(value) {
 
   const cutPatterns = [
     /\n\.\.[A-Za-z][^\n]{0,80}\.\.\s*(?:\d{1,2}\/\d{1,2}\/\d{4}|\d{4})?/i,
-    /\n(?:CLICK\s+TO\s+GET|CLICK\s+HERE\s+TO\s+GET)\s+WUUS01\s+PTSDY1[^\n]*/i,
-    /\nNOTE:\s*THE\s+NEXT\s+DAY\s+1\s+OUTLOOK\s+IS\s+SCHEDULED[^\n]*/i,
-    /\nWUUS01\s+PTSDY1[^\n]*/i
+    /\n(?:CLICK\s+TO\s+GET|CLICK\s+HERE\s+TO\s+GET)\s+WUUS0[1-3]\s+PTSDY[1-3][^\n]*/i,
+    /\nNOTE:\s*THE\s+NEXT\s+DAY\s+[1-3]\s+OUTLOOK\s+IS\s+SCHEDULED[^\n]*/i,
+    /\nWUUS0[1-3]\s+PTSDY[1-3][^\n]*/i
   ];
 
   let cutAt = text.length;
@@ -5533,7 +5539,10 @@ const SPC_FORCE_KOREAN_TERMS = [
   ["shortwave trough", "단파 기압골"],
   ["low-level jet", "하층 제트기류"],
   ["large-scale ascent", "대규모 상승기류"],
+  ["upper-level low", "상층 저기압"],
+  ["mid-level low", "중층 저기압"],
   ["upper low", "상층 저기압"],
+  ["weather system", "기압계"],
   ["surface low", "지상 저기압"],
   ["closed low", "폐쇄 저기압"],
   ["outflow boundaries", "유출 경계"],
@@ -5809,6 +5818,11 @@ function createSpcControl() {
     daySelect.setAttribute("aria-label", "SPC 예보 유효기간 선택");
 
     const MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    const MONTH_NAMES = [
+      "January","February","March","April","May","June",
+      "July","August","September","October","November","December"
+    ];
+    const MONTH_INDEX = Object.fromEntries(MONTH_NAMES.map((name, i) => [name.toLowerCase(), i]));
 
     function compactUtcLabel(date) {
       const d = date instanceof Date ? date : new Date(date);
@@ -5816,60 +5830,131 @@ function createSpcControl() {
       return `${String(d.getUTCHours()).padStart(2,"0")}00Z, ${String(d.getUTCDate()).padStart(2,"0")}${MONTHS[d.getUTCMonth()]}`;
     }
 
-    function periodLabel(validIso, expireIso) {
-      const valid = new Date(validIso || "");
-      const expire = new Date(expireIso || "");
-      if (!Number.isNaN(valid.getTime()) && !Number.isNaN(expire.getTime())) {
-        return `${compactUtcLabel(valid)} ~ ${compactUtcLabel(expire)}`;
-      }
-      return "";
-    }
-
-    // 현재 UTC 시각에 실제로 유효한 12Z~12Z 기간을 Day 1로 잡는다.
-    // 예: 28SEP 11:59Z -> 27SEP 12Z ~ 28SEP 12Z
-    //     28SEP 12:00Z 이후 -> 28SEP 12Z ~ 29SEP 12Z
-    function currentSpcPeriodStartUtc() {
-      const now = new Date();
-      let start = new Date(Date.UTC(
-        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0
-      ));
-      if (now.getTime() < start.getTime()) {
-        start = new Date(start.getTime() - 24 * 3600000);
-      }
-      return start;
-    }
-
-    function fallbackPeriodLabel(day) {
-      const anchor = currentSpcPeriodStartUtc();
-      const start = new Date(anchor.getTime() + (day - 1) * 24 * 3600000);
+    function periodLabelFromDateKey(dateKey) {
+      const start = new Date(`${dateKey}T12:00:00Z`);
+      if (Number.isNaN(start.getTime())) return dateKey || "?";
       const end = new Date(start.getTime() + 24 * 3600000);
       return `${compactUtcLabel(start)} ~ ${compactUtcLabel(end)}`;
     }
 
-    function rebuildPeriodOptions() {
-      const selected = daySelect.value || "1";
-      daySelect.replaceChildren();
-      [1, 2, 3].forEach(day => {
-        const option = document.createElement("option");
-        option.value = String(day);
-        option.textContent = fallbackPeriodLabel(day);
-        daySelect.appendChild(option);
-      });
-      daySelect.value = ["1", "2", "3"].includes(selected) ? selected : "1";
+    function inferYearForMonth(monthIndex) {
+      const now = new Date();
+      let year = now.getUTCFullYear();
+      const nowMonth = now.getUTCMonth();
+      // 연말/연초 경계 보정: 12월에 1월이 보이면 다음 해, 1월에 12월이 보이면 전년도.
+      if (nowMonth >= 10 && monthIndex <= 1) year += 1;
+      else if (nowMonth <= 1 && monthIndex >= 10) year -= 1;
+      return year;
     }
 
-    rebuildPeriodOptions();
+    function dateKeyFromEnglishDate(monthName, dayNumber) {
+      const monthIndex = MONTH_INDEX[String(monthName || "").toLowerCase()];
+      const day = Number(dayNumber);
+      if (!Number.isInteger(monthIndex) || !Number.isFinite(day)) return "";
+      const year = inferYearForMonth(monthIndex);
+      return `${year}-${String(monthIndex + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    }
 
-    // 화면에는 별도 상태 설명을 표시하지 않지만 내부 상태 갱신은 유지한다.
+    function parseLatestSiteDates(markdown) {
+      const text = String(markdown || "").replace(/\r/g, "");
+
+      // 메인 페이지의 'Overview of the threat for the next few days' 바로 아래 날짜를 우선 사용한다.
+      // National Risk Overview 등 뒤쪽에 같은 날짜가 다시 나와도 첫 3개만 사용한다.
+      let block = text;
+      const overview = text.match(
+        /(?:^|\n)#{2,4}\s+Overview of the threat for the next few days\s*\n([\s\S]*?)(?=\n#{2,4}\s+|$)/i
+      );
+      if (overview) block = overview[1];
+
+      const rx = /(?:^|\n)\s*(?:[-*]\s*)?(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})\s*(?:\n|$)/gi;
+      const dates = [];
+      let match;
+      while ((match = rx.exec(block)) && dates.length < 3) {
+        const key = dateKeyFromEnglishDate(match[2], match[3]);
+        if (key && !dates.includes(key)) dates.push(key);
+      }
+
+      // Reader가 heading 구조를 바꿨을 경우 전체 문서에서 다시 찾는다.
+      if (dates.length < 3 && block !== text) {
+        rx.lastIndex = 0;
+        while ((match = rx.exec(text)) && dates.length < 3) {
+          const key = dateKeyFromEnglishDate(match[2], match[3]);
+          if (key && !dates.includes(key)) dates.push(key);
+        }
+      }
+
+      return dates.slice(0, 3);
+    }
+
+    async function fetchLatestSiteDates() {
+      const urls = [
+        "https://r.jina.ai/https://www.severeweatheroutlook.com/",
+        "https://www.severeweatheroutlook.com/"
+      ];
+      let lastError = null;
+
+      for (const url of urls) {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          let body = await response.text();
+
+          if (/^\s*<!doctype html|<html[\s>]/i.test(body)) {
+            const doc = new DOMParser().parseFromString(body, "text/html");
+            body = doc.body?.innerText || body;
+          }
+
+          const dates = parseLatestSiteDates(body);
+          if (dates.length >= 3) return dates;
+          throw new Error("최신 Day 1~3 날짜를 찾지 못했습니다.");
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError || new Error("SevereWeatherOutlook 메인 페이지 연결 실패");
+    }
+
+    // 사이트 날짜 조회 실패 때만 쓰는 안전용 fallback.
+    function fallbackDateKeys() {
+      const now = new Date();
+      let start = new Date(Date.UTC(
+        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0
+      ));
+      if (now.getTime() < start.getTime()) start = new Date(start.getTime() - 24 * 3600000);
+      return [0, 1, 2].map(offset =>
+        new Date(start.getTime() + offset * 24 * 3600000).toISOString().slice(0, 10)
+      );
+    }
+
+    function selectedSiteDateKey() {
+      const option = daySelect.options[daySelect.selectedIndex];
+      return option?.dataset?.dateKey || "";
+    }
+
+    function setPeriodOptions(dateKeys, selectedDay = "1") {
+      daySelect.replaceChildren();
+      dateKeys.slice(0, 3).forEach((dateKey, index) => {
+        const option = document.createElement("option");
+        option.value = String(index + 1);
+        option.dataset.dateKey = dateKey;
+        option.textContent = periodLabelFromDateKey(dateKey);
+        daySelect.appendChild(option);
+      });
+      daySelect.value = ["1", "2", "3"].includes(String(selectedDay)) ? String(selectedDay) : "1";
+      if (!daySelect.value) daySelect.value = "1";
+    }
+
+    // 초기에는 fallback을 넣어 두되, 실제 ON 시 사이트 최신 날짜로 반드시 다시 갱신한다.
+    setPeriodOptions(fallbackDateKeys(), "1");
+
     const status = document.createElement("div");
-
     let enabled = false;
     let requestId = 0;
 
     async function fetchSpcGeoJson(file) {
       const response = await fetch(`${SPC_SERVICE}/${file}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`${file}: HTTP ${response.status}`);
-
       const data = await response.json();
       if (data.error || !Array.isArray(data.features)) {
         throw new Error(data.error?.message || `${file}: 잘못된 GeoJSON`);
@@ -5879,21 +5964,25 @@ function createSpcControl() {
 
     function usableFeatures(data) {
       return data.features
-        .filter(feature =>
-          feature.geometry && ["Polygon", "MultiPolygon"].includes(feature.geometry.type))
+        .filter(feature => feature.geometry && ["Polygon", "MultiPolygon"].includes(feature.geometry.type))
         .sort((a, b) => Number(a.properties?.DN) - Number(b.properties?.DN));
     }
 
-    function shiftedFeatures(features) {
+    function shiftedFeatures(features, siteDateKey) {
       return features.map(feature => ({
         ...feature,
+        properties: {
+          ...(feature.properties || {}),
+          // 상세 본문은 선택된 SevereWeatherOutlook 날짜와 강제로 1:1 매칭한다.
+          __SEVERE_DATE_KEY: siteDateKey
+        },
         geometry: shiftGeometryLongitude(feature.geometry)
       }));
     }
 
-    function addConvectiveLayer(features, day) {
+    function addConvectiveLayer(features, day, siteDateKey) {
       const layer = L.geoJSON(
-        { type: "FeatureCollection", features: shiftedFeatures(features) },
+        { type: "FeatureCollection", features: shiftedFeatures(features, siteDateKey) },
         {
           style: feature => ({
             color: spcConvectiveColors[Number(feature.properties?.DN)] || "#64748b",
@@ -5912,9 +6001,9 @@ function createSpcControl() {
       spcLayer.addLayer(layer);
     }
 
-    function addTornadoLayer(features, day) {
+    function addTornadoLayer(features, day, siteDateKey) {
       const layer = L.geoJSON(
-        { type: "FeatureCollection", features: shiftedFeatures(features) },
+        { type: "FeatureCollection", features: shiftedFeatures(features, siteDateKey) },
         {
           style: feature => ({
             color: spcTornadoColors[Number(feature.properties?.DN)] || "#7c3aed",
@@ -5934,17 +6023,12 @@ function createSpcControl() {
       spcLayer.addLayer(layer);
     }
 
-    function updateSelectedPeriodFromIssued(day, issued) {
-      // 드롭다운은 사용자가 요청한 12Z~12Z 고정 기간 형식을 유지한다.
-      // SPC의 중간 갱신 VALID_ISO가 13Z/16Z 등이어도 옵션 문구는 바꾸지 않는다.
-      return;
-    }
-
     const refresh = async () => {
       const id = ++requestId;
       if (!enabled) return;
 
       const day = daySelect.value;
+      const siteDateKey = selectedSiteDateKey();
       const convectiveFile = spcFiles[`${day}-convective`];
       const tornadoFile = spcFiles[`${day}-tornado`];
       status.textContent = "SPC 자료 읽는 중...";
@@ -5973,16 +6057,8 @@ function createSpcControl() {
         }
 
         spcLayer.clearLayers();
-        addConvectiveLayer(convectiveFeatures, day);
-        if (tornadoFeatures.length) addTornadoLayer(tornadoFeatures, day);
-
-        const issued =
-          convectiveFeatures[0]?.properties ||
-          convectiveData.features[0]?.properties ||
-          tornadoFeatures[0]?.properties ||
-          tornadoData?.features?.[0]?.properties;
-
-        updateSelectedPeriodFromIssued(day, issued);
+        addConvectiveLayer(convectiveFeatures, day, siteDateKey);
+        if (tornadoFeatures.length) addTornadoLayer(tornadoFeatures, day, siteDateKey);
 
         if (day === "3") {
           status.textContent = "대류위험 표시 (Day 3 토네이도 개별 확률 없음)";
@@ -6001,10 +6077,23 @@ function createSpcControl() {
       }
     };
 
+    async function syncPeriodsFromSite(resetToDay1 = true) {
+      const previous = daySelect.value || "1";
+      try {
+        const latestDates = await fetchLatestSiteDates();
+        if (!enabled) return;
+        setPeriodOptions(latestDates, resetToDay1 ? "1" : previous);
+      } catch (error) {
+        console.warn("SevereWeatherOutlook 최신 날짜 조회 실패, UTC fallback 사용:", error);
+        if (!enabled) return;
+        setPeriodOptions(fallbackDateKeys(), resetToDay1 ? "1" : previous);
+      }
+    }
+
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
 
-    L.DomEvent.on(button, "click", event => {
+    L.DomEvent.on(button, "click", async event => {
       L.DomEvent.stop(event);
       enabled = !enabled;
       button.textContent = enabled ? "대류예보 ON" : "대류예보 OFF";
@@ -6012,14 +6101,23 @@ function createSpcControl() {
       container.classList.toggle("spc-expanded", enabled);
 
       if (enabled) {
-        // ON할 때 현재 UTC 기준으로 Day 1~3 기간 문구를 다시 계산한다.
-        // 이미 종료된 12Z~12Z 기간은 Day 1 첫 항목으로 남지 않는다.
-        rebuildPeriodOptions();
+        // 사용자가 ON 할 때마다 SevereWeatherOutlook 메인 페이지를 no-store로 확인한다.
+        // 사이트가 새 Day 1/2/3 세트로 넘어갔다면 즉시 그 세트를 첫 번째부터 표시한다.
+        const option = document.createElement("option");
+        option.value = "1";
+        option.textContent = "최신 예보 확인 중...";
+        daySelect.replaceChildren(option);
+        daySelect.disabled = true;
+
+        await syncPeriodsFromSite(true);
+        if (!enabled) return;
+        daySelect.disabled = false;
         daySelect.value = "1";
         spcLayer.addTo(map);
         refresh();
       } else {
         ++requestId;
+        daySelect.disabled = false;
         spcLayer.clearLayers();
         map.removeLayer(spcLayer);
         status.textContent = "SPC 대류위험 + 토네이도 확률";
