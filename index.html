@@ -503,9 +503,30 @@
   margin: 0 0 7px;
   padding: 6px 7px;
   border-radius: 5px;
+  border-left: 4px solid #94a3b8;
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 800;
+}
+.spc-popup-wrap .spc-risk-headline.risk-green {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+  color: #166534;
+}
+.spc-popup-wrap .spc-risk-headline.risk-orange {
+  border-left-color: #f97316;
   background: #fff7ed;
   color: #9a3412;
-  font-weight: 800;
+}
+.spc-popup-wrap .spc-risk-headline.risk-red {
+  border-left-color: #dc2626;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.spc-popup-wrap .spc-risk-headline.risk-neutral {
+  border-left-color: #94a3b8;
+  background: #f8fafc;
+  color: #334155;
 }
 .spc-popup-wrap .spc-section-title {
   margin-top: 7px;
@@ -5530,6 +5551,8 @@ const SPC_KEEP_ENGLISH_TERMS = [
 // 일반 기상용어는 기계번역에 맡기지 않고 앱에서 읽기 쉬운 표현으로 고정한다.
 // 긴 표현을 먼저 처리하므로 deep trough가 trough보다 우선한다.
 const SPC_FORCE_KOREAN_TERMS = [
+  ["subtle vorticity maxima", "약한 상층 회전 강화 구역"],
+  ["subtle vorticity maximum", "약한 상층 회전 강화 구역"],
   ["vorticity maxima", "회전 성분이 강한 상층 기류"],
   ["vorticity maximum", "회전 성분이 강한 상층 기류"],
   ["deep trough", "강하게 발달한 기압골"],
@@ -5685,6 +5708,33 @@ function addSpcSection(parent, title, text) {
   parent.appendChild(body);
 }
 
+function spcHeadlineRiskClass(properties, headlineText) {
+  const text = String(headlineText || "").toUpperCase();
+
+  // Headline wording is the best signal for the national outlook statement.
+  // Keep exact category checks ahead of the generic word "SEVERE", because
+  // even a MARGINAL headline contains "SEVERE THUNDERSTORMS".
+  if (/\bNO\s+SEVERE\b|NO\s+SEVERE\s+THUNDERSTORM\s+AREAS\s+FORECAST/.test(text)) {
+    return "risk-green";
+  }
+  if (/\b(?:ENHANCED|MODERATE|HIGH)\s+RISK\b/.test(text)) {
+    return "risk-red";
+  }
+  if (/\b(?:MARGINAL|SLIGHT)\s+RISK\b/.test(text)) {
+    return "risk-orange";
+  }
+
+  // Fallback to the official SPC categorical DN for the polygon that was clicked.
+  // DN 2 = General Thunder, 3 = Marginal, 4 = Slight, 5/6/8 = higher severe categories.
+  const dn = Number(properties?.DN);
+  if (dn === 2) return "risk-green";
+  if (dn === 3 || dn === 4) return "risk-orange";
+  if (dn === 5 || dn === 6 || dn === 8) return "risk-red";
+
+  // Unknown/new wording must never break the popup. It simply gets a neutral style.
+  return "risk-neutral";
+}
+
 async function fillSpcExtraDetails(target, properties) {
   const dateKey = spcOutlookDate(properties);
   target.className = "spc-extra";
@@ -5702,7 +5752,7 @@ async function fillSpcExtraDetails(target, properties) {
 
     if (headlineKo) {
       const headline = document.createElement("div");
-      headline.className = "spc-risk-headline";
+      headline.className = `spc-risk-headline ${spcHeadlineRiskClass(properties, outlook.headline)}`;
       headline.textContent = headlineKo;
       target.appendChild(headline);
     }
@@ -5945,7 +5995,7 @@ function createSpcControl() {
       if (!daySelect.value) daySelect.value = "1";
     }
 
-    // 초기에는 fallback을 넣어 두되, 실제 ON 시 사이트 최신 날짜로 반드시 다시 갱신한다.
+    // 초기에는 fallback을 넣어 두되, 실제 ON 시 SPC 공식 VALID 날짜로 반드시 다시 갱신한다.
     setPeriodOptions(fallbackDateKeys(), "1");
 
     const status = document.createElement("div");
@@ -5991,13 +6041,14 @@ function createSpcControl() {
       return !!a && !!b && a.valid === b.valid && a.expire === b.expire;
     }
 
-    function shiftedFeatures(features, siteDateKey) {
+    function shiftedFeatures(features, detailDateKey) {
       return features.map(feature => ({
         ...feature,
         properties: {
           ...(feature.properties || {}),
-          // 상세 본문은 선택된 SevereWeatherOutlook 날짜와 강제로 1:1 매칭한다.
-          __SEVERE_DATE_KEY: siteDateKey
+          // 상세 본문 날짜는 이 SPC 파일 자체의 VALID_ISO 시작일과 1:1로 맞춘다.
+          // 홈페이지 날짜 배열의 순서가 달라져도 Day 1/2/3 본문이 섞이지 않는다.
+          __SEVERE_DATE_KEY: detailDateKey || String(feature.properties?.VALID_ISO || "").slice(0, 10)
         },
         geometry: shiftGeometryLongitude(feature.geometry)
       }));
@@ -6051,7 +6102,6 @@ function createSpcControl() {
       if (!enabled) return;
 
       const day = daySelect.value;
-      const siteDateKey = selectedSiteDateKey();
       const convectiveFile = spcFiles[`${day}-convective`];
       const tornadoFile = spcFiles[`${day}-tornado`];
       status.textContent = "SPC 자료 읽는 중...";
@@ -6100,9 +6150,16 @@ function createSpcControl() {
           console.warn("SPC tornado outlook load failed:", tornadoResult.reason);
         }
 
+        // 지도와 상세 본문은 반드시 동일한 SPC VALID 시작일을 사용한다.
+        // 예: Day 3가 29SEP 1200Z 시작이면 상세 페이지도 /2026-09-29/만 사용한다.
+        const convectivePeriod = spcValidPeriod(convectiveData);
+        const detailDateKey = convectivePeriod
+          ? new Date(convectivePeriod.valid).toISOString().slice(0, 10)
+          : String(convectiveFeatures[0]?.properties?.VALID_ISO || "").slice(0, 10);
+
         spcLayer.clearLayers();
-        addConvectiveLayer(convectiveFeatures, day, siteDateKey);
-        if (tornadoFeatures.length) addTornadoLayer(tornadoFeatures, day, siteDateKey);
+        addConvectiveLayer(convectiveFeatures, day, detailDateKey);
+        if (tornadoFeatures.length) addTornadoLayer(tornadoFeatures, day, detailDateKey);
 
         if (day === "3") {
           status.textContent = "대류위험 표시 (Day 3 토네이도 개별 확률 없음)";
@@ -6125,15 +6182,29 @@ function createSpcControl() {
       }
     };
 
-    async function syncPeriodsFromSite(resetToDay1 = true) {
+    async function syncPeriodsFromSpc(resetToDay1 = true) {
       const previous = daySelect.value || "1";
       try {
-        const latestDates = await fetchLatestSiteDates();
+        // 각 Day의 공식 SPC GeoJSON에서 실제 VALID 시작일을 읽는다.
+        // 이 방식은 SevereWeatherOutlook 홈페이지의 노출 순서와 무관하며,
+        // SPC가 새 발행 세트로 교체되는 즉시 Day 1/2/3 날짜도 함께 갱신된다.
+        const files = [
+          spcFiles["1-convective"],
+          spcFiles["2-convective"],
+          spcFiles["3-convective"]
+        ];
+        const results = await Promise.all(files.map(fetchSpcGeoJson));
         if (!enabled) return;
-        setPeriodOptions(latestDates, resetToDay1 ? "1" : previous);
+
+        const dateKeys = results.map(data => {
+          const period = spcValidPeriod(data);
+          if (!period) throw new Error("SPC VALID_ISO를 확인할 수 없습니다.");
+          return new Date(period.valid).toISOString().slice(0, 10);
+        });
+
+        setPeriodOptions(dateKeys, resetToDay1 ? "1" : previous);
       } catch (error) {
-        console.warn("SevereWeatherOutlook 최신 날짜 조회 실패, UTC fallback 사용:", error);
-        if (!enabled) return;
+        console.warn("SPC Day 1~3 유효기간 조회 실패, fallback 사용:", error);
         setPeriodOptions(fallbackDateKeys(), resetToDay1 ? "1" : previous);
       }
     }
@@ -6157,7 +6228,7 @@ function createSpcControl() {
         daySelect.replaceChildren(option);
         daySelect.disabled = true;
 
-        await syncPeriodsFromSite(true);
+        await syncPeriodsFromSpc(true);
         if (!enabled) return;
         daySelect.disabled = false;
         daySelect.value = "1";
