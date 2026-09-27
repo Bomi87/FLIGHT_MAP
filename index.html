@@ -12,10 +12,6 @@
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/vendor.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/leaflet.distortableimage.css" />
-  <script src="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/vendor.js"></script>
-  <script src="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/leaflet.distortableimage.js"></script>
   <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 
   <style>
@@ -1043,7 +1039,7 @@
 
 /* ===== NOAA NAM 3km / GFS 모델 일기도 overlay ===== */
 /* 이 버전은 원자료 좌표 렌더링 대신 NOAA MAG 완성형 일기도를 사용한다.
-   사용자가 원한 대로 지도 바탕이 비치지 않도록 높은 opacity(0.92)로 표시한다. */
+   사용자가 원한 대로 지도 바탕이 비치지 않도록 100% opacity(1.0)로 표시한다. */
 
 .leaflet-control-noaa-model {
   min-width: 250px;
@@ -6731,87 +6727,14 @@ function callNoaaModelJsonp(airport, step) {
  * Corner order required by Leaflet.DistortableImage:
  * NW, NE, SW, SE
  */
-const NOAA_MAG_WARP_CORNERS = {
-  // Calibrated to the visible geographic frame of NCEP MAG regional graphics.
-  // These intentionally differ from the broad request bounds used by backend.
-  "US-NE": [
-    [50.0, -90.0], [50.0, -60.5],
-    [31.5, -88.0], [31.5, -62.0]
-  ],
-  "US-NW": [
-    [52.0, -130.0], [52.0, -101.0],
-    [36.0, -126.0], [36.0, -103.0]
-  ],
-  "US-NC": [
-    [52.0, -113.0], [52.0, -82.0],
-    [33.0, -109.0], [33.0, -85.0]
-  ],
-  "US-SW": [
-    [43.0, -130.0], [43.0, -99.0],
-    [23.0, -125.0], [23.0, -102.0]
-  ],
-  "US-SC": [
-    [42.0, -112.0], [42.0, -84.0],
-    [22.0, -107.0], [22.0, -88.0]
-  ],
-  "US-SE": [
-    [41.0, -98.0], [41.0, -69.0],
-    [21.0, -93.0], [21.0, -73.0]
-  ],
-  "CONUS": [
-    [54.0, -133.0], [54.0, -57.0],
-    [20.0, -126.0], [20.0, -65.0]
-  ],
-  "ALASKA": [
-    [74.0, -176.0], [74.0, -126.0],
-    [48.0, -170.0], [48.0, -130.0]
-  ]
-};
-
-function noaaModelShiftCornerSet(corners, referenceLon) {
-  if (!Array.isArray(corners) || corners.length !== 4) return null;
-  return corners.map(([lat, lon]) => {
-    let shifted = Number(lon);
-    while (shifted - referenceLon > 180) shifted -= 360;
-    while (shifted - referenceLon < -180) shifted += 360;
-    return L.latLng(Number(lat), shifted);
-  });
-}
-
 function createNoaaMagOverlay(data, referenceLon) {
-  const calibration = NOAA_MAG_WARP_CORNERS[data.area];
-
-  if (calibration && typeof L.distortableImageOverlay === "function") {
-    const corners = noaaModelShiftCornerSet(calibration, referenceLon);
-    if (corners) {
-      const warped = L.distortableImageOverlay(data.imageUrl, {
-        corners,
-        opacity: 0.92,
-        editable: false,
-        selected: false,
-        mode: "lock",
-        suppressToolbar: true
-      });
-
-      // Prevent the weather graphic from capturing map interaction.
-      warped.on("load", () => {
-        const el = warped.getElement && warped.getElement();
-        if (el) {
-          el.style.pointerEvents = "none";
-          el.style.opacity = "0.92";
-        }
-      });
-
-      return warped;
-    }
-  }
-
-  // Safe fallback if the plugin/CDN is unavailable or this is a GFS domain.
   const bounds = noaaModelShiftBounds(data.bounds, referenceLon);
   if (!bounds) return null;
 
+  // 완성형 NOAA/NCEP MAG 일기도를 100% 불투명으로 표시한다.
+  // 지도와의 정밀 지리정합 대신 일기도 자체의 해안선/주 경계를 기준으로 본다.
   return L.imageOverlay(data.imageUrl, bounds, {
-    opacity: 0.92,
+    opacity: 1,
     interactive: false,
     className: "noaa-model-image-overlay",
     attribution: "NOAA/NCEP MAG"
@@ -6858,11 +6781,8 @@ async function loadNoaaModelOverlay() {
       noaaModelUi.valid.textContent =
         `VALID ${noaaModelFormatUtc(data.validIso)} · F${String(data.fhr).padStart(3,"0")}`;
     }
-
-    const warpedMode =
-      NOAA_MAG_WARP_CORNERS[data.area] && typeof L.distortableImageOverlay === "function";
     setNoaaModelStatus(
-      `INIT ${noaaModelFormatUtc(data.initIso)} · NOAA/NCEP MAG 일기도${warpedMode ? " · 지리보정 overlay" : ""}`,
+      `INIT ${noaaModelFormatUtc(data.initIso)} · NOAA/NCEP MAG 일기도 · 100% 불투명`,
       false
     );
   } catch (err) {
