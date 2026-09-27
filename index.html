@@ -344,8 +344,10 @@
 
 .leaflet-control-typhoon button {
   display: block;
-  width: 100%;
-  min-width: 84px;
+  width: 60px;
+  min-width: 60px;
+  box-sizing: border-box;
+  white-space: nowrap;
   height: 24px;
   border: none;
   background: #2563eb;
@@ -353,7 +355,7 @@
   font-size: 10px !important;
   font-weight: 700 !important;
   cursor: pointer;
-  padding: 0 6px;
+  padding: 0 3px;
   text-align: center;
 }
 
@@ -4691,8 +4693,9 @@ async function loadJtwcStorm(url) {
       if (coords.length < 2) continue;
       L.polyline(toRenderLatLngsFromCoords(coords, context), {
         color: /best|past/i.test(name) ? "#64748b" : "#dc2626", weight: 3,
-        dashArray: /best|past/i.test(name) ? null : "8 5"
-      }).bindPopup(popup(name)).addTo(result);
+        dashArray: /best|past/i.test(name) ? null : "8 5",
+        interactive: false
+      }).addTo(result);
     }
     for (const node of pm.getElementsByTagName("Point")) {
       const coords = parseCoordinates(textOfFirst(node, "coordinates"));
@@ -4701,12 +4704,22 @@ async function loadJtwcStorm(url) {
         /^\d{1,2}\/\d{2}Z\b/.test(name) ||
         /VALID TIME:\s*\d{1,2}\/\d{4}Z/i.test(name)
       );
-      const marker = L.circleMarker(toRenderLatLng(coords[0].lat, coords[0].lon, context), {
+      const latlng = toRenderLatLng(coords[0].lat, coords[0].lon, context);
+      L.circleMarker(latlng, {
         radius: isCurrentPoint ? 8 : 5,
         color: isCurrentPoint ? "#1e3a8a" : "#991b1b",
         fillColor: isCurrentPoint ? "#2563eb" : "#ffffff",
         fillOpacity: 1,
-        weight: 2
+        weight: 2,
+        interactive: false
+      }).addTo(result);
+      // 보이는 원 크기는 유지하고 클릭 영역만 넓힌다.
+      L.circleMarker(latlng, {
+        radius: 18,
+        stroke: false,
+        fillColor: "#ffffff",
+        fillOpacity: 0.001,
+        bubblingMouseEvents: false
       }).bindPopup(popup(name)).addTo(result);
       if (isCurrentPoint) currentMarkerPlaced = true;
     }
