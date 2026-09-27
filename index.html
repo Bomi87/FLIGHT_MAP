@@ -6692,33 +6692,43 @@ function trimSpcOutlookTail(value) {
   let text = cleanSevereText(value);
   if (!text) return "";
 
-  // SPC 본문 뒤에 붙는 forecaster signature / 제품 링크 / 페이지 footer / JS를 모두 제거한다.
-  // 앞쪽 공백이 들어오는 경우도 허용한다.
   const cutPatterns = [
-    // Forecaster signature: "..Smith/Bentley.. 09/27/2026"
-    /\n\s*\.\.[A-Za-z][^\n]{0,120}\.\.\s*(?:\d{1,2}\/\d{1,2}\/\d{4}|\d{4})?/i,
-
-    // Official product/footer markers
+    // Forecaster signature and product footer
+    /\n\s*\.\.[A-Za-z][^\n]{0,140}\.\.\s*(?:\d{1,2}\/\d{1,2}\/\d{4}|\d{4})?/i,
     /\n\s*(?:CLICK\s+TO\s+GET|CLICK\s+HERE\s+TO\s+GET)\s+WUUS0[1-3]\s+PTSDY[1-3][^\n]*/i,
     /\n\s*NOTE:\s*THE\s+NEXT\s+DAY\s+[1-3]\s+OUTLOOK\s+IS\s+SCHEDULED[^\n]*/i,
     /\n\s*WUUS0[1-3]\s+PTSDY[1-3][^\n]*/i,
 
-    // SPC webpage navigation/footer
+    // Website navigation / footer
     /\n\s*(?:Top|Latest Day\s+[1-3]\s+Outlook|Today's Outlook|Forecast Products|Home)\b/i,
     /\n\s*Weather Topics\s*:/i,
+    /\n\s*(?:Watches|Mesoscale Discussions|Outlooks|Fire Weather|All Products|Contact Us)\b/i,
     /\n\s*NOAA\s*\/\s*National Weather Service/i,
     /\n\s*National Weather Service\b/i,
     /\n\s*National Centers for Environmental Prediction\b/i,
     /\n\s*Storm Prediction Center\b/i,
+    /\n\s*120\s+David\s+L\.\s+Boren\s+Blvd/i,
     /\n\s*Page last modified\s*:/i,
     /\n\s*Disclaimer\b/i,
     /\n\s*Information Quality\b/i,
+    /\n\s*Help\b/i,
+    /\n\s*Glossary\b/i,
     /\n\s*Privacy Policy\b/i,
     /\n\s*Freedom of Information Act\b/i,
+    /\n\s*About Us\b/i,
+    /\n\s*Career Opportunities\b/i,
 
-    // Stray site script text
+    // Ads / promotional / tracking / scripts
+    /\n\s*Advertisement\b/i,
+    /\n\s*Sponsored\b/i,
+    /\n\s*AdChoices\b/i,
+    /\n\s*Google Ads?\b/i,
+    /\n\s*adsbygoogle\b/i,
+    /\n\s*googlesyndication\b/i,
+    /\n\s*doubleclick\b/i,
     /\n\s*if\s*\(\s*typeof\s+jQuery/i,
-    /\n\s*document\.write\s*\(/i
+    /\n\s*document\.write\s*\(/i,
+    /\n\s*<script\b/i
   ];
 
   let cutAt = text.length;
@@ -7406,10 +7416,10 @@ async function fillSpcExtraDetails(target, properties, day) {
     outlook.summary = trimSpcOutlookTail(outlook.summary);
     outlook.synopsis = trimSpcOutlookTail(outlook.synopsis);
 
-    const [summaryKo, synopsisKo] = await Promise.all([
-      translateSevereText(outlook.summary),
-      translateSevereText(outlook.synopsis)
-    ]);
+    const summaryKo = await translateSevereText(outlook.summary);
+
+    // 상세 전망은 번역하지 않고 SPC 영어 원문을 그대로 표시한다.
+    const synopsisKo = trimSpcOutlookTail(outlook.synopsis);
 
     target.replaceChildren();
 
@@ -7480,7 +7490,7 @@ async function fillSpcExtraDetails(target, properties, day) {
       const summary = document.createElement("summary");
       summary.textContent = "상세 전망 접기 / 펼치기";
       details.appendChild(summary);
-      addSpcSection(details, "상세 전망", synopsisKo);
+      addSpcSection(details, "상세 전망 (영문 원문)", synopsisKo);
       target.appendChild(details);
     }
 
