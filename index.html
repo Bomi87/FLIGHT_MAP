@@ -482,6 +482,29 @@
   color: #111827;
   margin-bottom: 2px;
 }
+
+.spc-popup-wrap .spc-title-risk {
+  display: inline-block;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-weight: 900;
+}
+.spc-popup-wrap .spc-title-risk.risk-green {
+  background: #dcfce7;
+  color: #166534;
+}
+.spc-popup-wrap .spc-title-risk.risk-orange {
+  background: #ffedd5;
+  color: #9a3412;
+}
+.spc-popup-wrap .spc-title-risk.risk-red {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.spc-popup-wrap .spc-title-risk.risk-neutral {
+  background: #f1f5f9;
+  color: #334155;
+}
 .spc-popup-wrap .spc-popup-period {
   font-size: 11px;
   color: #4b5563;
@@ -5949,9 +5972,24 @@ function spcPopup(properties, day, type) {
   const heading = document.createElement("div");
   heading.className = "spc-popup-title";
   const n = Number(p.DN);
-  heading.textContent = type === "tornado"
-    ? `SPC Day ${day} 토네이도 확률 ${n}%`
-    : `SPC Day ${day} 대류 위험: ${spcConvectiveNames[n] || p.LABEL || n}`;
+
+  if (type === "tornado") {
+    heading.textContent = `SPC Day ${day} 토네이도 확률 ${n}%`;
+  } else {
+    const prefix = document.createElement("span");
+    prefix.textContent = `SPC Day ${day} 대류 위험: `;
+
+    const level = document.createElement("span");
+    level.className = "spc-title-risk " + (
+      n === 2 ? "risk-green" :
+      (n === 3 || n === 4) ? "risk-orange" :
+      (n === 5 || n === 6 || n === 8) ? "risk-red" :
+      "risk-neutral"
+    );
+    level.textContent = spcConvectiveNames[n] || p.LABEL || n;
+
+    heading.append(prefix, level);
+  }
   node.appendChild(heading);
 
   if (p.VALID_ISO || p.EXPIRE_ISO) {
