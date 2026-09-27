@@ -6332,79 +6332,192 @@ function updateTyphoonClickTargets() {
 }
 map.on("zoomend", updateTyphoonClickTargets);
 
+
+async function loadNhcAtlanticStormsWithRetry_(maxRetries = 2) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await loadNhcAtlanticStorms();
+    } catch (error) {
+      lastError = error;
+      console.warn(
+        `NHC 대서양 자료 조회 실패 (${attempt + 1}/${maxRetries + 1})`,
+        error
+      );
+
+      if (attempt < maxRetries) {
+        // 1차 실패 후 0.8초, 2차 실패 후 1.6초 대기 후 재시도
+        await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)));
+      }
+    }
+  }
+
+  throw lastError || new Error("NHC 대서양 자료 조회 실패");
+}
+
 function createTyphoonControl() {
   const control = L.control({ position: "topright" });
+
   control.onAdd = function () {
-    const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-typhoon control-group-weather control-group-start");
+    const container = L.DomUtil.create(
+      "div",
+      "leaflet-bar leaflet-control leaflet-control-typhoon control-group-weather control-group-start"
+    );
     const button = L.DomUtil.create("button", "", container);
     button.type = "button";
+
     const update = () => {
       button.textContent = typhoonVisible ? "태풍 ON" : "태풍 OFF";
       button.classList.toggle("typhoon-on", typhoonVisible);
-      button.title = typhoonVisible ? "태풍 표시 끄기 (JTWC·NHC)" : "태풍 표시 켜기 (JTWC·NHC)";
+      button.title = typhoonVisible
+        ? "태풍 표시 끄기 (JTWC·NHC)"
+        : "태풍 표시 켜기 (JTWC·NHC)";
     };
+
     update();
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
+
     L.DomEvent.on(button, "click", async e => {
       L.DomEvent.stop(e);
+
       if (typhoonVisible) {
         map.removeLayer(typhoonLayer);
         typhoonVisible = false;
         update();
         return;
       }
+
       button.disabled = true;
       button.textContent = "...";
+
+      // 두 소스를 독립적으로 시작한다.
+      // NHC가 실패/지연돼도 JTWC 표출을 막지 않는다.
+      const jtwcPromise = (async () => {
+        const response = await fetch(JTWC_RSS_URL, { cache: "no-store" });
+        if (!response.ok) throw new Error(`JTWC RSS HTTP ${response.status}`);
+
+        const links = getJtwcKmzLinks(await response.text());
+        const loaded = await Promise.allSettled(links.map(loadJtwcStorm));
+
+        const layers = loaded.flatMap((entry, i) => {
+          if (entry.status === "fulfilled") return [entry.value];
+          console.error("JTWC storm load failed:", links[i], entry.reason);
+          return [];
+        });
+
+        if (links.length && !layers.length) {
+          throw new Error("JTWC 태풍 KMZ를 읽지 못했습니다");
+        }
+
+        return {
+          layers,
+          missing: links.length - layers.length
+        };
+      })();
+
+      // 대서양 NHC는 최초 1회 + 자동 RETRY 2회 (총 3회 시도)
+      const nhcPromise = loadNhcAtlanticStormsWithRetry_(2);
+
+      typhoonLayer.clearLayers();
+
+      let jtwcResult = null;
+      let nhcResult = null;
+      let jtwcError = null;
+      let nhcError = null;
+      let success = 0;
+
       try {
-        const sources = await Promise.allSettled([
-          (async () => {
-            const response = await fetch(JTWC_RSS_URL, { cache: "no-store" });
-            if (!response.ok) throw new Error(`JTWC RSS HTTP ${response.status}`);
-            const links = getJtwcKmzLinks(await response.text());
-            const loaded = await Promise.allSettled(links.map(loadJtwcStorm));
-            const layers = loaded.flatMap((entry, i) => {
-              if (entry.status === "fulfilled") return [entry.value];
-              console.error("JTWC storm load failed:", links[i], entry.reason);
-              return [];
-            });
-            if (links.length && !layers.length) throw new Error("JTWC 태풍 KMZ를 읽지 못했습니다");
-            return { layers, missing: links.length - layers.length };
-          })(),
-          loadNhcAtlanticStorms().then(layers => ({ layers, missing: 0 }))
-        ]);
-        typhoonLayer.clearLayers();
-        const jtwcLayers = sources[0].status === 'fulfilled' ? sources[0].value.layers : [];
-        const duplicateNHC = layer => jtwcLayers.some(jtwc => {
-          const jtwcId = String(jtwc.jtwcStormId || '').toUpperCase();
-          return jtwcId.startsWith(layer.nhcStormId) ||
-            (jtwcId.startsWith('AL') && jtwc.jtwcName &&
-              jtwc.jtwcName.toUpperCase() === String(layer.nhcStormName).toUpperCase());
-        });
-        const failures = [];
-        let success = 0;
-        sources.forEach((entry, i) => {
-          if (entry.status === "fulfilled") {
-            entry.value.layers.forEach(layer => {
-              if (i === 1 && duplicateNHC(layer)) return;
-              typhoonLayer.addLayer(layer); success++;
-            });
-            if (entry.value.missing) failures.push(`JTWC ${entry.value.missing}개 파일 실패`);
-          } else {
-            const source = i === 0 ? "JTWC" : "NHC 대서양";
-            console.error(`${source} load failed:`, entry.reason);
-            failures.push(`${source}: ${entry.reason.message || entry.reason}`);
+        // JTWC를 먼저 처리하여 NHC fetch가 느리거나 실패해도 바로 표시한다.
+        try {
+          jtwcResult = await jtwcPromise;
+
+          for (const layer of jtwcResult.layers) {
+            typhoonLayer.addLayer(layer);
+            success++;
           }
-        });
+
+          if (success > 0) {
+            typhoonLayer.addTo(map);
+            typhoonVisible = true;
+            updateTyphoonClickTargets();
+            update();
+          }
+
+          if (jtwcResult.missing) {
+            console.warn(`JTWC ${jtwcResult.missing}개 파일 실패`);
+          }
+        } catch (error) {
+          jtwcError = error;
+          console.error("JTWC load failed:", error);
+        }
+
+        // NHC는 별도로 완료를 기다린다. 실패해도 위 JTWC layer는 그대로 유지된다.
+        try {
+          const nhcLayers = await nhcPromise;
+          nhcResult = { layers: nhcLayers };
+
+          const jtwcLayers = jtwcResult?.layers || [];
+          const duplicateNHC = layer => jtwcLayers.some(jtwc => {
+            const jtwcId = String(jtwc.jtwcStormId || "").toUpperCase();
+            return jtwcId.startsWith(layer.nhcStormId) ||
+              (
+                jtwcId.startsWith("AL") &&
+                jtwc.jtwcName &&
+                jtwc.jtwcName.toUpperCase() ===
+                  String(layer.nhcStormName || "").toUpperCase()
+              );
+          });
+
+          for (const layer of nhcLayers) {
+            if (duplicateNHC(layer)) continue;
+            typhoonLayer.addLayer(layer);
+            success++;
+          }
+
+          if (success > 0 && !map.hasLayer(typhoonLayer)) {
+            typhoonLayer.addTo(map);
+          }
+
+          if (success > 0) {
+            typhoonVisible = true;
+            updateTyphoonClickTargets();
+            update();
+          }
+        } catch (error) {
+          nhcError = error;
+          console.error(
+            "NHC 대서양 load failed after automatic retries:",
+            error
+          );
+          // 중요: 여기서는 throw하지 않는다.
+          // JTWC가 이미 성공했다면 그대로 정상 표출을 유지한다.
+        }
+
         if (!success) {
-          if (failures.length) throw new Error(failures.join(" / "));
+          const failures = [];
+          if (jtwcError) {
+            failures.push(`JTWC: ${jtwcError.message || jtwcError}`);
+          }
+          if (nhcError) {
+            failures.push(`NHC 대서양: ${nhcError.message || nhcError}`);
+          }
+
+          if (failures.length) {
+            throw new Error(failures.join(" / "));
+          }
+
           alert("현재 표시할 태풍 예보가 없습니다.");
           return;
         }
-        typhoonLayer.addTo(map);
-        typhoonVisible = true;
-        updateTyphoonClickTargets();
-        if (failures.length) alert(`태풍 ${success}개 표시 중. 일부 자료 실패: ${failures.join(" / ")}`);
+
+        // 일부 소스 실패는 지도 표출을 중단하지 않는다.
+        if (nhcError && jtwcResult?.layers?.length) {
+          console.warn(
+            "NHC 대서양 자료는 실패했지만 JTWC 태풍은 정상 표시 중입니다."
+          );
+        }
       } catch (err) {
         console.error("Typhoon load failed:", err);
         alert("태풍 표시 실패: " + (err.message || err));
@@ -6413,8 +6526,10 @@ function createTyphoonControl() {
         update();
       }
     });
+
     return container;
   };
+
   return control;
 }
 // SPC forecasts describe a whole valid period, unlike hourly model frames.
