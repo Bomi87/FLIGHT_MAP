@@ -6727,12 +6727,21 @@ function callNoaaModelJsonp(airport, step) {
  * 따라서 공항/route/Leaflet 지도와 같은 위경도 좌표를 직접 사용한다.
  * ========================================================= */
 
-const NOMADS_GRIB_MODULE_URL =
-  "https://esm.unpkg.com/@trkbt10/grib2-wasm?target=es2022";
+const NOMADS_GRIB_MODULE_CANDIDATES = [
+  // Direct browser ESM file first: avoids the beta esm.unpkg.com transformer.
+  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/index.js",
+  // jsDelivr ESM transformer fallback.
+  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/+esm",
+  // Secondary transformer fallback.
+  "https://esm.sh/@trkbt10/grib2-wasm"
+];
 
 const NOMADS_GRIB_WASM_CANDIDATES = [
+  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/grib2.wasm",
   "https://unpkg.com/@trkbt10/grib2-wasm/grib2.wasm",
+  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/grib2_wasm.wasm",
   "https://unpkg.com/@trkbt10/grib2-wasm/grib2_wasm.wasm",
+  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/grib2_wasm_bg.wasm",
   "https://unpkg.com/@trkbt10/grib2-wasm/grib2_wasm_bg.wasm"
 ];
 
@@ -6750,18 +6759,39 @@ async function loadNomadsGribModule_() {
   if (nomadsGribModulePromise) return nomadsGribModulePromise;
 
   nomadsGribModulePromise = (async () => {
-    const mod = await import(NOMADS_GRIB_MODULE_URL);
+    const errors = [];
 
-    let lastError = null;
-    for (const wasmUrl of NOMADS_GRIB_WASM_CANDIDATES) {
+    for (const moduleUrl of NOMADS_GRIB_MODULE_CANDIDATES) {
+      let mod;
       try {
-        await mod.initBrowser(wasmUrl);
-        return mod;
+        mod = await import(/* webpackIgnore: true */ moduleUrl);
       } catch (err) {
-        lastError = err;
+        errors.push(`module ${moduleUrl}: ${err?.message || err}`);
+        continue;
+      }
+
+      if (!mod || typeof mod.initBrowser !== "function") {
+        errors.push(`module ${moduleUrl}: initBrowser() 없음`);
+        continue;
+      }
+
+      for (const wasmUrl of NOMADS_GRIB_WASM_CANDIDATES) {
+        try {
+          await mod.initBrowser(wasmUrl);
+          console.info("GRIB2 decoder loaded:", moduleUrl, wasmUrl);
+          return mod;
+        } catch (err) {
+          errors.push(`wasm ${wasmUrl}: ${err?.message || err}`);
+        }
       }
     }
-    throw lastError || new Error("GRIB2 WASM 초기화 실패");
+
+    // Allow a retry on the next click if all CDNs were temporarily unavailable.
+    nomadsGribModulePromise = null;
+    throw new Error(
+      "GRIB2 decoder 로드 실패 · " +
+      (errors.length ? errors.slice(0, 4).join(" | ") : "사용 가능한 CDN 없음")
+    );
   })();
 
   return nomadsGribModulePromise;
