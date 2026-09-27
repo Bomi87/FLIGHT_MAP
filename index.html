@@ -1953,6 +1953,74 @@
   background: #14b8a6 !important;
 }
 
+
+
+/* ===== 우측 버튼 색상 체계 v17 ===== */
+/* NON-WX = Green family / WX = Navy family */
+
+/* NDB / FIR / U.S : 동일한 초록 계열 */
+.leaflet-control-ndb-toggle button,
+.leaflet-control-fir-toggle button,
+.leaflet-control-artcc-toggle button {
+  background: #2f6f57 !important;   /* muted forest green */
+  color: #f8fafc !important;
+}
+
+.leaflet-control-ndb-toggle button:hover,
+.leaflet-control-fir-toggle button:hover,
+.leaflet-control-artcc-toggle button:hover {
+  background: #285f4b !important;
+}
+
+.leaflet-control-ndb-toggle button.ndb-on,
+.leaflet-control-fir-toggle button.fir-on,
+.leaflet-control-artcc-toggle button.artcc-on {
+  background: #1f513f !important;   /* darker green on */
+  color: #ffffff !important;
+}
+
+/* 일반도구 rail */
+.control-group-general::before {
+  background: #3f8f70 !important;
+}
+
+/* 기상 4개 : NAVY 계열 */
+.leaflet-control-typhoon button,
+.leaflet-control-vaac button,
+.leaflet-control-spc button,
+.leaflet-control-noaa-model .noaa-model-toggle {
+  background: #1f3a5f !important;   /* navy */
+  color: #f8fafc !important;
+}
+
+.leaflet-control-typhoon button:hover,
+.leaflet-control-vaac button:hover,
+.leaflet-control-spc button:hover,
+.leaflet-control-noaa-model .noaa-model-toggle:hover {
+  background: #294b78 !important;
+}
+
+/* 기상 ON은 초록이 아니라 cobalt/indigo */
+.leaflet-control-typhoon button.typhoon-on,
+.leaflet-control-vaac button.vaac-on,
+.leaflet-control-spc button.spc-on,
+.leaflet-control-noaa-model .noaa-model-toggle.model-on {
+  background: #365fa8 !important;
+  color: #ffffff !important;
+}
+
+.leaflet-control-typhoon button.typhoon-on:hover,
+.leaflet-control-vaac button.vaac-on:hover,
+.leaflet-control-spc button.spc-on:hover,
+.leaflet-control-noaa-model .noaa-model-toggle.model-on:hover {
+  background: #2f5598 !important;
+}
+
+/* 기상 rail도 navy-blue 계열 */
+.control-group-weather::before {
+  background: #3b6fb6 !important;
+}
+
 </style>
 </head>
 <body>
