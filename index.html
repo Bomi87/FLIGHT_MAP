@@ -580,6 +580,16 @@
   margin-top: 2px;
   white-space: pre-wrap;
 }
+
+.spc-popup-wrap .spc-detail-subheading {
+  margin: 5px 0 4px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #111827;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .spc-popup-wrap .spc-risk-values {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -7203,6 +7213,33 @@ function spcHeadlineRiskClass(properties, headlineText) {
   return spcRiskCssClass(spcRiskMeta(properties, headlineText).tone);
 }
 
+function addSpcEnglishDetailSection(parent, title, text) {
+  const source = cleanSevereText(text);
+  if (!source) return;
+
+  const sectionTitle = document.createElement("div");
+  sectionTitle.className = "spc-section-title";
+  sectionTitle.textContent = title;
+  parent.appendChild(sectionTitle);
+
+  const lines = source.split("\n");
+  const firstIndex = lines.findIndex(line => line.trim());
+  if (firstIndex < 0) return;
+
+  const subheading = document.createElement("div");
+  subheading.className = "spc-detail-subheading";
+  subheading.textContent = lines[firstIndex].trim();
+  parent.appendChild(subheading);
+
+  const bodyText = lines.slice(firstIndex + 1).join("\n").trim();
+  if (bodyText) {
+    const body = document.createElement("div");
+    body.className = "spc-section-text";
+    body.textContent = bodyText;
+    parent.appendChild(body);
+  }
+}
+
 
 // ===== SPC 상세정보 보강: Day 1/2 누락 방지 =====
 // SevereWeatherOutlook 쪽에서 현재 Day 1 상세전망/확률 일부가 비어 오는 경우,
@@ -7490,7 +7527,7 @@ async function fillSpcExtraDetails(target, properties, day) {
       const summary = document.createElement("summary");
       summary.textContent = "상세 전망 접기 / 펼치기";
       details.appendChild(summary);
-      addSpcSection(details, "상세 전망 (영문 원문)", synopsisKo);
+      addSpcEnglishDetailSection(details, "상세 전망 (영문 원문)", synopsisKo);
       target.appendChild(details);
     }
 
