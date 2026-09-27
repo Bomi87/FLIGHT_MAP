@@ -12,7 +12,6 @@
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3-contour@4/dist/d3-contour.min.js"></script>
   <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 
   <style>
@@ -1092,6 +1091,17 @@
 }
 .noaa-model-status.error {
   color: #b91c1c;
+}
+
+.noaa-model-mode {
+  width: 100%;
+  margin: 5px 0 3px;
+  padding: 5px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font-weight: 700;
 }
 /* ===== NOAA NAM 3km / GFS 모델 일기도 overlay 끝 ===== */
 
@@ -6545,13 +6555,18 @@ function createNoaaModelControl() {
 
     const toggle = L.DomUtil.create("button", "noaa-model-toggle", container);
     toggle.type = "button";
-    toggle.textContent = "NAM 3km 원자료 OFF";
+    toggle.textContent = "NAM 3km 예보 OFF";
 
     const airportMeta = L.DomUtil.create("div", "noaa-model-meta", container);
     airportMeta.textContent = "공항검색에서 ICAO를 먼저 선택하세요.";
 
     const modelMeta = L.DomUtil.create("div", "noaa-model-meta", container);
-    modelMeta.textContent = "미국 본토: NAM 3km 원자료 정확좌표";
+    modelMeta.textContent = "미국 본토: NAM Conus 3 km";
+
+    const modeSelect = L.DomUtil.create("select", "noaa-model-mode", container);
+    modeSelect.innerHTML =
+      '<option value="precip">강수 + 기압</option>' +
+      '<option value="wind">지상풍 10m</option>';
 
     const timeRow = L.DomUtil.create("div", "noaa-model-time-row", container);
     const prev = L.DomUtil.create("button", "", timeRow);
@@ -6564,9 +6579,9 @@ function createNoaaModelControl() {
     next.textContent = "+";
 
     const status = L.DomUtil.create("div", "noaa-model-status", container);
-    status.textContent = "NOAA/NOMADS NAM 3km 원자료";
+    status.textContent = "NAM Conus 3 km · Open-Meteo";
 
-    noaaModelUi = { container, toggle, airportMeta, modelMeta, valid, status, prev, next };
+    noaaModelUi = { container, toggle, airportMeta, modelMeta, modeSelect, valid, status, prev, next };
 
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
@@ -6574,13 +6589,13 @@ function createNoaaModelControl() {
     L.DomEvent.on(toggle, "click", event => {
       L.DomEvent.stop(event);
       noaaModelEnabled = !noaaModelEnabled;
-      toggle.textContent = noaaModelEnabled ? "NAM 3km 원자료 ON" : "NAM 3km 원자료 OFF";
+      toggle.textContent = noaaModelEnabled ? "NAM 3km 예보 ON" : "NAM 3km 예보 OFF";
       toggle.classList.toggle("model-on", noaaModelEnabled);
 
       if (!noaaModelEnabled) {
         ++noaaModelRequestId;
         clearNoaaModelLayer();
-        setNoaaModelStatus("NOAA/NOMADS NAM 3km 원자료", false);
+        setNoaaModelStatus("NAM Conus 3 km · Open-Meteo", false);
         return;
       }
 
@@ -6604,6 +6619,11 @@ function createNoaaModelControl() {
       if (!noaaModelEnabled || !noaaModelAirport) return;
       noaaModelStep += 1;
       loadNoaaModelOverlay();
+    });
+
+    L.DomEvent.on(modeSelect, "change", event => {
+      L.DomEvent.stop(event);
+      if (noaaModelEnabled && noaaModelAirport) loadNoaaModelOverlay(true);
     });
 
     return container;
@@ -6716,450 +6736,417 @@ function callNoaaModelJsonp(airport, step) {
 
 
 
+
 /* =========================================================
- * NOAA NOMADS NAM CONUS NEST — exact grid-coordinate overlay
+ * NAM Conus 3 km display without browser-side GRIB decoding
  *
- * MAG imageOverlay는 사용하지 않는다.
- * Apps Script가 NOMADS Grib Filter에서 공항 주변의 REFC + PRMSL
- * GRIB2 subset을 받아 base64로 전달하고, 브라우저 WASM decoder가
- * 각 grid point의 실제 latitude / longitude를 읽는다.
- *
- * 따라서 공항/route/Leaflet 지도와 같은 위경도 좌표를 직접 사용한다.
+ * Open-Meteo exposes NOAA NAM Conus as a 3 km model and returns
+ * precipitation, MSLP and 10 m wind for requested coordinates.
+ * We request one VALID hour at a time on a regular lat/lon mesh,
+ * so every rendered cell/arrow is placed directly by geographic
+ * coordinates and there is no image-projection misalignment.
  * ========================================================= */
 
-const NOMADS_GRIB_MODULE_CANDIDATES = [
-  // Direct browser ESM file first: avoids the beta esm.unpkg.com transformer.
-  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/index.js",
-  // jsDelivr ESM transformer fallback.
-  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/+esm",
-  // Secondary transformer fallback.
-  "https://esm.sh/@trkbt10/grib2-wasm"
-];
+const NAM_OPEN_METEO_URL = "https://api.open-meteo.com/v1/gfs";
+const NAM_MODEL_NAME = "ncep_nam_conus";
 
-const NOMADS_GRIB_WASM_CANDIDATES = [
-  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/grib2.wasm",
-  "https://unpkg.com/@trkbt10/grib2-wasm/grib2.wasm",
-  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/grib2_wasm.wasm",
-  "https://unpkg.com/@trkbt10/grib2-wasm/grib2_wasm.wasm",
-  "https://cdn.jsdelivr.net/npm/@trkbt10/grib2-wasm/grib2_wasm_bg.wasm",
-  "https://unpkg.com/@trkbt10/grib2-wasm/grib2_wasm_bg.wasm"
-];
+let namGridLayer = null;
+const namGridCache = new Map();
 
-let nomadsGribModulePromise = null;
-let nomadsExactLayer = null;
-
-function b64ToUint8_(base64) {
-  const raw = atob(base64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
+function namTargetValid_(step) {
+  const now = Date.now();
+  const nextHour = Math.ceil(now / 3600000) * 3600000;
+  return new Date(nextHour + Number(step || 0) * 3600000);
 }
 
-async function loadNomadsGribModule_() {
-  if (nomadsGribModulePromise) return nomadsGribModulePromise;
-
-  nomadsGribModulePromise = (async () => {
-    const errors = [];
-
-    for (const moduleUrl of NOMADS_GRIB_MODULE_CANDIDATES) {
-      let mod;
-      try {
-        mod = await import(/* webpackIgnore: true */ moduleUrl);
-      } catch (err) {
-        errors.push(`module ${moduleUrl}: ${err?.message || err}`);
-        continue;
-      }
-
-      if (!mod || typeof mod.initBrowser !== "function") {
-        errors.push(`module ${moduleUrl}: initBrowser() 없음`);
-        continue;
-      }
-
-      for (const wasmUrl of NOMADS_GRIB_WASM_CANDIDATES) {
-        try {
-          await mod.initBrowser(wasmUrl);
-          console.info("GRIB2 decoder loaded:", moduleUrl, wasmUrl);
-          return mod;
-        } catch (err) {
-          errors.push(`wasm ${wasmUrl}: ${err?.message || err}`);
-        }
-      }
-    }
-
-    // Allow a retry on the next click if all CDNs were temporarily unavailable.
-    nomadsGribModulePromise = null;
-    throw new Error(
-      "GRIB2 decoder 로드 실패 · " +
-      (errors.length ? errors.slice(0, 4).join(" | ") : "사용 가능한 CDN 없음")
-    );
-  })();
-
-  return nomadsGribModulePromise;
+function namIsoHour_(date) {
+  return date.toISOString().slice(0, 13) + ":00";
 }
 
-function callNomadsRawJsonp_(airport, step) {
-  return new Promise((resolve, reject) => {
-    const callbackName =
-      "nomadsRawCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+function namBuildMesh_(airport) {
+  const centerLat = Number(airport.lat);
+  let centerLon = Number(airport.lon);
+  while (centerLon > 180) centerLon -= 360;
+  while (centerLon < -180) centerLon += 360;
 
-    const params = new URLSearchParams({
-      action: "namRaw",
-      lat: String(airport.lat),
-      lon: String(airport.lon),
-      icao: String(airport.icao || ""),
-      step: String(step || 0),
-      callback: callbackName,
-      _: String(Date.now())
-    });
+  // About 450-500 km around the selected airport.
+  // 45 x 55 = 2475 samples, split into small POST requests.
+  const rows = 45;
+  const cols = 55;
+  const latSpan = 4.4;
+  const lonSpan = 6.0;
+  const south = centerLat - latSpan / 2;
+  const north = centerLat + latSpan / 2;
+  const west = centerLon - lonSpan / 2;
+  const east = centerLon + lonSpan / 2;
 
-    const script = document.createElement("script");
-    script.src =
-      TOKYO_VAAC_BACKEND_URL +
-      (TOKYO_VAAC_BACKEND_URL.includes("?") ? "&" : "?") +
-      params.toString();
-
-    const timer = setTimeout(() => {
-      cleanup();
-      reject(new Error("NOMADS NAM 3km 요청 시간이 초과되었습니다."));
-    }, 45000);
-
-    window[callbackName] = data => {
-      cleanup();
-      resolve(data);
-    };
-
-    script.onerror = () => {
-      cleanup();
-      reject(new Error("NOMADS 백엔드에 연결할 수 없습니다."));
-    };
-
-    function cleanup() {
-      clearTimeout(timer);
-      delete window[callbackName];
-      if (script.parentNode) script.parentNode.removeChild(script);
+  const points = [];
+  for (let r = 0; r < rows; r++) {
+    const lat = south + (north - south) * r / (rows - 1);
+    for (let c = 0; c < cols; c++) {
+      const lon = west + (east - west) * c / (cols - 1);
+      points.push({ r, c, lat, lon });
     }
+  }
 
-    document.head.appendChild(script);
+  return { rows, cols, south, north, west, east, points };
+}
+
+async function namFetchChunk_(chunk, validIso) {
+  const body = new URLSearchParams();
+  body.set("latitude", chunk.map(p => p.lat.toFixed(5)).join(","));
+  body.set("longitude", chunk.map(p => p.lon.toFixed(5)).join(","));
+  body.set("hourly", "precipitation,pressure_msl,wind_speed_10m,wind_direction_10m");
+  body.set("models", NAM_MODEL_NAME);
+  body.set("start_hour", validIso);
+  body.set("end_hour", validIso);
+  body.set("timezone", "UTC");
+  body.set("wind_speed_unit", "kn");
+  body.set("precipitation_unit", "mm");
+  body.set("cell_selection", "nearest");
+
+  const response = await fetch(NAM_OPEN_METEO_URL, {
+    method: "POST",
+    headers: {"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+    body: body.toString(),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const t = await response.text().catch(() => "");
+    throw new Error(`NAM API HTTP ${response.status}${t ? " · " + t.slice(0,160) : ""}`);
+  }
+
+  const json = await response.json();
+  const arr = Array.isArray(json) ? json : [json];
+  if (arr.length !== chunk.length) {
+    throw new Error(`NAM API 지점 수 불일치 ${arr.length}/${chunk.length}`);
+  }
+
+  return arr.map((item, i) => {
+    const h = item.hourly || {};
+    return {
+      ...chunk[i],
+      modelLat: Number(item.latitude),
+      modelLon: Number(item.longitude),
+      precipitation: Number(h.precipitation?.[0]),
+      pressure: Number(h.pressure_msl?.[0]),
+      windSpeed: Number(h.wind_speed_10m?.[0]),
+      windDirection: Number(h.wind_direction_10m?.[0]),
+      time: h.time?.[0] || validIso
+    };
   });
 }
 
-function normalizeGridLon_(lon, referenceLon) {
-  let x = Number(lon);
-  if (!Number.isFinite(x)) return x;
-  while (x > 180) x -= 360;
-  while (x < -180) x += 360;
-  while (x - referenceLon > 180) x -= 360;
-  while (x - referenceLon < -180) x += 360;
-  return x;
+async function namFetchGrid_(airport, valid) {
+  const mesh = namBuildMesh_(airport);
+  const validIso = namIsoHour_(valid);
+  const chunks = [];
+  const chunkSize = 120;
+
+  for (let i = 0; i < mesh.points.length; i += chunkSize) {
+    chunks.push(mesh.points.slice(i, i + chunkSize));
+  }
+
+  // Keep concurrency moderate to avoid hammering the public API.
+  const all = [];
+  for (let i = 0; i < chunks.length; i += 4) {
+    const batch = chunks.slice(i, i + 4);
+    const result = await Promise.all(batch.map(chunk => namFetchChunk_(chunk, validIso)));
+    result.forEach(part => all.push(...part));
+  }
+
+  return {...mesh, points: all, validIso};
 }
 
-function refcColor_(dbz) {
-  if (!Number.isFinite(dbz) || dbz < 5) return null;
-  if (dbz < 10) return "rgba(170,255,120,.36)";
-  if (dbz < 20) return "rgba(80,230,70,.42)";
-  if (dbz < 30) return "rgba(20,190,80,.48)";
-  if (dbz < 40) return "rgba(40,180,220,.54)";
-  if (dbz < 50) return "rgba(245,210,55,.58)";
-  if (dbz < 60) return "rgba(245,125,40,.62)";
-  return "rgba(210,35,50,.66)";
+function namPrecipColor_(mm) {
+  if (!Number.isFinite(mm) || mm <= 0.02) return null;
+  if (mm < 0.2) return "rgba(180,240,180,.28)";
+  if (mm < 0.5) return "rgba(90,220,110,.36)";
+  if (mm < 1.0) return "rgba(45,185,95,.44)";
+  if (mm < 2.0) return "rgba(40,155,210,.50)";
+  if (mm < 4.0) return "rgba(50,105,225,.56)";
+  if (mm < 8.0) return "rgba(235,210,55,.60)";
+  if (mm < 15.0) return "rgba(245,125,40,.64)";
+  return "rgba(210,35,50,.68)";
 }
 
-const NomadsExactGridLayer_ = L.Layer.extend({
-  initialize: function(decoded, options) {
-    L.setOptions(this, options || {});
-    this.decoded = decoded;
-    this.canvas = null;
+function namGridPoint_(grid, r, c) {
+  if (r < 0 || c < 0 || r >= grid.rows || c >= grid.cols) return null;
+  return grid.points[r * grid.cols + c] || null;
+}
+
+const NamWeatherLayer_ = L.Layer.extend({
+  initialize: function(grid, mode) {
+    this.grid = grid;
+    this.mode = mode || "precip";
   },
 
   onAdd: function(mapInstance) {
     this._map = mapInstance;
-    this.canvas = L.DomUtil.create("canvas", "nomads-exact-grid-layer");
+    this.canvas = L.DomUtil.create("canvas", "nam-weather-grid-layer");
     this.canvas.style.position = "absolute";
     this.canvas.style.pointerEvents = "none";
     this.canvas.style.zIndex = "350";
     mapInstance.getPanes().overlayPane.appendChild(this.canvas);
 
-    this._redraw = this._redraw.bind(this);
-    mapInstance.on("move zoom resize", this._redraw);
+    this._redrawBound = this._redraw.bind(this);
+    mapInstance.on("move zoom resize", this._redrawBound);
     this._redraw();
   },
 
   onRemove: function(mapInstance) {
-    mapInstance.off("move zoom resize", this._redraw);
+    mapInstance.off("move zoom resize", this._redrawBound);
     if (this.canvas?.parentNode) this.canvas.parentNode.removeChild(this.canvas);
     this.canvas = null;
   },
 
-  _redraw: function() {
-    if (!this.canvas || !this._map) return;
-
-    const mapInstance = this._map;
-    const size = mapInstance.getSize();
+  _setupCanvas: function() {
+    const size = this._map.getSize();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-
     this.canvas.width = Math.round(size.x * dpr);
     this.canvas.height = Math.round(size.y * dpr);
     this.canvas.style.width = size.x + "px";
     this.canvas.style.height = size.y + "px";
-
-    const topLeft = mapInstance.containerPointToLayerPoint([0,0]);
+    const topLeft = this._map.containerPointToLayerPoint([0,0]);
     L.DomUtil.setPosition(this.canvas, topLeft);
-
     const ctx = this.canvas.getContext("2d");
     ctx.setTransform(dpr,0,0,dpr,0,0);
     ctx.clearRect(0,0,size.x,size.y);
-
-    this._drawReflectivity(ctx, size);
-    this._drawPressureContours(ctx, size);
+    return {ctx, size};
   },
 
-  _drawReflectivity: function(ctx, size) {
-    const field = this.decoded.refc;
-    if (!field) return;
+  _project: function(lat, lon) {
+    const displayLon = shiftLonNearReference(Number(lon), GLOBAL_WORLD_REFERENCE_LON);
+    return this._map.latLngToContainerPoint([Number(lat), displayLon]);
+  },
 
-    const lats = field.lats;
-    const lons = field.lons;
-    const vals = field.values;
-    const n = vals.length;
-
-    // Keep canvas fast on large subsets.
-    const stride = n > 140000 ? 3 : n > 70000 ? 2 : 1;
-    const zoom = this._map.getZoom();
-    const radius = zoom >= 7 ? 3.0 : zoom >= 5 ? 2.3 : 1.7;
-
-    for (let i = 0; i < n; i += stride) {
-      const value = vals[i];
-      const color = refcColor_(value);
-      if (!color) continue;
-
-      const lat = lats[i];
-      const lon = lons[i];
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-
-      const displayLon = normalizeGridLon_(lon, GLOBAL_WORLD_REFERENCE_LON);
-      const p = this._map.latLngToContainerPoint([lat, displayLon]);
-      if (p.x < -5 || p.y < -5 || p.x > size.x + 5 || p.y > size.y + 5) continue;
-
-      ctx.fillStyle = color;
-      ctx.fillRect(p.x - radius, p.y - radius, radius * 2, radius * 2);
+  _redraw: function() {
+    if (!this.canvas || !this._map) return;
+    const {ctx, size} = this._setupCanvas();
+    if (this.mode === "wind") this._drawWind(ctx, size);
+    else {
+      this._drawPrecip(ctx, size);
+      this._drawPressure(ctx, size);
     }
   },
 
-  _drawPressureContours: function(ctx, size) {
-    const field = this.decoded.prmsl;
-    if (!field || !window.d3?.contours) return;
+  _drawPrecip: function(ctx, size) {
+    const g = this.grid;
 
-    const ni = Number(field.ni);
-    const nj = Number(field.nj);
-    if (!Number.isFinite(ni) || !Number.isFinite(nj) ||
-        ni < 2 || nj < 2 || ni * nj !== field.values.length) return;
+    for (let r = 0; r < g.rows - 1; r++) {
+      for (let c = 0; c < g.cols - 1; c++) {
+        const p00 = namGridPoint_(g,r,c);
+        const p01 = namGridPoint_(g,r,c+1);
+        const p10 = namGridPoint_(g,r+1,c);
+        const p11 = namGridPoint_(g,r+1,c+1);
+        if (!p00 || !p01 || !p10 || !p11) continue;
 
-    // Convert Pa -> hPa for contour generation.
-    const hpa = Array.from(field.values, v =>
-      Number.isFinite(v) && v > 2000 ? v / 100 : NaN
-    );
+        const vals = [p00.precipitation,p01.precipitation,p10.precipitation,p11.precipitation]
+          .filter(Number.isFinite);
+        if (!vals.length) continue;
+        const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+        const color = namPrecipColor_(avg);
+        if (!color) continue;
 
+        const a = this._project(p00.lat,p00.lon);
+        const b = this._project(p01.lat,p01.lon);
+        const d = this._project(p10.lat,p10.lon);
+        const e = this._project(p11.lat,p11.lon);
+
+        if ([a,b,d,e].every(q => q.x < -20 || q.x > size.x+20 || q.y < -20 || q.y > size.y+20)) continue;
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(a.x,a.y);
+        ctx.lineTo(b.x,b.y);
+        ctx.lineTo(e.x,e.y);
+        ctx.lineTo(d.x,d.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  },
+
+  _drawPressure: function(ctx, size) {
+    const g = this.grid;
+
+    // Draw lightweight isobar-like lines using marching squares at 4-hPa intervals.
     let min = Infinity, max = -Infinity;
-    for (const v of hpa) {
-      if (!Number.isFinite(v)) continue;
-      if (v < min) min = v;
-      if (v > max) max = v;
+    for (const p of g.points) {
+      if (!Number.isFinite(p.pressure)) continue;
+      min = Math.min(min,p.pressure);
+      max = Math.max(max,p.pressure);
     }
     if (!Number.isFinite(min) || !Number.isFinite(max)) return;
 
-    const first = Math.ceil(min / 4) * 4;
-    const thresholds = [];
-    for (let p = first; p <= max; p += 4) thresholds.push(p);
-    if (!thresholds.length) return;
-
-    let contours;
-    try {
-      contours = d3.contours().size([ni, nj]).thresholds(thresholds)(hpa);
-    } catch (e) {
-      console.warn("MSLP contour generation failed:", e);
-      return;
-    }
-
+    const first = Math.ceil(min/4)*4;
     ctx.save();
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = "rgba(25,25,25,.74)";
+    ctx.strokeStyle = "rgba(20,20,20,.72)";
+    ctx.fillStyle = "rgba(10,10,10,.82)";
+    ctx.lineWidth = 1.1;
     ctx.font = "700 10px Arial";
-    ctx.fillStyle = "rgba(20,20,20,.82)";
 
-    const lats = field.lats;
-    const lons = field.lons;
-
-    const xyToPoint = xy => {
-      const x = Math.max(0, Math.min(ni - 1, Math.round(xy[0])));
-      const y = Math.max(0, Math.min(nj - 1, Math.round(xy[1])));
-      const idx = y * ni + x;
-      const lat = lats[idx];
-      const lon = lons[idx];
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-      return this._map.latLngToContainerPoint([
-        lat,
-        normalizeGridLon_(lon, GLOBAL_WORLD_REFERENCE_LON)
-      ]);
-    };
-
-    for (const contour of contours) {
+    for (let level = first; level <= max; level += 4) {
       let labelDone = false;
-      const polygons = contour.coordinates || [];
-      for (const poly of polygons) {
-        for (const ring of poly) {
-          if (!ring || ring.length < 2) continue;
-          ctx.beginPath();
-          let started = false;
-          let labelPoint = null;
 
-          for (let k = 0; k < ring.length; k += 2) {
-            const p = xyToPoint(ring[k]);
-            if (!p) continue;
-            if (!started) {
-              ctx.moveTo(p.x, p.y);
-              started = true;
-            } else {
-              ctx.lineTo(p.x, p.y);
+      for (let r = 0; r < g.rows - 1; r++) {
+        for (let c = 0; c < g.cols - 1; c++) {
+          const pts = [
+            namGridPoint_(g,r,c),
+            namGridPoint_(g,r,c+1),
+            namGridPoint_(g,r+1,c+1),
+            namGridPoint_(g,r+1,c)
+          ];
+          if (pts.some(p => !p || !Number.isFinite(p.pressure))) continue;
+
+          const crossings = [];
+          const edges = [[0,1],[1,2],[2,3],[3,0]];
+          for (const [i,j] of edges) {
+            const a = pts[i], b = pts[j];
+            const va = a.pressure - level;
+            const vb = b.pressure - level;
+            if (va === 0 && vb === 0) continue;
+            if ((va <= 0 && vb > 0) || (va > 0 && vb <= 0)) {
+              const t = (level - a.pressure) / (b.pressure - a.pressure);
+              const lat = a.lat + (b.lat-a.lat)*t;
+              const lon = a.lon + (b.lon-a.lon)*t;
+              crossings.push(this._project(lat,lon));
             }
-            if (!labelPoint && p.x > 15 && p.x < size.x - 30 &&
-                p.y > 15 && p.y < size.y - 15) labelPoint = p;
           }
-          if (started) ctx.stroke();
 
-          if (!labelDone && labelPoint) {
-            ctx.fillText(String(Math.round(contour.value)), labelPoint.x + 2, labelPoint.y - 2);
-            labelDone = true;
+          if (crossings.length >= 2) {
+            for (let k=0; k+1<crossings.length; k+=2) {
+              const a = crossings[k], b = crossings[k+1];
+              ctx.beginPath();
+              ctx.moveTo(a.x,a.y);
+              ctx.lineTo(b.x,b.y);
+              ctx.stroke();
+
+              if (!labelDone &&
+                  a.x>20 && a.x<size.x-40 && a.y>15 && a.y<size.y-15) {
+                ctx.fillText(String(level), a.x+2, a.y-2);
+                labelDone = true;
+              }
+            }
           }
         }
       }
     }
+
+    ctx.restore();
+  },
+
+  _drawWind: function(ctx, size) {
+    const g = this.grid;
+    const step = this._map.getZoom() >= 7 ? 2 : 3;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(20,35,55,.82)";
+    ctx.fillStyle = "rgba(15,30,50,.88)";
+    ctx.lineWidth = 1.3;
+    ctx.font = "700 10px Arial";
+
+    for (let r = 0; r < g.rows; r += step) {
+      for (let c = 0; c < g.cols; c += step) {
+        const p = namGridPoint_(g,r,c);
+        if (!p || !Number.isFinite(p.windSpeed) || !Number.isFinite(p.windDirection)) continue;
+
+        const q = this._project(p.lat,p.lon);
+        if (q.x < 12 || q.x > size.x-12 || q.y < 12 || q.y > size.y-12) continue;
+
+        // Meteorological direction is FROM; arrow points downwind.
+        const rad = (p.windDirection + 180) * Math.PI / 180;
+        const len = 13;
+        const x2 = q.x + Math.sin(rad)*len;
+        const y2 = q.y - Math.cos(rad)*len;
+
+        ctx.beginPath();
+        ctx.moveTo(q.x,q.y);
+        ctx.lineTo(x2,y2);
+        ctx.stroke();
+
+        const a1 = rad + Math.PI*0.82;
+        const a2 = rad - Math.PI*0.82;
+        ctx.beginPath();
+        ctx.moveTo(x2,y2);
+        ctx.lineTo(x2 + Math.sin(a1)*5, y2 - Math.cos(a1)*5);
+        ctx.moveTo(x2,y2);
+        ctx.lineTo(x2 + Math.sin(a2)*5, y2 - Math.cos(a2)*5);
+        ctx.stroke();
+
+        ctx.fillText(`${Math.round(p.windSpeed)}kt`, q.x+4, q.y-4);
+      }
+    }
+
     ctx.restore();
   }
 });
 
-function identifyNomadsFields_(mod, handle) {
-  const count = mod.getRecordCount(handle);
-  const fields = [];
-
-  for (let rec = 1; rec <= count; rec++) {
-    try {
-      const s3 = mod.getSection3(handle, rec);
-      const s4 = mod.getSection4(handle, rec);
-      const values = mod.getGridData(handle, rec);
-      const lats = mod.getLatitudes(handle, rec);
-      const lons = mod.getLongitudes(handle, rec);
-
-      if (!values?.length || values.length !== lats?.length ||
-          values.length !== lons?.length) continue;
-
-      let finite = [];
-      const sampleStep = Math.max(1, Math.floor(values.length / 1000));
-      for (let i = 0; i < values.length; i += sampleStep) {
-        const v = values[i];
-        if (Number.isFinite(v)) finite.push(v);
-      }
-      if (!finite.length) continue;
-
-      finite.sort((a,b) => a-b);
-      const median = finite[Math.floor(finite.length / 2)];
-      const min = finite[0], max = finite[finite.length - 1];
-
-      fields.push({
-        rec, s3, s4, values, lats, lons,
-        median, min, max,
-        ni: Number(s3?.ni),
-        nj: Number(s3?.nj)
-      });
-    } catch (err) {
-      console.warn("GRIB record decode skipped:", rec, err);
-    }
-  }
-
-  // PRMSL is normally Pa near ~100000.
-  const prmsl =
-    fields.find(f => f.median > 80000 && f.median < 110000) || null;
-
-  // Composite reflectivity normally dBZ, roughly -30..80.
-  const refc =
-    fields.find(f =>
-      f !== prmsl &&
-      f.max > 5 && f.max < 120 &&
-      f.median > -100 && f.median < 100
-    ) || null;
-
-  return { refc, prmsl };
-}
-
-async function decodeNomadsGrib_(base64) {
-  const mod = await loadNomadsGribModule_();
-  const bytes = b64ToUint8_(base64);
-  const handle = mod.parseGrib2(bytes);
-  const fields = identifyNomadsFields_(mod, handle);
-
-  if (!fields.refc && !fields.prmsl) {
-    throw new Error("GRIB2에서 REFC/PRMSL field를 찾지 못했습니다.");
-  }
-  return fields;
-}
-
-async function loadNoaaModelOverlay() {
+async function loadNoaaModelOverlay(forceReload) {
   if (!noaaModelEnabled || !noaaModelAirport) return;
 
   const id = ++noaaModelRequestId;
-  setNoaaModelStatus("NOMADS NAM 3km 원자료 읽는 중...", false);
+  const mode = noaaModelUi?.modeSelect?.value || "precip";
+  const valid = namTargetValid_(noaaModelStep);
+
+  const lat = Number(noaaModelAirport.lat);
+  let lon = Number(noaaModelAirport.lon);
+  while (lon > 180) lon -= 360;
+  while (lon < -180) lon += 360;
+
+  if (!(lat >= 20 && lat <= 55 && lon >= -135 && lon <= -55)) {
+    clearNoaaModelLayer();
+    setNoaaModelStatus("NAM Conus 영역 밖의 공항입니다.", true);
+    return;
+  }
+
+  const cacheKey =
+    `${Number(lat).toFixed(3)},${Number(lon).toFixed(3)},${namIsoHour_(valid)}`;
+
+  setNoaaModelStatus(
+    mode === "wind" ? "NAM 10m 지상풍 읽는 중..." : "NAM 강수·기압 읽는 중...",
+    false
+  );
 
   try {
-    // NAM CONUS nest is only for the continental U.S.
-    const lat = Number(noaaModelAirport.lat);
-    let lon = Number(noaaModelAirport.lon);
-    while (lon > 180) lon -= 360;
-    while (lon < -180) lon += 360;
+    let grid = !forceReload ? namGridCache.get(cacheKey) : null;
+    if (!grid) {
+      grid = await namFetchGrid_(noaaModelAirport, valid);
+      if (id !== noaaModelRequestId || !noaaModelEnabled) return;
 
-    if (!(lat >= 20 && lat <= 55 && lon >= -135 && lon <= -55)) {
-      throw new Error("현재 정확좌표 원자료 overlay는 NAM 3km CONUS 영역만 지원합니다.");
+      namGridCache.set(cacheKey, grid);
+      // Keep only a few VALID hours in memory.
+      while (namGridCache.size > 6) {
+        const firstKey = namGridCache.keys().next().value;
+        namGridCache.delete(firstKey);
+      }
     }
-
-    const data = await callNomadsRawJsonp_(noaaModelAirport, noaaModelStep);
-    if (id !== noaaModelRequestId || !noaaModelEnabled) return;
-
-    if (!data || !data.ok) {
-      throw new Error((data && data.error) || "NOMADS NAM 응답 오류");
-    }
-    if (!data.gribBase64) throw new Error("GRIB2 원자료가 비어 있습니다.");
-
-    setNoaaModelStatus("GRIB2 좌표/기상 field 해석 중...", false);
-    const decoded = await decodeNomadsGrib_(data.gribBase64);
-    if (id !== noaaModelRequestId || !noaaModelEnabled) return;
 
     clearNoaaModelLayer();
-    if (nomadsExactLayer) {
-      try { map.removeLayer(nomadsExactLayer); } catch (e) {}
-      nomadsExactLayer = null;
-    }
-
-    nomadsExactLayer = new NomadsExactGridLayer_(decoded);
-    nomadsExactLayer.addTo(map);
-    noaaModelLayer = nomadsExactLayer;
+    namGridLayer = new NamWeatherLayer_(grid, mode);
+    namGridLayer.addTo(map);
+    noaaModelLayer = namGridLayer;
 
     if (noaaModelUi) {
       noaaModelUi.modelMeta.textContent =
-        `NAM 3 km · NOMADS 원자료 · ${data.icao || noaaModelAirport.icao || ""}`;
+        mode === "wind"
+          ? `NAM Conus 3 km · 10m Wind · ${noaaModelAirport.icao || ""}`
+          : `NAM Conus 3 km · Precip + MSLP · ${noaaModelAirport.icao || ""}`;
       noaaModelUi.valid.textContent =
-        `VALID ${noaaModelFormatUtc(data.validIso)} · F${String(data.fhr).padStart(2,"0")}`;
+        `VALID ${noaaModelFormatUtc(valid.toISOString())} · ${noaaModelStep >= 0 ? "+" : ""}${noaaModelStep}h`;
     }
 
     setNoaaModelStatus(
-      `INIT ${noaaModelFormatUtc(data.initIso)} · REFC 실제 grid 좌표 + MSLP 4 hPa 등압선`,
+      mode === "wind"
+        ? "10m 풍향·풍속 · kt · 좌표 직접 렌더링"
+        : "시간강수(mm) + MSLP 4 hPa · 좌표 직접 렌더링",
       false
     );
   } catch (err) {
     if (id !== noaaModelRequestId) return;
-    console.error("NOMADS exact-grid overlay failed:", err);
+    console.error("NAM Open-Meteo grid failed:", err);
     clearNoaaModelLayer();
-    if (nomadsExactLayer) {
-      try { map.removeLayer(nomadsExactLayer); } catch (e) {}
-      nomadsExactLayer = null;
-    }
     setNoaaModelStatus(err.message || String(err), true);
   }
 }
