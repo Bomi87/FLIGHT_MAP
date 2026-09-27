@@ -2341,6 +2341,119 @@
   line-height: 26px !important;
 }
 
+
+
+/* ===== NOAA 패널 카드 구조 개선 v23 ===== */
+
+/* 이전 pseudo 카드 제거 */
+.leaflet-control-noaa-model.model-expanded::after {
+  display: none !important;
+}
+
+/* 컨테이너는 버튼 위치만 담당 */
+.leaflet-control-noaa-model.model-expanded {
+  width: 190px !important;
+  min-width: 190px !important;
+  max-width: 190px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+/* 일기도 버튼은 오른쪽 열에 고정 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-toggle {
+  display: block !important;
+  width: 62px !important;
+  min-width: 62px !important;
+  max-width: 62px !important;
+  margin: 0 0 0 auto !important;
+}
+
+/* 실제 팝업 카드 */
+.noaa-model-panel {
+  display: none;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-panel {
+  display: block !important;
+  width: 190px !important;
+  box-sizing: border-box !important;
+  margin-top: 4px !important;
+  padding: 7px 8px 8px !important;
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 3px 10px rgba(15,23,42,.16) !important;
+}
+
+/* 패널 안 글자는 흐리지 않게 명확한 색상 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-meta {
+  margin: 3px 0 !important;
+  color: #27364a !important;
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+  font-weight: 500 !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-valid {
+  color: #111827 !important;
+  font-size: 10px !important;
+  line-height: 1.15 !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-status {
+  margin-top: 5px !important;
+  color: #526173 !important;
+  font-size: 9.5px !important;
+  line-height: 1.25 !important;
+  font-weight: 500 !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-status.error {
+  color: #dc2626 !important;
+  font-weight: 600 !important;
+}
+
+/* select도 카드 안에서 자연스럽게 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-product {
+  width: 100% !important;
+  height: 28px !important;
+  margin: 0 0 5px !important;
+  font-size: 10px !important;
+  color: #173a70 !important;
+  border: 1px solid #93b4e8 !important;
+  background-color: #f8fbff !important;
+}
+
+/* 시간 행 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-time-row {
+  width: 100% !important;
+  margin-top: 6px !important;
+  gap: 6px !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-time-row button {
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 28px !important;
+  border: 1px solid #a8b4c4 !important;
+  background: #ffffff !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+
+/* 펼침 상태 rail은 버튼 바로 왼쪽에만 */
+.leaflet-control-noaa-model.model-expanded.control-group-weather::before {
+  left: auto !important;
+  right: 66px !important;
+  top: 0 !important;
+  bottom: auto !important;
+  height: 25px !important;
+}
+
 </style>
 </head>
 <body>
@@ -7402,18 +7515,20 @@ function createNoaaModelControl() {
     toggle.type = "button";
     toggle.textContent = "일기도 OFF";
 
-    const productSelect = L.DomUtil.create("select", "noaa-model-product", container);
+    const panel = L.DomUtil.create("div", "noaa-model-panel", container);
+
+    const productSelect = L.DomUtil.create("select", "noaa-model-product", panel);
     productSelect.innerHTML =
       '<option value="precip">강수</option>' +
       '<option value="maxwind">Max Wind</option>';
 
-    const airportMeta = L.DomUtil.create("div", "noaa-model-meta", container);
+    const airportMeta = L.DomUtil.create("div", "noaa-model-meta", panel);
     airportMeta.textContent = "공항검색에서 ICAO를 먼저 선택하세요.";
 
-    const modelMeta = L.DomUtil.create("div", "noaa-model-meta", container);
+    const modelMeta = L.DomUtil.create("div", "noaa-model-meta", panel);
     modelMeta.textContent = "NOAA/NCEP MAG";
 
-    const timeRow = L.DomUtil.create("div", "noaa-model-time-row", container);
+    const timeRow = L.DomUtil.create("div", "noaa-model-time-row", panel);
     const prev = L.DomUtil.create("button", "", timeRow);
     prev.type = "button";
     prev.textContent = "−";
@@ -7423,7 +7538,7 @@ function createNoaaModelControl() {
     next.type = "button";
     next.textContent = "+";
 
-    const status = L.DomUtil.create("div", "noaa-model-status", container);
+    const status = L.DomUtil.create("div", "noaa-model-status", panel);
     status.textContent = "NOAA/NCEP MAG 일기도";
 
     noaaModelUi = { container, toggle, productSelect, airportMeta, modelMeta, valid, status, prev, next };
