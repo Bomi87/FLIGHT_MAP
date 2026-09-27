@@ -1862,6 +1862,97 @@
   bottom: 0 !important;
 }
 
+
+
+/* ===== 우측 버튼 UI 미세조정 v16 ===== */
+
+/* 아래 3개 버튼 기준으로 전체 폭 통일 */
+.leaflet-control-ndb-toggle,
+.leaflet-control-fir-toggle,
+.leaflet-control-artcc-toggle,
+.leaflet-control-typhoon,
+.leaflet-control-vaac,
+.leaflet-control-spc,
+.leaflet-control-noaa-model {
+  width: 62px !important;
+  min-width: 62px !important;
+  max-width: 62px !important;
+  box-sizing: border-box !important;
+}
+
+/* leaflet-bar 자체 테두리 때문에 상단 버튼이 더 좁아 보이는 현상 제거 */
+.leaflet-control-ndb-toggle.leaflet-bar,
+.leaflet-control-fir-toggle.leaflet-bar,
+.leaflet-control-artcc-toggle.leaflet-bar,
+.leaflet-control-typhoon.leaflet-bar {
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.leaflet-control-ndb-toggle button,
+.leaflet-control-fir-toggle button,
+.leaflet-control-artcc-toggle button,
+.leaflet-control-typhoon button,
+.leaflet-control-vaac button,
+.leaflet-control-spc button,
+.leaflet-control-noaa-model .noaa-model-toggle {
+  display: block !important;
+  width: 62px !important;
+  min-width: 62px !important;
+  max-width: 62px !important;
+  height: 25px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+}
+
+/* 화산재 드롭다운도 같은 폭 */
+.leaflet-control-vaac select {
+  width: 62px !important;
+  min-width: 62px !important;
+  max-width: 62px !important;
+}
+
+/* NDB / FIR / U.S : 서로 구분되는 muted palette */
+.leaflet-control-ndb-toggle button {
+  background: #5b5f8a !important;   /* muted indigo */
+}
+.leaflet-control-ndb-toggle button:hover {
+  background: #4e5278 !important;
+}
+.leaflet-control-ndb-toggle button.ndb-on {
+  background: #454a73 !important;
+}
+
+.leaflet-control-fir-toggle button {
+  background: #3f6878 !important;   /* muted steel blue */
+}
+.leaflet-control-fir-toggle button:hover {
+  background: #365b69 !important;
+}
+.leaflet-control-fir-toggle button.fir-on {
+  background: #2f5360 !important;
+}
+
+.leaflet-control-artcc-toggle button {
+  background: #806044 !important;   /* muted bronze */
+}
+.leaflet-control-artcc-toggle button:hover {
+  background: #70543b !important;
+}
+.leaflet-control-artcc-toggle button.artcc-on {
+  background: #654b35 !important;
+}
+
+/* 일반 도구 구분선은 세 버튼의 중간 톤으로 */
+.control-group-general::before {
+  background: #6b7280 !important;
+}
+
+/* 기상 도구 구분선은 기존 teal 유지 */
+.control-group-weather::before {
+  background: #14b8a6 !important;
+}
+
 </style>
 </head>
 <body>
