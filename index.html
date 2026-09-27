@@ -374,27 +374,49 @@
 }
 
 .leaflet-control-spc {
-  background: #fff;
+  width: 110px;
+  background: transparent;
   border-radius: 4px;
-  padding: 5px;
-  width: 166px;
+  padding: 0;
   font: 11px Arial, sans-serif;
   color: #172554;
-  box-shadow: 0 1px 5px rgba(0,0,0,.4);
+  box-shadow: none;
+  text-align: right;
 }
 .leaflet-control-spc button {
+  display: block;
+  box-sizing: border-box;
+  width: 54px;
+  min-width: 54px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0 2px;
   border: 0;
+  border-radius: 4px;
   background: #2563eb;
-  color: white;
-  border-radius: 3px;
-  width: 100%;
-  height: 25px;
-  font-weight: bold;
+  color: #ffffff;
+  font: 700 9px Arial, sans-serif;
+  white-space: nowrap;
+  text-align: center;
   cursor: pointer;
+  box-shadow: 0 1px 5px rgba(0,0,0,.4);
 }
 .leaflet-control-spc button.spc-on { background: #b45309; }
-.leaflet-control-spc select { width: 100%; margin-top: 4px; font-size: 11px; }
-.leaflet-control-spc .spc-status { margin-top: 4px; font-size: 10px; overflow-wrap: anywhere; }
+.leaflet-control-spc select {
+  display: block;
+  box-sizing: border-box;
+  width: 110px;
+  height: 24px;
+  margin-top: 2px;
+  padding: 0 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #172554;
+  font: 9px Arial, sans-serif;
+  text-align: center;
+  cursor: pointer;
+}
 
 
 /* ===== SPC 상세 팝업 ===== */
@@ -5222,8 +5244,8 @@ function shiftGeometryLongitude(geometry, shift = US_RIGHT_WORLD_SHIFT) {
 }
 
 const severeOutlookCache = new Map();
-const SEVERE_OUTLOOK_CACHE_MS = 30 * 60 * 1000;
 const severeTranslateCache = new Map();
+const SEVERE_OUTLOOK_CACHE_MS = 30 * 60 * 1000;
 
 function spcOutlookDate(properties) {
   const raw = properties?.VALID_ISO || properties?.ISSUE_ISO || "";
@@ -5286,8 +5308,10 @@ function parseSevereWeatherMarkdown(markdown, dateKey) {
     /(?:^|\n)#{3}\s+SUMMARY\s*\n([\s\S]*?)(?=\n#{3}\s+|\n\.\.|$)/i
   );
 
+  // Synopsis/Discussion 이후의 지역별 상세 소제목(### ...)까지 모두 포함한다.
+  // detailed 자체가 다음 ## 직전에서 끝나므로 여기서는 끝까지 읽어도 안전하다.
   const synopsisMatch = detailed.match(
-    /(?:^|\n)#{3}\s+(?:Synopsis|Discussion)\s*\n([\s\S]*?)(?=\n#{3}\s+|\n\.\.|$)/i
+    /(?:^|\n)#{3}\s+(?:Synopsis|Discussion)\s*\n([\s\S]*)$/i
   );
 
   const risk = {};
@@ -5378,23 +5402,100 @@ async function fetchSevereWeatherPage(dateKey) {
   }
 }
 
+
+// 기상 전문용어 중 한국어 번역 시 의미가 애매해질 수 있는 표현은 영어 원문을 유지한다.
+// 긴 표현부터 보호하여 짧은 단어가 먼저 치환되는 것을 방지한다.
+const SPC_KEEP_ENGLISH_TERMS = [
+  "surface-based inhibition",
+  "cloud-layer vertical shear",
+  "low-level lapse rates",
+  "low-level jet",
+  "vertical wind shear",
+  "vertical shear",
+  "outflow boundaries",
+  "outflow boundary",
+  "surface trough",
+  "upper-level trough",
+  "mid-level trough",
+  "shortwave trough",
+  "vorticity maximum",
+  "vorticity maxima",
+  "mesoscale convective system",
+  "convective inhibition",
+  "convective initiation",
+  "boundary-layer moisture",
+  "moisture advection",
+  "large-scale ascent",
+  "storm-relative helicity",
+  "effective bulk shear",
+  "deep-layer shear",
+  "downdraft CAPE",
+  "SBCAPE",
+  "MLCAPE",
+  "MUCAPE",
+  "CAPE",
+  "CINH",
+  "DCAPE",
+  "LCL",
+  "supercell",
+  "supercells",
+  "dryline",
+  "cold front",
+  "warm front",
+  "stationary front",
+  "trough",
+  "ridge",
+  "instability",
+  "shear"
+];
+
+function protectSpcEnglishTerms(text) {
+  let protectedText = String(text || "");
+  const replacements = [];
+
+  const terms = [...SPC_KEEP_ENGLISH_TERMS].sort((a, b) => b.length - a.length);
+  terms.forEach(term => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const rx = new RegExp(`\\b${escaped}\\b`, "gi");
+    protectedText = protectedText.replace(rx, match => {
+      const token = `[[SPCTERM${replacements.length}]]`;
+      replacements.push({ token, value: match });
+      return token;
+    });
+  });
+
+  return { protectedText, replacements };
+}
+
+function restoreSpcEnglishTerms(text, replacements) {
+  let result = String(text || "");
+  replacements.forEach(({ token, value }) => {
+    // 번역기가 토큰 주변에 공백을 넣는 경우까지 허용한다.
+    const number = token.match(/\d+/)?.[0] || "";
+    const rx = new RegExp(`\\[\\[\\s*SPCTERM\\s*${number}\\s*\\]\\]`, "gi");
+    result = result.replace(rx, value);
+  });
+  return result;
+}
+
 async function translateSevereText(text) {
   const source = cleanSevereText(text);
   if (!source) return "";
   if (severeTranslateCache.has(source)) return severeTranslateCache.get(source);
 
   const promise = (async () => {
+    const { protectedText, replacements } = protectSpcEnglishTerms(source);
     try {
-      // 키가 필요 없는 Google Translate 웹 엔드포인트. 실패하면 영어 원문을 그대로 사용한다.
       const url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ko&dt=t&q=" +
-        encodeURIComponent(source);
+        encodeURIComponent(protectedText);
       const response = await fetch(url, { cache: "no-store" });
       if (!response.ok) throw new Error(`번역 HTTP ${response.status}`);
       const data = await response.json();
       const translated = Array.isArray(data?.[0])
         ? data[0].map(item => Array.isArray(item) ? (item[0] || "") : "").join("")
         : "";
-      return translated.trim() || source;
+      const restored = restoreSpcEnglishTerms(translated.trim(), replacements);
+      return restored || source;
     } catch (_) {
       return source;
     }
@@ -5475,7 +5576,20 @@ async function fillSpcExtraDetails(target, properties) {
 
     const source = document.createElement("div");
     source.className = "spc-source";
-    source.textContent = `출처: SevereWeatherOutlook / SPC · ${dateKey}`;
+
+    const sourceText = document.createElement("span");
+    sourceText.textContent = `출처: SevereWeatherOutlook / SPC · ${dateKey} · `;
+    source.appendChild(sourceText);
+
+    const pageLink = document.createElement("a");
+    pageLink.href = `https://www.severeweatheroutlook.com/everything/#${dateKey}`;
+    pageLink.target = "_blank";
+    pageLink.rel = "noopener noreferrer";
+    pageLink.textContent = "원문 페이지 열기";
+    pageLink.style.fontWeight = "700";
+    pageLink.style.textDecoration = "underline";
+    source.appendChild(pageLink);
+
     target.appendChild(source);
   } catch (error) {
     target.innerHTML = "";
@@ -5530,21 +5644,34 @@ function createSpcControl() {
 
     const button = L.DomUtil.create("button", "", container);
     button.type = "button";
-    button.textContent = "미국 SPC 예보 OFF";
+    button.textContent = "대류예보 OFF";
 
-    // 대류 위험 / 토네이도 확률 드롭다운은 제거하고 Day만 선택한다.
-    // Day 1/2에서는 Categorical + Tornado를 동시에 겹쳐 표시한다.
-    // Day 3은 SPC에서 개별 Tornado 확률 GeoJSON이 없으므로 Categorical만 표시한다.
+    // Day 번호 대신 실제 UTC 날짜를 표시한다. 예: 27SEP(SUN)
+    function spcDayOptionLabel(day) {
+      const now = new Date();
+      const date = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() + (day - 1),
+        12, 0, 0
+      ));
+      const dd = String(date.getUTCDate()).padStart(2, "0");
+      const mon = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][date.getUTCMonth()];
+      const dow = ["SUN","MON","TUE","WED","THU","FRI","SAT"][date.getUTCDay()];
+      return `${dd}${mon}(${dow})`;
+    }
+
+    // 대류 위험 + 토네이도 확률은 자동으로 함께 표시한다.
     const daySelect = L.DomUtil.create("select", "", container);
     [1, 2, 3].forEach(day => {
       const option = document.createElement("option");
       option.value = String(day);
-      option.textContent = `Day ${day}`;
+      option.textContent = spcDayOptionLabel(day);
       daySelect.appendChild(option);
     });
 
-    const status = L.DomUtil.create("div", "spc-status", container);
-    status.textContent = "SPC 대류위험 + 토네이도 확률";
+    // 화면에는 별도 상태 설명을 표시하지 않지만 내부 상태 갱신 코드는 유지한다.
+    const status = document.createElement("div");
 
     let enabled = false;
     let requestId = 0;
@@ -5701,7 +5828,7 @@ function createSpcControl() {
     L.DomEvent.on(button, "click", event => {
       L.DomEvent.stop(event);
       enabled = !enabled;
-      button.textContent = enabled ? "미국 SPC 예보 ON" : "미국 SPC 예보 OFF";
+      button.textContent = enabled ? "대류예보 ON" : "대류예보 OFF";
       button.classList.toggle("spc-on", enabled);
 
       if (enabled) {
