@@ -6898,55 +6898,6 @@ async function spcFetchJsonWithRetry_(url, options = {}, maxRetries = 2) {
   throw lastError || new Error("SPC JSON fetch 실패");
 }
 
-
-function spcHtmlToStructuredText_(html) {
-  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
-  const root = doc.querySelector("main, article, #content, .content") || doc.body;
-  if (!root) return "";
-
-  const blockTags = new Set([
-    "P", "DIV", "SECTION", "ARTICLE", "LI", "UL", "OL",
-    "TABLE", "TR", "BLOCKQUOTE", "PRE"
-  ]);
-
-  function walk(node) {
-    if (!node) return "";
-
-    if (node.nodeType === Node.TEXT_NODE) {
-      return String(node.nodeValue || "");
-    }
-
-    if (node.nodeType !== Node.ELEMENT_NODE) return "";
-
-    const tag = node.tagName;
-
-    if (/^H[1-6]$/.test(tag)) {
-      const level = Math.max(2, Math.min(6, Number(tag.slice(1)) || 2));
-      const content = Array.from(node.childNodes).map(walk).join("").trim();
-      return content ? `\n${"#".repeat(level)} ${content}\n` : "";
-    }
-
-    if (tag === "BR") return "\n";
-
-    // script/style/nav/footer는 상세예보 본문 구조에 필요하지 않음
-    if (["SCRIPT", "STYLE", "NOSCRIPT", "NAV", "FOOTER"].includes(tag)) return "";
-
-    const content = Array.from(node.childNodes).map(walk).join("");
-
-    if (blockTags.has(tag)) {
-      return `\n${content.trim()}\n\n`;
-    }
-
-    return content;
-  }
-
-  return walk(root)
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 async function fetchSevereWeatherPage(dateKey) {
   const cached = severeOutlookCache.get(dateKey);
   if (cached && Date.now() - cached.savedAt < SEVERE_OUTLOOK_CACHE_MS) return cached.promise;
@@ -6958,17 +6909,15 @@ async function fetchSevereWeatherPage(dateKey) {
   const promise = (async () => {
     let lastError = null;
 
-    // 실제 페이지 HTML을 먼저 시도한다.
-    // 성공하면 DOM의 문단(<p>/<div>/<br>) 구조를 살려서 빈 줄을 정확히 보존한다.
-    // CORS 등으로 직접 접근이 안 되면 Jina Reader로 fallback한다.
-    for (const url of [pageUrl, readerUrl]) {
+    // Jina Reader는 HTML을 읽기 쉬운 Markdown으로 바꿔 주며 브라우저 CORS 문제도 피하기 쉽다.
+    for (const url of [readerUrl, pageUrl]) {
       try {
         let body = await spcFetchTextWithRetry_(url, {}, 2);
 
-        // 직접 HTML 응답이면 innerText로 평탄화하지 않는다.
-        // 원문 페이지의 실제 문단/빈 줄 구조를 보존한 Markdown 유사 텍스트로 변환한다.
+        // 직접 HTML 응답인 경우 텍스트로 변환한다. Reader 응답은 그대로 Markdown이다.
         if (/^\s*<!doctype html|<html[\s>]/i.test(body)) {
-          body = spcHtmlToStructuredText_(body);
+          const doc = new DOMParser().parseFromString(body, "text/html");
+          body = doc.body?.innerText || body;
         }
 
         const parsed = parseSevereWeatherMarkdown(body, dateKey);
@@ -7270,10 +7219,7 @@ function spcHeadlineRiskClass(properties, headlineText) {
 }
 
 function addSpcEnglishDetailSection(parent, title, text) {
-  const source = String(text || "")
-    .replace(/\r/g, "")
-    .trim();
-
+  const source = cleanSevereText(text);
   if (!source) return;
 
   const sectionTitle = document.createElement("div");
@@ -7285,7 +7231,7 @@ function addSpcEnglishDetailSection(parent, title, text) {
   const firstIndex = lines.findIndex(line => line.trim());
   if (firstIndex < 0) return;
 
-  // 첫 줄은 SPC 지역 소제목.
+  // 첫 줄은 SPC 지역 소제목으로 별도 강조.
   const subheading = document.createElement("div");
   subheading.className = "spc-detail-subheading";
   subheading.textContent = lines[firstIndex].trim();
@@ -7294,23 +7240,24 @@ function addSpcEnglishDetailSection(parent, title, text) {
   const rawBody = lines.slice(firstIndex + 1).join("\n").trim();
   if (!rawBody) return;
 
-  // 중요:
-  // 1) 원문 자체의 빈 줄(연속 개행)은 문단 구분으로 반드시 보존한다.
-  // 2) SPC PRE의 폭 제한 때문에 생긴 단일 개행은 같은 문단이므로 공백으로 이어 붙인다.
-  // 3) 문단 안에서는 문장 끝마다 한 줄씩 내려 읽기 쉽게 표시한다.
+  // SPC 원문은 70~80자 폭에서 강제 줄바꿈되어 들어오므로,
+  // 단일 줄바꿈은 같은 문단 안의 줄바꿈으로 보고 공백으로 합친다.
+  // 원문에 실제 빈 줄(\n\n)이 있으면 문단 구분으로 그대로 보존한다.
   const paragraphs = rawBody
-    .split(/\n[ \t]*\n+/)
+    .split(/\n\s*\n+/)
     .map(paragraph =>
       paragraph
         .split("\n")
         .map(line => line.trim())
         .filter(Boolean)
         .join(" ")
-        .replace(/[ \t]{2,}/g, " ")
+        .replace(/\s{2,}/g, " ")
         .trim()
     )
     .filter(Boolean);
 
+  // 각 문단 안에서는 문장 마침표/물음표/느낌표 뒤에서 줄을 바꾼다.
+  // 문단 사이에는 빈 줄 하나를 유지한다.
   const formattedBody = paragraphs
     .map(paragraph =>
       paragraph.replace(/([.!?])\s+(?=[A-Z])/g, "$1\n")
@@ -7411,10 +7358,8 @@ async function fetchOfficialSpcNarrative_(day) {
 
   const officialUrl = `https://www.spc.noaa.gov/products/outlook/day${d}otlk.html`;
   const urls = [
-    // 공식 SPC HTML의 <pre> 원문을 우선 사용해 실제 빈 줄/문단 구분을 보존한다.
-    officialUrl,
-    // 직접 접근 실패 시에만 Reader를 fallback으로 사용한다.
-    `https://r.jina.ai/https://www.spc.noaa.gov/products/outlook/day${d}otlk.html`
+    `https://r.jina.ai/https://www.spc.noaa.gov/products/outlook/day${d}otlk.html`,
+    officialUrl
   ];
 
   let lastError = null;
@@ -7505,8 +7450,7 @@ async function fillSpcExtraDetails(target, properties, day) {
       (!outlook.risk?.tornado || !outlook.risk?.hail || !outlook.risk?.wind);
 
     const [officialNarrativeResult, officialRiskResult] = await Promise.allSettled([
-      // 상세 전망은 원문의 문단/빈 줄 보존을 위해 공식 SPC 원문을 항상 확인한다.
-      ['1','2','3'].includes(String(day))
+      needsNarrativeFallback
         ? fetchOfficialSpcNarrative_(day)
         : Promise.resolve({ headline:'', summary:'', synopsis:'' }),
       needsRiskFallback
@@ -7520,15 +7464,10 @@ async function fillSpcExtraDetails(target, properties, day) {
         ...outlook,
         headline: outlook.headline || official.headline || '',
         summary: outlook.summary || official.summary || '',
-        // 상세 전망 표시용 원문은 SevereWeatherOutlook의 Markdown을 우선 사용한다.
-        // 이 소스는 화면에 보이는 실제 문단 공백(빈 줄)을 보존한다.
-        // 해당 내용이 없을 때만 공식 SPC 원문을 fallback으로 사용한다.
         synopsis: outlook.synopsis || official.synopsis || ''
       };
     } else if (needsNarrativeFallback) {
       console.warn('SPC 공식 상세전망 보강 실패:', officialNarrativeResult.reason);
-    } else {
-      console.warn('SPC 공식 원문 조회 실패, 기존 상세 전망 사용:', officialNarrativeResult.reason);
     }
 
     if (officialRiskResult.status === 'fulfilled') {
@@ -7542,12 +7481,12 @@ async function fillSpcExtraDetails(target, properties, day) {
     // 번역 전에 반드시 예보 본문만 남긴다.
     // navigation/footer/forecaster 서명/스크립트가 번역기로 들어가지 않도록 최종 방어한다.
     outlook.summary = trimSpcOutlookTail(outlook.summary);
+    outlook.synopsis = trimSpcOutlookTail(outlook.synopsis);
 
     const summaryKo = await translateSevereText(outlook.summary);
 
-    // 상세 전망은 영어 원문 그대로 표시한다.
-    // 원문의 실제 빈 줄은 renderer가 판단해야 하므로 여기서는 개행 구조를 건드리지 않는다.
-    const synopsisKo = trimSpcOutlookTail(String(outlook.synopsis || "").replace(/\r/g, ""));
+    // 상세 전망은 번역하지 않고 SPC 영어 원문을 그대로 표시한다.
+    const synopsisKo = trimSpcOutlookTail(outlook.synopsis);
 
     target.replaceChildren();
 
