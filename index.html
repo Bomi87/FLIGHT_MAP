@@ -5968,6 +5968,29 @@ function createSpcControl() {
         .sort((a, b) => Number(a.properties?.DN) - Number(b.properties?.DN));
     }
 
+    // 대류/토네이도 파일이 SPC 업데이트 도중 서로 다른 발행 사이클을 가리키는지 검사한다.
+    // 두 파일의 VALID_ISO와 EXPIRE_ISO가 모두 존재하고 정확히 일치할 때만 함께 표시한다.
+    function spcValidPeriod(data) {
+      const features = Array.isArray(data?.features) ? data.features : [];
+      const props = features.map(feature => feature?.properties || {})
+        .find(p => p.VALID_ISO && p.EXPIRE_ISO);
+      if (!props) return null;
+
+      const valid = Date.parse(props.VALID_ISO);
+      const expire = Date.parse(props.EXPIRE_ISO);
+      if (!Number.isFinite(valid) || !Number.isFinite(expire)) return null;
+      return {
+        valid,
+        expire,
+        validIso: new Date(valid).toISOString(),
+        expireIso: new Date(expire).toISOString()
+      };
+    }
+
+    function sameSpcValidPeriod(a, b) {
+      return !!a && !!b && a.valid === b.valid && a.expire === b.expire;
+    }
+
     function shiftedFeatures(features, siteDateKey) {
       return features.map(feature => ({
         ...feature,
@@ -6048,9 +6071,30 @@ function createSpcControl() {
         let tornadoFeatures = [];
         let tornadoError = "";
 
+        let tornadoSyncState = "";
         if (tornadoResult.status === "fulfilled" && tornadoResult.value) {
           tornadoData = tornadoResult.value;
           tornadoFeatures = usableFeatures(tornadoData);
+
+          // Day 1/2는 대류와 토네이도가 같은 SPC 유효기간일 때만 토네이도를 겹쳐 표시한다.
+          // SPC 서버가 새 발행본으로 교체되는 짧은 순간에 한쪽만 먼저 갱신되면 날짜 혼합을 막는다.
+          if (tornadoFile) {
+            const convectivePeriod = spcValidPeriod(convectiveData);
+            const tornadoPeriod = spcValidPeriod(tornadoData);
+            if (!convectivePeriod || !tornadoPeriod) {
+              tornadoFeatures = [];
+              tornadoSyncState = "검증불가";
+              console.warn("SPC convective/tornado validity check unavailable", {
+                convectivePeriod, tornadoPeriod
+              });
+            } else if (!sameSpcValidPeriod(convectivePeriod, tornadoPeriod)) {
+              tornadoFeatures = [];
+              tornadoSyncState = "불일치";
+              console.warn("SPC convective/tornado validity mismatch", {
+                convective: convectivePeriod, tornado: tornadoPeriod
+              });
+            }
+          }
         } else if (tornadoFile && tornadoResult.status === "rejected") {
           tornadoError = tornadoResult.reason?.message || String(tornadoResult.reason || "");
           console.warn("SPC tornado outlook load failed:", tornadoResult.reason);
@@ -6062,6 +6106,10 @@ function createSpcControl() {
 
         if (day === "3") {
           status.textContent = "대류위험 표시 (Day 3 토네이도 개별 확률 없음)";
+        } else if (tornadoSyncState === "불일치") {
+          status.textContent = "대류위험 표시 · 토네이도 업데이트 동기화 대기";
+        } else if (tornadoSyncState === "검증불가") {
+          status.textContent = "대류위험 표시 · 토네이도 유효기간 확인 대기";
         } else if (tornadoError) {
           status.textContent = "대류위험 표시 · 토네이도 자료 연결 실패";
         } else if (!tornadoFeatures.length) {
