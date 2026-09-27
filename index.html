@@ -4678,8 +4678,32 @@ function createArtccToggleControl() {
 const JTWC_RSS_URL = "https://www.metoc.navy.mil/jtwc/rss/jtwc.rss";
 // NHC 예보를 반영하는 공개 ArcGIS 서비스. BASIN=AL만 조회해 JTWC 태평양 자료와 중복되지 않는다.
 const NHC_ATLANTIC_POINTS_URL = "https://services9.arcgis.com/RHVPKKiFTONKtxq3/ArcGIS/rest/services/Active_Hurricanes_v1/FeatureServer/0/query";
+const NHC_ATLANTIC_CONE_URL = "https://services9.arcgis.com/RHVPKKiFTONKtxq3/ArcGIS/rest/services/Active_Hurricanes_v1/FeatureServer/4/query";
+// NHC 공식 KMZ에서 34/50/64 kt 바람 반경을 읽는 별도 Apps Script를 배포한 뒤 URL을 입력한다.
+const NHC_WIND_BACKEND_URL = "";
 const typhoonLayer = L.featureGroup();
 let typhoonVisible = false;
+
+async function loadNhcWindRadii() {
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/.test(NHC_WIND_BACKEND_URL)) return {};
+  return new Promise((resolve, reject) => {
+    const callback = 'nhcWindCb' + Date.now() + Math.floor(Math.random()*100000);
+    const script = document.createElement('script');
+    let done = false;
+    const timer = setTimeout(() => finish(new Error('NHC 바람 반경 요청 시간 초과')), 20000);
+    function finish(error, payload) {
+      if (done) return;
+      done = true; clearTimeout(timer); delete window[callback]; script.remove();
+      if (error) reject(error);
+      else if (!payload?.ok) reject(new Error(payload?.error || 'NHC 바람 반경 응답 오류'));
+      else resolve(payload.storms || {});
+    }
+    window[callback] = payload => finish(null, payload);
+    script.onerror = () => finish(new Error('NHC 바람 반경 서버 접속 실패'));
+    script.src = NHC_WIND_BACKEND_URL + (NHC_WIND_BACKEND_URL.includes('?') ? '&' : '?') + 'callback=' + callback;
+    document.head.appendChild(script);
+  });
+}
 
 function getJtwcKmzLinks(rssText) {
   const doc = parseXml(rssText);
@@ -4817,6 +4841,28 @@ async function loadNhcAtlanticStorms() {
   if (!response.ok) throw new Error(`NHC 예보 HTTP ${response.status}`);
   const data = await response.json();
   if (data.error || !Array.isArray(data.features)) throw new Error("NHC 예보 데이터 형식 오류");
+  let nhcRadii = {};
+  try { nhcRadii = await loadNhcWindRadii(); }
+  catch (error) { console.warn('NHC 바람 반경 자료 조회 실패:', error); }
+
+  // 예보 경로의 불확실성 범위. 바람 반경과 다른 자료이므로 별도 스타일로 그린다.
+  let coneFeatures = [];
+  try {
+    const coneQuery = new URLSearchParams({
+      where: "BASIN='AL'",
+      outFields: "STORMNUM,ADVDATE,BASIN",
+      returnGeometry: "true", outSR: "4326", f: "geojson"
+    });
+    const coneResponse = await fetch(`${NHC_ATLANTIC_CONE_URL}?${coneQuery}`, {
+      cache: "no-store", signal: AbortSignal.timeout(15000)
+    });
+    if (!coneResponse.ok) throw new Error(`HTTP ${coneResponse.status}`);
+    const cones = await coneResponse.json();
+    if (!Array.isArray(cones.features) || cones.error) throw new Error("예보 범위 형식 오류");
+    coneFeatures = cones.features;
+  } catch (error) {
+    console.warn("NHC 예보 범위 조회 실패, 경로만 표시:", error);
+  }
 
   const storms = new Map();
   for (const feature of data.features) {
@@ -4866,6 +4912,41 @@ async function loadNhcAtlanticStorms() {
     const visibleCopies = copies.filter(c => c.x >= 0 && c.x <= mapWidth);
     const bestCopy = (visibleCopies.length ? visibleCopies : copies)
       .sort((a, b) => Math.abs(a.x - mapWidth * 0.77) - Math.abs(b.x - mapWidth * 0.77))[0];
+    // 해당 폭풍의 같은 발표 시각에 나온 cone만 사용한다.
+    for (const cone of coneFeatures) {
+      const p = cone.properties || {};
+      if (Number(p.STORMNUM) !== Number(id.slice(2)) || Number(p.ADVDATE) !== newest) continue;
+      const geometry = cone.geometry;
+      if (!geometry || !["Polygon", "MultiPolygon"].includes(geometry.type)) continue;
+      const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+      for (const rings of polygons) {
+        if (!Array.isArray(rings) || !Array.isArray(rings[0]) || rings[0].length < 3) continue;
+        const latlngs = rings.map(ring => ring.map(([lon,lat]) => {
+          const point = toRenderLatLng(lat, lon, context);
+          return [point[0], point[1] + bestCopy.shift];
+        }));
+        L.polygon(latlngs, {
+          color: "#f59e0b", weight: 1, fillColor: "#fbbf24", fillOpacity: 0.12,
+          bubblingMouseEvents: false
+        }).bindPopup(`${escapeHtml(title)}<br>예보 경로 불확실성 범위 (NHC cone)`)
+          .addTo(group);
+      }
+    }
+    // JTWC와 동일하게 실제 원본 KMZ에 존재하는 34/50/64 kt 영역만 표시한다.
+    // 발표 번호가 서로 다르면 오래된 반경이 최신 경로에 붙지 않도록 제외한다.
+    const officialRadii = nhcRadii[`${id}${new Date(newest).getUTCFullYear()}`];
+    if (officialRadii && officialRadii.advisory === advisory.padStart(3, '0')) {
+      for (const region of officialRadii.polygons || []) {
+        if (![34,50,64].includes(region.windKt) || !Array.isArray(region.coordinates) || region.coordinates.length < 3) continue;
+        const color = region.windKt === 64 ? '#ef4444' : region.windKt === 50 ? '#f97316' : '#facc15';
+        const area = region.coordinates.map(([lon,lat]) => {
+          const point = toRenderLatLng(lat, lon, context);
+          return [point[0], point[1] + bestCopy.shift];
+        });
+        L.polygon(area, {color, weight:1, opacity:.7, fillColor:color, fillOpacity:.12, interactive:false})
+          .addTo(group);
+      }
+    }
     const positions = points.map(item => {
       const [lon, lat] = item.geometry.coordinates;
       const rendered = toRenderLatLng(lat, lon, context);
@@ -5402,6 +5483,7 @@ function createTokyoVaacControl() {
   control.onAdd=function() {
     const box=L.DomUtil.create('div','leaflet-control-vaac');
     const button=L.DomUtil.create('button','',box); button.textContent='화산재 OFF'; button.type='button';
+    button.title='Shift+클릭: 테스트용 화산재 영역 표시';
     const select=L.DomUtil.create('select','',box);
     select.style.display='none';
     const choices=[[0,'현재'],[6,'+6hr'],[12,'+12hr'],[18,'+18hr']];
@@ -5424,7 +5506,7 @@ function createTokyoVaacControl() {
       if (!tokyoVaacEnabled) return;
       renderTokyoVaac(Number(select.value));
     });
-    button.addEventListener('click',async()=>{
+    button.addEventListener('click',async event=>{
       if (tokyoVaacEnabled) {
         ++tokyoVaacRequest; tokyoVaacEnabled=false;
         map.removeLayer(tokyoVaacLayer); select.style.display='none'; button.textContent='화산재 OFF';
@@ -5433,7 +5515,7 @@ function createTokyoVaacControl() {
       const request=++tokyoVaacRequest;
       button.disabled=true; button.textContent='확인 중…';
       try {
-        const data=tokyoVaacTestMode === '1' || tokyoVaacTestMode === 'partial'
+        const data=event.shiftKey || tokyoVaacTestMode === '1' || tokyoVaacTestMode === 'partial'
           ? tokyoVaacSampleData() : await tokyoVaacJsonp();
         if (request!==tokyoVaacRequest) return;
         if (!data?.ok || !Array.isArray(data.advisories)) throw new Error(data?.error||'VAAC 응답 형식 오류');
