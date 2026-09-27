@@ -4629,9 +4629,43 @@ async function loadJtwcStorm(url) {
   if (doc.querySelector("parsererror")) throw new Error(`${url}: KML XML 오류`);
   const stormId = new URL(url).pathname.split("/").pop().replace(/\.kmz$/i, "").toUpperCase();
   const result = L.featureGroup();
-  const placemarks = [...doc.getElementsByTagName("Placemark")];
+  // JTWC KMZ에는 수일간의 과거 Best Track이 별도 Folder로 들어 있다.
+  // 현재 위치와 예보 경로만 남겨 긴 과거 이동 궤적을 지도에서 제외한다.
+  const isHistoricalPlacemark = pm => {
+    for (let parent = pm.parentElement; parent; parent = parent.parentElement) {
+      if (parent.localName !== "Folder") continue;
+      const directName = [...parent.children].find(child => child.localName === "name");
+      if (directName && /previous\s+best\s+track|past\s+track|historical/i.test(directName.textContent)) {
+        return true;
+      }
+    }
+    return /^(?:Best Track|\d{8}Z)$/i.test(textOfFirst(pm, "name"));
+  };
+  const placemarks = [...doc.getElementsByTagName("Placemark")]
+    .filter(pm => !isHistoricalPlacemark(pm));
   const context = { referenceLon: GLOBAL_WORLD_REFERENCE_LON };
-  const popup = name => `<b>${escapeHtml(name || stormId)}</b><br><small>JTWC ${escapeHtml(stormId)}</small><br><a href="${url}" target="_blank" rel="noopener noreferrer">원본 KMZ</a>`;
+  const warningPlacemark = placemarks.find(pm =>
+    pm.getElementsByTagName("Point").length && /WARNING NR/i.test(textOfFirst(pm, "name"))
+  );
+  const warningName = warningPlacemark ? textOfFirst(warningPlacemark, "name") : "";
+  const stormMatch = warningName.match(/\b(SUPER TYPHOON|TYPHOON|HURRICANE|TROPICAL STORM|TROPICAL DEPRESSION|TROPICAL CYCLONE)\s+(\d{1,2}[A-Z])(?:\s*\(([^)]+)\))?/i);
+  const titleCase = value => String(value).toLowerCase().replace(/\b[a-z]/g, letter => letter.toUpperCase());
+  const stormTitle = stormMatch
+    ? `${titleCase(stormMatch[1])} ${stormMatch[2].toUpperCase()}${stormMatch[3] ? ` (${titleCase(stormMatch[3])})` : ""}`
+    : "Tropical Cyclone Formation Alert";
+  const popup = name => {
+    let detail = "";
+    if (/^\d{1,2}\/\d{2}Z\s*-/i.test(name)) detail = name.trim();
+    else if (name === warningName) {
+      const validTime = name.match(/^(\d{1,2}\/\d{2}Z)/);
+      const wind = name.match(/-\s*(\d+)\s*knots/i);
+      detail = [validTime?.[1], wind ? `${wind[1]} knots` : ""].filter(Boolean).join(" - ");
+    }
+    const heading = detail
+      ? `<b>${escapeHtml(detail)}</b><br>${escapeHtml(stormTitle)}`
+      : `<b>${escapeHtml(stormTitle)}</b>`;
+    return `${heading}<br><a href="${url}" target="_blank" rel="noopener noreferrer">원본 KMZ</a>`;
+  };
 
   // 풍속 반경을 먼저 그려 경로와 위치 점이 위에 보이도록 한다.
   for (const pm of placemarks) {
@@ -4641,11 +4675,15 @@ async function loadJtwcStorm(url) {
       const coords = parseCoordinates(textOfFirst(outer || node, "coordinates"));
       if (coords.length < 3) continue;
       const color = /64\s*KT/i.test(name) ? "#ef4444" : /50\s*KT/i.test(name) ? "#f97316" : "#facc15";
+      // Danger Swath와 34/50/64 kt 반경은 시각 자료로만 표시한다.
+      // 클릭 정보는 현재·예보 위치 점의 중심풍속에 남긴다.
       L.polygon(toRenderLatLngsFromCoords(coords, context), {
-        color, weight: 1, opacity: 0.7, fillColor: color, fillOpacity: 0.12
-      }).bindPopup(popup(name)).addTo(result);
+        color, weight: 1, opacity: 0.7, fillColor: color, fillOpacity: 0.12,
+        interactive: false
+      }).addTo(result);
     }
   }
+  let currentMarkerPlaced = false;
   for (const pm of placemarks) {
     const name = textOfFirst(pm, "name");
     for (const node of pm.getElementsByTagName("LineString")) {
@@ -4659,9 +4697,18 @@ async function loadJtwcStorm(url) {
     for (const node of pm.getElementsByTagName("Point")) {
       const coords = parseCoordinates(textOfFirst(node, "coordinates"));
       if (!coords.length) continue;
-      L.circleMarker(toRenderLatLng(coords[0].lat, coords[0].lon, context), {
-        radius: 5, color: "#991b1b", fillColor: "#ffffff", fillOpacity: 1, weight: 2
+      const isCurrentPoint = !currentMarkerPlaced && (
+        /^\d{1,2}\/\d{2}Z\b/.test(name) ||
+        /VALID TIME:\s*\d{1,2}\/\d{4}Z/i.test(name)
+      );
+      const marker = L.circleMarker(toRenderLatLng(coords[0].lat, coords[0].lon, context), {
+        radius: isCurrentPoint ? 8 : 5,
+        color: isCurrentPoint ? "#1e3a8a" : "#991b1b",
+        fillColor: isCurrentPoint ? "#2563eb" : "#ffffff",
+        fillOpacity: 1,
+        weight: 2
       }).bindPopup(popup(name)).addTo(result);
+      if (isCurrentPoint) currentMarkerPlaced = true;
     }
   }
   if (!result.getLayers().length) throw new Error(`${stormId}: 표시할 경로가 없습니다`);
@@ -4675,7 +4722,7 @@ function createTyphoonControl() {
     const button = L.DomUtil.create("button", "", container);
     button.type = "button";
     const update = () => {
-      button.textContent = typhoonVisible ? "Typhoon On" : "Typhoon Off";
+      button.textContent = typhoonVisible ? "태풍 ON" : "태풍 OFF";
       button.classList.toggle("typhoon-on", typhoonVisible);
       button.title = typhoonVisible ? "JTWC 태풍 표시 끄기" : "JTWC 태풍 표시 켜기";
     };
