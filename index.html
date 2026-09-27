@@ -6692,11 +6692,33 @@ function trimSpcOutlookTail(value) {
   let text = cleanSevereText(value);
   if (!text) return "";
 
+  // SPC 본문 뒤에 붙는 forecaster signature / 제품 링크 / 페이지 footer / JS를 모두 제거한다.
+  // 앞쪽 공백이 들어오는 경우도 허용한다.
   const cutPatterns = [
-    /\n\.\.[A-Za-z][^\n]{0,80}\.\.\s*(?:\d{1,2}\/\d{1,2}\/\d{4}|\d{4})?/i,
-    /\n(?:CLICK\s+TO\s+GET|CLICK\s+HERE\s+TO\s+GET)\s+WUUS0[1-3]\s+PTSDY[1-3][^\n]*/i,
-    /\nNOTE:\s*THE\s+NEXT\s+DAY\s+[1-3]\s+OUTLOOK\s+IS\s+SCHEDULED[^\n]*/i,
-    /\nWUUS0[1-3]\s+PTSDY[1-3][^\n]*/i
+    // Forecaster signature: "..Smith/Bentley.. 09/27/2026"
+    /\n\s*\.\.[A-Za-z][^\n]{0,120}\.\.\s*(?:\d{1,2}\/\d{1,2}\/\d{4}|\d{4})?/i,
+
+    // Official product/footer markers
+    /\n\s*(?:CLICK\s+TO\s+GET|CLICK\s+HERE\s+TO\s+GET)\s+WUUS0[1-3]\s+PTSDY[1-3][^\n]*/i,
+    /\n\s*NOTE:\s*THE\s+NEXT\s+DAY\s+[1-3]\s+OUTLOOK\s+IS\s+SCHEDULED[^\n]*/i,
+    /\n\s*WUUS0[1-3]\s+PTSDY[1-3][^\n]*/i,
+
+    // SPC webpage navigation/footer
+    /\n\s*(?:Top|Latest Day\s+[1-3]\s+Outlook|Today's Outlook|Forecast Products|Home)\b/i,
+    /\n\s*Weather Topics\s*:/i,
+    /\n\s*NOAA\s*\/\s*National Weather Service/i,
+    /\n\s*National Weather Service\b/i,
+    /\n\s*National Centers for Environmental Prediction\b/i,
+    /\n\s*Storm Prediction Center\b/i,
+    /\n\s*Page last modified\s*:/i,
+    /\n\s*Disclaimer\b/i,
+    /\n\s*Information Quality\b/i,
+    /\n\s*Privacy Policy\b/i,
+    /\n\s*Freedom of Information Act\b/i,
+
+    // Stray site script text
+    /\n\s*if\s*\(\s*typeof\s+jQuery/i,
+    /\n\s*document\.write\s*\(/i
   ];
 
   let cutAt = text.length;
@@ -6704,6 +6726,7 @@ function trimSpcOutlookTail(value) {
     const match = rx.exec(text);
     if (match && match.index < cutAt) cutAt = match.index;
   }
+
   return cleanSevereText(text.slice(0, cutAt));
 }
 
@@ -6799,6 +6822,57 @@ function parseSevereWeatherMarkdown(markdown, dateKey) {
   };
 }
 
+
+async function spcFetchTextWithRetry_(url, options = {}, maxRetries = 2) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, { cache: "no-store", ...options });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.text();
+    } catch (error) {
+      lastError = error;
+      console.warn(
+        `SPC text fetch 실패 (${attempt + 1}/${maxRetries + 1})`,
+        url,
+        error
+      );
+
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+      }
+    }
+  }
+
+  throw lastError || new Error("SPC text fetch 실패");
+}
+
+async function spcFetchJsonWithRetry_(url, options = {}, maxRetries = 2) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, { cache: "no-store", ...options });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      console.warn(
+        `SPC JSON fetch 실패 (${attempt + 1}/${maxRetries + 1})`,
+        url,
+        error
+      );
+
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+      }
+    }
+  }
+
+  throw lastError || new Error("SPC JSON fetch 실패");
+}
+
 async function fetchSevereWeatherPage(dateKey) {
   const cached = severeOutlookCache.get(dateKey);
   if (cached && Date.now() - cached.savedAt < SEVERE_OUTLOOK_CACHE_MS) return cached.promise;
@@ -6813,9 +6887,7 @@ async function fetchSevereWeatherPage(dateKey) {
     // Jina Reader는 HTML을 읽기 쉬운 Markdown으로 바꿔 주며 브라우저 CORS 문제도 피하기 쉽다.
     for (const url of [readerUrl, pageUrl]) {
       try {
-        const response = await fetch(url, { cache: "no-store" });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        let body = await response.text();
+        let body = await spcFetchTextWithRetry_(url, {}, 2);
 
         // 직접 HTML 응답인 경우 텍스트로 변환한다. Reader 응답은 그대로 Markdown이다.
         if (/^\s*<!doctype html|<html[\s>]/i.test(body)) {
@@ -7125,9 +7197,33 @@ function spcHeadlineRiskClass(properties, headlineText) {
 // ===== SPC 상세정보 보강: Day 1/2 누락 방지 =====
 // SevereWeatherOutlook 쪽에서 현재 Day 1 상세전망/확률 일부가 비어 오는 경우,
 // 공식 SPC Day 1/2 narrative와 확률 GeoJSON으로 '누락된 항목만' 보완한다.
+
+function extractOfficialSpcProductText_(rawText) {
+  let text = String(rawText || "").replace(/\r/g, "");
+
+  // HTML 직접 응답이면 전체 페이지 innerText가 아니라 실제 예보문이 들어 있는 PRE를 우선 사용한다.
+  if (/^\s*<!doctype html|<html[\s>]/i.test(text)) {
+    const doc = new DOMParser().parseFromString(text, "text/html");
+    const preBlocks = Array.from(doc.querySelectorAll("pre"))
+      .map(node => String(node.textContent || "").trim())
+      .filter(Boolean);
+
+    const productPre = preBlocks.find(block =>
+      /\bSUMMARY\b/i.test(block) &&
+      (/\bTHERE IS\b/i.test(block) || /NO SEVERE THUNDERSTORM AREAS FORECAST/i.test(block))
+    );
+
+    if (productPre) return trimSpcOutlookTail(productPre);
+
+    text = doc.body?.innerText || text;
+  }
+
+  // Jina markdown/plain text 응답에서도 footer를 먼저 잘라 낸다.
+  return trimSpcOutlookTail(text);
+}
+
 function parseOfficialSpcNarrative_(rawText) {
-  let text = String(rawText || '')
-    .replace(/\r/g, '')
+  let text = extractOfficialSpcProductText_(rawText)
     .replace(/^\s*>\s?/gm, '')
     .replace(/\*\*/g, '')
     .replace(/^\s*#{1,6}\s*/gm, '')
@@ -7174,8 +7270,8 @@ function parseOfficialSpcNarrative_(rawText) {
 
   return {
     headline: headlineMatch ? cleanSevereText(headlineMatch[1]) : '',
-    summary: cleanSevereText(summary),
-    synopsis: cleanSevereText(synopsis)
+    summary: trimSpcOutlookTail(summary),
+    synopsis: trimSpcOutlookTail(synopsis)
   };
 }
 
@@ -7192,15 +7288,10 @@ async function fetchOfficialSpcNarrative_(day) {
   let lastError = null;
   for (const url of urls) {
     try {
-      const response = await fetch(url, { cache:'no-store' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      let body = await response.text();
+      let body = await spcFetchTextWithRetry_(url, {}, 2);
 
-      if (/^\s*<!doctype html|<html[\s>]/i.test(body)) {
-        const doc = new DOMParser().parseFromString(body, 'text/html');
-        body = doc.body?.innerText || body;
-      }
-
+      // parseOfficialSpcNarrative_ 내부에서 실제 SPC PRE 본문만 추출한다.
+      // 전체 body.innerText를 넘겨 footer/navigation이 상세 전망에 섞이는 문제를 막는다.
       const parsed = parseOfficialSpcNarrative_(body);
       if (parsed.headline || parsed.summary || parsed.synopsis) return parsed;
       throw new Error('SPC 공식 상세 본문을 찾지 못했습니다.');
@@ -7224,9 +7315,7 @@ async function fetchOfficialSpcRiskValues_(day) {
 
   const entries = Object.entries(files);
   const results = await Promise.allSettled(entries.map(async ([, file]) => {
-    const response = await fetch(`${SPC_SERVICE}/${file}`, { cache:'no-store' });
-    if (!response.ok) throw new Error(`${file}: HTTP ${response.status}`);
-    const data = await response.json();
+    const data = await spcFetchJsonWithRetry_(`${SPC_SERVICE}/${file}`, {}, 2);
     if (data?.error || !Array.isArray(data?.features)) {
       throw new Error(`${file}: 잘못된 GeoJSON`);
     }
@@ -7257,10 +7346,28 @@ async function fillSpcExtraDetails(target, properties, day) {
   target.innerHTML = '<div class="spc-extra-loading">상세 SPC 전망을 불러오는 중...</div>';
 
   try {
-    let outlook = await fetchSevereWeatherPage(dateKey);
+    // 1순위: SevereWeatherOutlook.
+    // 연결 자체가 실패해도 여기서 전체 팝업을 실패시키지 않고 공식 SPC로 계속 진행한다.
+    let outlook = {
+      headline: "",
+      summary: "",
+      synopsis: "",
+      risk: {},
+      pageUrl: ""
+    };
 
-    // Day 1/2는 상세전망 또는 TORNADO/HAIL/WIND가 하나라도 빠지면 공식 SPC로 보강한다.
-    // SevereWeatherOutlook에서 정상 제공되는 값은 그대로 우선 사용한다.
+    try {
+      outlook = await fetchSevereWeatherPage(dateKey);
+    } catch (error) {
+      console.warn(
+        "SevereWeatherOutlook 상세자료 최종 실패 → 공식 SPC fallback 진행:",
+        error
+      );
+    }
+
+    // 2순위: 공식 SPC.
+    // Day 1/2는 상세전망 또는 TORNADO/HAIL/WIND가 하나라도 빠지면 자동 보강한다.
+    // SevereWeatherOutlook에서 정상 제공된 값은 그대로 우선 사용한다.
     const needsNarrativeFallback = !outlook.summary || !outlook.synopsis;
     const needsRiskFallback = ['1','2'].includes(String(day)) &&
       (!outlook.risk?.tornado || !outlook.risk?.hail || !outlook.risk?.wind);
@@ -7291,6 +7398,13 @@ async function fillSpcExtraDetails(target, properties, day) {
     } else if (needsRiskFallback) {
       console.warn('SPC 공식 확률 보강 실패:', officialRiskResult.reason);
     }
+
+    // 두 상세 소스가 동시에 실패해도 위험등급/확률 박스는 가능한 범위에서 계속 표시한다.
+    // narrative만 비어 있을 때 팝업 전체를 오류로 바꾸지 않는다.
+    // 번역 전에 반드시 예보 본문만 남긴다.
+    // navigation/footer/forecaster 서명/스크립트가 번역기로 들어가지 않도록 최종 방어한다.
+    outlook.summary = trimSpcOutlookTail(outlook.summary);
+    outlook.synopsis = trimSpcOutlookTail(outlook.synopsis);
 
     const [summaryKo, synopsisKo] = await Promise.all([
       translateSevereText(outlook.summary),
@@ -7352,6 +7466,13 @@ async function fillSpcExtraDetails(target, properties, day) {
     }
 
     addSpcSection(target, "요약", summaryKo);
+
+    if (!summaryKo && !synopsisKo) {
+      const notice = document.createElement("div");
+      notice.className = "spc-extra-error";
+      notice.textContent = "상세 문장 자료는 현재 불러오지 못했지만 위험등급/확률 자료는 표시 중입니다.";
+      target.appendChild(notice);
+    }
 
     if (synopsisKo) {
       const details = document.createElement("details");
