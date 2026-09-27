@@ -4936,8 +4936,10 @@ async function loadNhcAtlanticStorms() {
     // 발표 번호가 서로 다르면 오래된 반경이 최신 경로에 붙지 않도록 제외한다.
     const officialRadii = nhcRadii[`${id}${new Date(newest).getUTCFullYear()}`];
     if (officialRadii?.warnings?.length) console.warn(`NHC ${id} wind radii:`, officialRadii.warnings);
+    // NHC의 최신 Watches/Warnings Forecast Cone으로 바로 이동한다.
+    // #contents가 없으면 페이지 하단 등 이전 스크롤 위치로 열릴 수 있다.
     const nhcGraphicsUrl = /^https:\/\/www\.nhc\.noaa\.gov\/graphics_at\d+\.shtml$/.test(officialRadii?.graphicsUrl || '')
-      ? officialRadii.graphicsUrl : 'https://www.nhc.noaa.gov/';
+      ? `${officialRadii.graphicsUrl}?cone#contents` : 'https://www.nhc.noaa.gov/';
     if (officialRadii && officialRadii.advisory === advisory.padStart(3, '0')) {
       for (const region of officialRadii.polygons || []) {
         if (![34,50,64].includes(region.windKt) || !Array.isArray(region.coordinates) || region.coordinates.length < 3) continue;
@@ -5493,7 +5495,25 @@ function createTokyoVaacControl() {
         option.value=String(hour); option.textContent=label; select.appendChild(option);
       }
       if ([...select.options].some(option=>option.value===preferred)) select.value=preferred;
-      select.style.display=select.options.length ? 'block' : 'none';
+      select.style.display=tokyoVaacEnabled && select.options.length ? 'block' : 'none';
+    };
+    // 처음 열 때도 실제 예보 유무를 표시하되, 지도 표시는 사용자가 켤 때만 시작한다.
+    const checkAvailability=async()=>{
+      const request=++tokyoVaacRequest;
+      button.disabled=true; button.textContent='확인 중…';
+      try {
+        const data=await tokyoVaacJsonp();
+        if (request!==tokyoVaacRequest) return;
+        if (!data?.ok || !Array.isArray(data.advisories)) throw new Error(data?.error||'VAAC 응답 형식 오류');
+        tokyoVaacData=data;
+        updateChoices();
+        button.textContent=select.options.length ? '화산재 OFF' : '화산재 없음';
+      } catch(error) {
+        if (request===tokyoVaacRequest) {
+          button.textContent='화산재 OFF';
+          console.warn('화산재 예보 상태 확인 실패:',error);
+        }
+      } finally {if(request===tokyoVaacRequest) button.disabled=false;}
     };
     L.DomEvent.disableClickPropagation(box); L.DomEvent.disableScrollPropagation(box);
     select.addEventListener('change',()=>{
@@ -5514,6 +5534,11 @@ function createTokyoVaacControl() {
         if (!data?.ok || !Array.isArray(data.advisories)) throw new Error(data?.error||'VAAC 응답 형식 오류');
         tokyoVaacData=data; tokyoVaacEnabled=true;
         updateChoices();
+        if (!select.options.length) {
+          tokyoVaacEnabled=false;
+          button.classList.remove('vaac-on'); button.textContent='화산재 없음';
+          return;
+        }
         renderTokyoVaac(Number(select.value));
         tokyoVaacLayer.addTo(map);
         button.classList.add('vaac-on'); button.textContent='화산재 ON';
@@ -5521,6 +5546,7 @@ function createTokyoVaacControl() {
         if (request===tokyoVaacRequest) {button.textContent='화산재 OFF'; alert('화산재 예보 실패: '+(error.message||String(error)));}
       } finally {if(request===tokyoVaacRequest) button.disabled=false;}
     });
+    checkAvailability();
     return box;
   };
   return control;
