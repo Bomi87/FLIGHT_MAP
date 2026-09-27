@@ -7740,11 +7740,11 @@ async function fillSpcExtraDetails(target, properties, day) {
     headline.append(riskLabel, riskDesc);
     target.appendChild(headline);
 
-    const baseRiskKeys = [
-      ["tornado", "TORNADO"],
-      ["hail", "HAIL"],
-      ["wind", "WIND"]
-    ];
+ const baseRiskKeys = [
+  ["tornado", "TORNADO"],
+  ["wind", "WIND"],
+  ["hail", "HAIL"]
+];
 
     const riskKeys = ['1','2'].includes(String(day))
       ? baseRiskKeys
