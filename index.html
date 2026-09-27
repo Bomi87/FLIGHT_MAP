@@ -4679,13 +4679,12 @@ const JTWC_RSS_URL = "https://www.metoc.navy.mil/jtwc/rss/jtwc.rss";
 // NHC 예보를 반영하는 공개 ArcGIS 서비스. BASIN=AL만 조회해 JTWC 태평양 자료와 중복되지 않는다.
 const NHC_ATLANTIC_POINTS_URL = "https://services9.arcgis.com/RHVPKKiFTONKtxq3/ArcGIS/rest/services/Active_Hurricanes_v1/FeatureServer/0/query";
 const NHC_ATLANTIC_CONE_URL = "https://services9.arcgis.com/RHVPKKiFTONKtxq3/ArcGIS/rest/services/Active_Hurricanes_v1/FeatureServer/4/query";
-// NHC 공식 KMZ에서 34/50/64 kt 바람 반경을 읽는 별도 Apps Script를 배포한 뒤 URL을 입력한다.
-const NHC_WIND_BACKEND_URL = "";
+// NHC 바람 반경은 아래의 Tokyo VAAC 앱과 동일한 /exec 에 action=nhcWind 로 요청한다.
 const typhoonLayer = L.featureGroup();
 let typhoonVisible = false;
 
 async function loadNhcWindRadii() {
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/.test(NHC_WIND_BACKEND_URL)) return {};
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/.test(TOKYO_VAAC_BACKEND_URL)) return {};
   return new Promise((resolve, reject) => {
     const callback = 'nhcWindCb' + Date.now() + Math.floor(Math.random()*100000);
     const script = document.createElement('script');
@@ -4700,7 +4699,8 @@ async function loadNhcWindRadii() {
     }
     window[callback] = payload => finish(null, payload);
     script.onerror = () => finish(new Error('NHC 바람 반경 서버 접속 실패'));
-    script.src = NHC_WIND_BACKEND_URL + (NHC_WIND_BACKEND_URL.includes('?') ? '&' : '?') + 'callback=' + callback;
+    script.src = TOKYO_VAAC_BACKEND_URL + (TOKYO_VAAC_BACKEND_URL.includes('?') ? '&' : '?') +
+      'action=nhcWind&callback=' + callback;
     document.head.appendChild(script);
   });
 }
@@ -4752,6 +4752,8 @@ async function loadJtwcStorm(url) {
   const stormTitle = stormMatch
     ? `${titleCase(stormMatch[1])} ${stormMatch[2].toUpperCase()}${stormMatch[3] ? ` (${titleCase(stormMatch[3])})` : ""}`
     : "Tropical Cyclone Formation Alert";
+  result.jtwcStormId = stormId;
+  result.jtwcName = stormMatch?.[3] || '';
   const popup = name => {
     let detail = "";
     if (/^\d{1,2}\/\d{2}Z\s*-/i.test(name)) detail = name.trim();
@@ -4901,6 +4903,8 @@ async function loadNhcAtlanticStorms() {
       : null;
     const context = { referenceLon: GLOBAL_WORLD_REFERENCE_LON };
     const group = L.featureGroup();
+    group.nhcStormId = id;
+    group.nhcStormName = name;
     // 화면에 반복된 세계지도 중 오른쪽 복제 지도에 대서양 폭풍을 표시한다.
     // 한 폭풍의 모든 점에는 같은 360도 이동값을 적용해 경로가 끊기지 않게 한다.
     const firstCoord = current.geometry.coordinates;
@@ -4935,6 +4939,7 @@ async function loadNhcAtlanticStorms() {
     // JTWC와 동일하게 실제 원본 KMZ에 존재하는 34/50/64 kt 영역만 표시한다.
     // 발표 번호가 서로 다르면 오래된 반경이 최신 경로에 붙지 않도록 제외한다.
     const officialRadii = nhcRadii[`${id}${new Date(newest).getUTCFullYear()}`];
+    if (officialRadii?.warnings?.length) console.warn(`NHC ${id} wind radii:`, officialRadii.warnings);
     if (officialRadii && officialRadii.advisory === advisory.padStart(3, '0')) {
       for (const region of officialRadii.polygons || []) {
         if (![34,50,64].includes(region.windKt) || !Array.isArray(region.coordinates) || region.coordinates.length < 3) continue;
@@ -5043,11 +5048,21 @@ function createTyphoonControl() {
           loadNhcAtlanticStorms().then(layers => ({ layers, missing: 0 }))
         ]);
         typhoonLayer.clearLayers();
+        const jtwcLayers = sources[0].status === 'fulfilled' ? sources[0].value.layers : [];
+        const duplicateNHC = layer => jtwcLayers.some(jtwc => {
+          const jtwcId = String(jtwc.jtwcStormId || '').toUpperCase();
+          return jtwcId.startsWith(layer.nhcStormId) ||
+            (jtwcId.startsWith('AL') && jtwc.jtwcName &&
+              jtwc.jtwcName.toUpperCase() === String(layer.nhcStormName).toUpperCase());
+        });
         const failures = [];
         let success = 0;
         sources.forEach((entry, i) => {
           if (entry.status === "fulfilled") {
-            entry.value.layers.forEach(layer => { typhoonLayer.addLayer(layer); success++; });
+            entry.value.layers.forEach(layer => {
+              if (i === 1 && duplicateNHC(layer)) return;
+              typhoonLayer.addLayer(layer); success++;
+            });
             if (entry.value.missing) failures.push(`JTWC ${entry.value.missing}개 파일 실패`);
           } else {
             const source = i === 0 ? "JTWC" : "NHC 대서양";
