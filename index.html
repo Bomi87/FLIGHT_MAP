@@ -1245,11 +1245,21 @@
       }
     }
   
-.leaflet-control-vaac { background:#fff; padding:8px; border-radius:6px; min-width:155px; max-width:225px; box-shadow:0 2px 8px #0003; font:12px/1.35 sans-serif; }
-.leaflet-control-vaac button { width:100%; cursor:pointer; border:0; background:#475569; color:#fff; border-radius:4px; padding:6px; }
-.leaflet-control-vaac button.vaac-on { background:#9a3412; }
-.leaflet-control-vaac select { width:100%; margin-top:5px; padding:4px; }
-.leaflet-control-vaac small { display:block; margin-top:5px; overflow-wrap:anywhere; }
+.leaflet-control-vaac { width:54px; border-radius:4px; box-shadow:0 1px 5px rgba(0,0,0,.4); overflow:hidden; margin-top:0; }
+.leaflet-control-vaac button {
+  display:block; box-sizing:border-box; width:54px; height:24px; padding:0 2px;
+  white-space:nowrap; border:0; background:#2563eb; color:#fff;
+  font:700 9px Arial,sans-serif; text-align:center; cursor:pointer;
+}
+.leaflet-control-vaac button:hover { background:#1d4ed8; }
+.leaflet-control-vaac button.vaac-on,
+.leaflet-control-vaac button.vaac-on:hover { background:#b45309; }
+.leaflet-control-vaac button:disabled { cursor:default; }
+.leaflet-control-vaac select {
+  display:block; box-sizing:border-box; width:54px; height:24px; margin:0;
+  padding:0; border:1px solid #d1d5db; border-radius:0;
+  background:#fff; color:#172554; font:9px Arial,sans-serif; cursor:pointer;
+}
 </style>
 </head>
 <body>
@@ -4795,7 +4805,7 @@ async function loadJtwcStorm(url) {
 async function loadNhcAtlanticStorms() {
   const query = new URLSearchParams({
     where: "BASIN='AL'",
-    outFields: "STORMNAME,STORMNUM,STORMTYPE,TCDVLP,MAXWIND,VALIDTIME,TAU,ADVDATE,BASIN",
+    outFields: "STORMNAME,STORMNUM,STORMTYPE,TCDVLP,MAXWIND,VALIDTIME,TAU,ADVDATE,ADVISNUM,BASIN",
     returnGeometry: "true",
     outSR: "4326",
     f: "geojson"
@@ -4817,8 +4827,8 @@ async function loadNhcAtlanticStorms() {
     if (props.BASIN !== "AL" || !Array.isArray(coordinates) || coordinates.length < 2 ||
         !Number.isFinite(coordinates[0]) || !Number.isFinite(coordinates[1]) ||
         !Number.isFinite(tau) || tau < 0 || tau > 120 ||
-        // 오래된 최종 예보를 현재 활동 중인 폭풍으로 표시하지 않는다.
-        !Number.isFinite(issued) || Date.now() - issued > 6.5 * 3600000 ||
+        // NHC의 정규 발표 간격과 지연을 허용하되 오래된 예보는 제외한다.
+        !Number.isFinite(issued) || Date.now() - issued > 18 * 3600000 ||
         issued - Date.now() > 3600000) continue;
     const number = Number(props.STORMNUM);
     if (!Number.isFinite(number)) continue;
@@ -4839,6 +4849,10 @@ async function loadNhcAtlanticStorms() {
     const rawType = String(current.properties.TCDVLP || "Tropical Cyclone").trim();
     const type = /major hurricane/i.test(rawType) ? "Hurricane" : rawType;
     const title = `${type} ${id.slice(2)}L (${name})`;
+    const advisory = String(current.properties.ADVISNUM ?? "").trim().toUpperCase();
+    const kmzUrl = /^\d{1,3}[A-Z]?$/.test(advisory)
+      ? `https://www.nhc.noaa.gov/storm_graphics/api/${id}${new Date(newest).getUTCFullYear()}_${advisory.padStart(3, "0")}adv_TRACK.kmz`
+      : null;
     const context = { referenceLon: GLOBAL_WORLD_REFERENCE_LON };
     const group = L.featureGroup();
     // 화면에 반복된 세계지도 중 오른쪽 복제 지도에 대서양 폭풍을 표시한다.
@@ -4869,7 +4883,8 @@ async function loadNhcAtlanticStorms() {
       const detail = [time, Number.isFinite(wind) && wind > 0 ? `${wind} knots` : ""]
         .filter(Boolean).join(" - ");
       const popup = `${detail ? `<b>${escapeHtml(detail)}</b><br>` : ""}${escapeHtml(title)}` +
-        `<br><a href="https://www.nhc.noaa.gov/" target="_blank" rel="noopener noreferrer">NHC 공식 홈페이지</a>`;
+        (kmzUrl ? `<br><a href="${kmzUrl}" target="_blank" rel="noopener noreferrer">원본 KMZ 다운로드</a>` :
+          `<br><a href="https://www.nhc.noaa.gov/gis/" target="_blank" rel="noopener noreferrer">NHC GIS 자료</a>`);
       L.circleMarker(positions[index], {
         radius: isCurrent ? 8 : 5,
         color: isCurrent ? "#1e3a8a" : "#991b1b",
@@ -5369,37 +5384,48 @@ function createTokyoVaacControl() {
   const control=L.control({position:'topright'});
   control.onAdd=function() {
     const box=L.DomUtil.create('div','leaflet-control-vaac');
-    const button=L.DomUtil.create('button','',box); button.textContent='화산재 예보 OFF'; button.type='button';
+    const button=L.DomUtil.create('button','',box); button.textContent='화산재 OFF'; button.type='button';
     const select=L.DomUtil.create('select','',box);
-    [[0,'현재 관측'],[6,'+6시간'],[12,'+12시간'],[18,'+18시간']].forEach(([v,label])=>{
-      const o=document.createElement('option'); o.value=v; o.textContent=label; select.appendChild(o);
-    });
-    const status=L.DomUtil.create('small','',box); status.textContent='Tokyo VAAC · UTC';
+    select.style.display='none';
+    const choices=[[0,'현재'],[6,'+6hr'],[12,'+12hr'],[18,'+18hr']];
+    const updateChoices=()=>{
+      const preferred=select.value;
+      select.replaceChildren();
+      for (const [hour,label] of choices) {
+        const available=tokyoVaacData?.advisories.some(a=>a.phases?.some(phase=>
+          phase.hour===hour && Date.parse(phase.valid)>=Date.now()-6*3600000 &&
+          phase.polygons?.some(p=>Array.isArray(p.coordinates) && p.coordinates.length>=3)));
+        if (!available) continue;
+        const option=document.createElement('option');
+        option.value=String(hour); option.textContent=label; select.appendChild(option);
+      }
+      if ([...select.options].some(option=>option.value===preferred)) select.value=preferred;
+      select.style.display=select.options.length ? 'block' : 'none';
+    };
     L.DomEvent.disableClickPropagation(box); L.DomEvent.disableScrollPropagation(box);
     select.addEventListener('change',()=>{
       if (!tokyoVaacEnabled) return;
-      const count=renderTokyoVaac(Number(select.value));
-      status.textContent=count ? `${count}개 화산재 영역 · Tokyo VAAC` : '선택 시각에 표시할 화산재 영역 없음';
+      renderTokyoVaac(Number(select.value));
     });
     button.addEventListener('click',async()=>{
       if (tokyoVaacEnabled) {
         ++tokyoVaacRequest; tokyoVaacEnabled=false;
-        map.removeLayer(tokyoVaacLayer); button.textContent='화산재 예보 OFF';
-        button.classList.remove('vaac-on'); status.textContent='Tokyo VAAC · UTC'; return;
+        map.removeLayer(tokyoVaacLayer); select.style.display='none'; button.textContent='화산재 OFF';
+        button.classList.remove('vaac-on'); return;
       }
       const request=++tokyoVaacRequest;
-      button.disabled=true; button.textContent='화산재 확인 중…';
+      button.disabled=true; button.textContent='확인 중…';
       try {
         const data=await tokyoVaacJsonp();
         if (request!==tokyoVaacRequest) return;
         if (!data?.ok || !Array.isArray(data.advisories)) throw new Error(data?.error||'VAAC 응답 형식 오류');
         tokyoVaacData=data; tokyoVaacEnabled=true;
-        const count=renderTokyoVaac(Number(select.value));
+        updateChoices();
+        renderTokyoVaac(Number(select.value));
         tokyoVaacLayer.addTo(map);
-        button.classList.add('vaac-on'); button.textContent='화산재 예보 ON';
-        status.textContent=count ? `${count}개 화산재 영역 · Tokyo VAAC` : '선택 시각에 표시할 화산재 영역 없음';
+        button.classList.add('vaac-on'); button.textContent='화산재 ON';
       } catch(error) {
-        if (request===tokyoVaacRequest) {button.textContent='화산재 예보 OFF'; status.textContent=error.message||String(error);}
+        if (request===tokyoVaacRequest) {button.textContent='화산재 OFF'; alert('화산재 예보 실패: '+(error.message||String(error)));}
       } finally {if(request===tokyoVaacRequest) button.disabled=false;}
     });
     return box;
