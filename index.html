@@ -1701,6 +1701,167 @@
   color: #f8fafc !important;
 }
 
+
+
+/* ===== 우측 버튼 UI 정리 v15 ===== */
+
+/* 공통: 접힌 상태 버튼 폭/높이 완전 통일 */
+.leaflet-control-ndb-toggle,
+.leaflet-control-fir-toggle,
+.leaflet-control-artcc-toggle,
+.leaflet-control-typhoon,
+.leaflet-control-vaac,
+.leaflet-control-spc,
+.leaflet-control-noaa-model {
+  width: 58px !important;
+  min-width: 58px !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+.leaflet-control-ndb-toggle button,
+.leaflet-control-fir-toggle button,
+.leaflet-control-artcc-toggle button,
+.leaflet-control-typhoon button,
+.leaflet-control-vaac button,
+.leaflet-control-spc button,
+.leaflet-control-noaa-model .noaa-model-toggle {
+  width: 58px !important;
+  min-width: 58px !important;
+  height: 25px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 3px !important;
+  border: 0 !important;
+  border-radius: 4px !important;
+  color: #f8fafc !important;
+  font: 700 9px/25px Arial, sans-serif !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  box-shadow: 0 1px 4px rgba(15,23,42,.22) !important;
+}
+
+/* 그룹 내부 간격도 동일 */
+.control-group-general,
+.control-group-weather {
+  margin-top: 2px !important;
+  margin-right: 8px !important;
+}
+
+/* -------- 일반 지도/공역 도구 --------
+   OFF = graphite, ON = indigo */
+.leaflet-control-ndb-toggle button,
+.leaflet-control-fir-toggle button,
+.leaflet-control-artcc-toggle button {
+  background: #475569 !important;
+}
+
+.leaflet-control-ndb-toggle button:hover,
+.leaflet-control-fir-toggle button:hover,
+.leaflet-control-artcc-toggle button:hover {
+  background: #334155 !important;
+}
+
+.leaflet-control-ndb-toggle button.ndb-on,
+.leaflet-control-fir-toggle button.fir-on,
+.leaflet-control-artcc-toggle button.artcc-on {
+  background: #4f46e5 !important;
+}
+
+/* -------- 기상 분석 도구 --------
+   OFF = navy, ON = teal */
+.leaflet-control-typhoon button,
+.leaflet-control-vaac button,
+.leaflet-control-spc button,
+.leaflet-control-noaa-model .noaa-model-toggle {
+  background: #1e3a5f !important;
+}
+
+.leaflet-control-typhoon button:hover,
+.leaflet-control-vaac button:hover,
+.leaflet-control-spc button:hover,
+.leaflet-control-noaa-model .noaa-model-toggle:hover {
+  background: #27496d !important;
+}
+
+.leaflet-control-typhoon button.typhoon-on,
+.leaflet-control-vaac button.vaac-on,
+.leaflet-control-spc button.spc-on,
+.leaflet-control-noaa-model .noaa-model-toggle.model-on {
+  background: #0f766e !important;
+}
+
+/* 로딩/disabled */
+.leaflet-control-typhoon button:disabled,
+.leaflet-control-vaac button:disabled,
+.leaflet-control-fir-toggle button:disabled,
+.leaflet-control-artcc-toggle button:disabled {
+  background: #94a3b8 !important;
+  color: #f8fafc !important;
+}
+
+/* 드롭다운을 펼쳐도 버튼 자체 폭은 58px 유지 */
+.leaflet-control-vaac select {
+  width: 58px !important;
+  box-sizing: border-box !important;
+}
+
+.leaflet-control-noaa-model.model-expanded {
+  width: 190px !important;
+}
+
+/* -------- 그룹 왼쪽 rail --------
+   버튼 세로 길이에 딱 맞고 상/하단이 튀어나오지 않게 처리 */
+.control-group-general,
+.control-group-weather {
+  position: relative !important;
+}
+
+.control-group-general::before,
+.control-group-weather::before {
+  content: "" !important;
+  position: absolute !important;
+  left: -7px !important;
+  width: 3px !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  border-radius: 2px !important;
+  pointer-events: none !important;
+  z-index: 30 !important;
+}
+
+/* 일반 도구 rail */
+.control-group-general::before {
+  background: #6366f1 !important;
+}
+
+/* 기상 도구 rail */
+.control-group-weather::before {
+  background: #14b8a6 !important;
+}
+
+/* 인접 버튼 사이 rail이 끊겨 보이지 않도록
+   중간 컨트롤만 위/아래 2px 연장.
+   첫/마지막은 바깥으로 절대 튀어나오지 않음. */
+.control-group-general:not(.control-group-start):not(.control-group-end)::before,
+.control-group-weather:not(.control-group-start):not(.control-group-end)::before {
+  top: -2px !important;
+  bottom: -2px !important;
+}
+.control-group-general.control-group-start:not(.control-group-end)::before,
+.control-group-weather.control-group-start:not(.control-group-end)::before {
+  bottom: -2px !important;
+}
+.control-group-general.control-group-end:not(.control-group-start)::before,
+.control-group-weather.control-group-end:not(.control-group-start)::before {
+  top: -2px !important;
+}
+
+/* 화산재 select가 열렸을 때 rail이 select 전체 높이까지 자연스럽게 이어짐 */
+.leaflet-control-vaac.control-group-weather::before {
+  bottom: 0 !important;
+}
+
 </style>
 </head>
 <body>
