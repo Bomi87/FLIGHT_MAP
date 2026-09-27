@@ -4714,19 +4714,38 @@ async function loadJtwcStorm(url) {
         interactive: false
       }).addTo(result);
       // 보이는 원 크기는 유지하고 클릭 영역만 넓힌다.
-      L.circleMarker(latlng, {
-        radius: 18,
+      const clickTarget = L.circleMarker(latlng, {
+        radius: isCurrentPoint ? 11 : 9,
         stroke: false,
         fillColor: "#ffffff",
         fillOpacity: 0.001,
         bubblingMouseEvents: false
       }).bindPopup(popup(name)).addTo(result);
+      clickTarget.jtwcMaxClickRadius = isCurrentPoint ? 11 : 9;
       if (isCurrentPoint) currentMarkerPlaced = true;
     }
   }
   if (!result.getLayers().length) throw new Error(`${stormId}: 표시할 경로가 없습니다`);
   return result;
 }
+
+function updateTyphoonClickTargets() {
+  if (!typhoonVisible) return;
+  const targets = [];
+  typhoonLayer.eachLayer(storm => storm.eachLayer(layer => {
+    if (layer.jtwcMaxClickRadius) targets.push(layer);
+  }));
+  const positions = targets.map(target => map.latLngToLayerPoint(target.getLatLng()));
+  targets.forEach((target, i) => {
+    let nearest = Infinity;
+    positions.forEach((point, j) => {
+      if (i !== j) nearest = Math.min(nearest, positions[i].distanceTo(point));
+    });
+    // 가장 가까운 다른 태풍 위치까지의 거리 절반을 넘지 않게 제한한다.
+    target.setRadius(Math.min(target.jtwcMaxClickRadius, Math.max(0, (nearest - 2) / 2)));
+  });
+}
+map.on("zoomend", updateTyphoonClickTargets);
 
 function createTyphoonControl() {
   const control = L.control({ position: "topright" });
@@ -4774,6 +4793,7 @@ function createTyphoonControl() {
         if (!success) throw new Error("태풍 KMZ를 읽지 못했습니다. 콘솔 오류를 확인하세요.");
         typhoonLayer.addTo(map);
         typhoonVisible = true;
+        updateTyphoonClickTargets();
         button.title = `JTWC 태풍 ${success}개 표시 중`;
         if (success < links.length) alert(`JTWC 태풍 ${success}/${links.length}개만 표시되었습니다.`);
       } catch (err) {
