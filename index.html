@@ -7469,9 +7469,10 @@ async function fillSpcExtraDetails(target, properties, day) {
         ...outlook,
         headline: outlook.headline || official.headline || '',
         summary: outlook.summary || official.summary || '',
-        // 상세 전망은 공식 SPC <pre> 원문을 우선 사용.
-        // 따라서 원문에 빈 줄이 있으면 그 문단 구분이 그대로 살아 있다.
-        synopsis: official.synopsis || outlook.synopsis || ''
+        // 상세 전망 표시용 원문은 SevereWeatherOutlook의 Markdown을 우선 사용한다.
+        // 이 소스는 화면에 보이는 실제 문단 공백(빈 줄)을 보존한다.
+        // 해당 내용이 없을 때만 공식 SPC 원문을 fallback으로 사용한다.
+        synopsis: outlook.synopsis || official.synopsis || ''
       };
     } else if (needsNarrativeFallback) {
       console.warn('SPC 공식 상세전망 보강 실패:', officialNarrativeResult.reason);
@@ -7490,12 +7491,12 @@ async function fillSpcExtraDetails(target, properties, day) {
     // 번역 전에 반드시 예보 본문만 남긴다.
     // navigation/footer/forecaster 서명/스크립트가 번역기로 들어가지 않도록 최종 방어한다.
     outlook.summary = trimSpcOutlookTail(outlook.summary);
-    outlook.synopsis = trimSpcOutlookTail(outlook.synopsis);
 
     const summaryKo = await translateSevereText(outlook.summary);
 
-    // 상세 전망은 번역하지 않고 SPC 영어 원문을 그대로 표시한다.
-    const synopsisKo = trimSpcOutlookTail(outlook.synopsis);
+    // 상세 전망은 영어 원문 그대로 표시한다.
+    // 원문의 실제 빈 줄은 renderer가 판단해야 하므로 여기서는 개행 구조를 건드리지 않는다.
+    const synopsisKo = trimSpcOutlookTail(String(outlook.synopsis || "").replace(/\r/g, ""));
 
     target.replaceChildren();
 
