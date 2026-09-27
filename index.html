@@ -6877,90 +6877,9 @@ function fitMapToNoaaChartBounds_(data, referenceLon) {
 
 
 function fitMapToNoaaAirportFocus_(data, airport, referenceLon) {
-  if (!airport) return;
-
-  const model = String(data && data.model || "").toLowerCase();
-
-  // U.S./NAM-HIRES already uses regional MAG domains, so keep the full chart.
-  if (model === "nam-hires") {
-    fitMapToNoaaChartBounds_(data, referenceLon);
-    return;
-  }
-
-  const icao = String(airport.icao || "").toUpperCase();
-  const lat = Number(airport.lat);
-  let lon = Number(airport.lon);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    fitMapToNoaaChartBounds_(data, referenceLon);
-    return;
-  }
-
-  lon = shiftLonNearReference(lon, referenceLon);
-
-  // ICAO-prefix regional presets for a cleaner operational view.
-  // Korea: show the Korean Peninsula and nearby seas.
-  if (/^RK/.test(icao)) {
-    map.fitBounds([[31.0, 123.0], [41.5, 133.5]], {
-      paddingTopLeft:[28,28],
-      paddingBottomRight:[28,28],
-      animate:true
-    });
-    return;
-  }
-
-  // Japan: show the main Japanese islands and surrounding waters.
-  if (/^RJ/.test(icao)) {
-    map.fitBounds([[29.0, 128.0], [46.0, 148.5]], {
-      paddingTopLeft:[28,28],
-      paddingBottomRight:[28,28],
-      animate:true
-    });
-    return;
-  }
-
-  // Mainland China: split roughly into useful east/north vs broader central/south focus.
-  if (/^ZB|^ZS/.test(icao)) {
-    // Beijing / Shanghai / eastern China
-    map.fitBounds([[24.0, 108.0], [42.5, 127.5]], {
-      paddingTopLeft:[28,28],
-      paddingBottomRight:[28,28],
-      animate:true
-    });
-    return;
-  }
-
-  if (/^ZG|^ZH|^ZP|^ZU|^ZL|^ZW/.test(icao)) {
-    // South / central / southwest / northwest China
-    map.fitBounds([[18.0, 95.0], [42.5, 122.0]], {
-      paddingTopLeft:[28,28],
-      paddingBottomRight:[28,28],
-      animate:true
-    });
-    return;
-  }
-
-  // Generic non-U.S. fallback: airport-centered regional view,
-  // but wider than the previous aggressive zoom.
-  const latHalf = 14;
-  const cosLat = Math.max(0.45, Math.cos(lat * Math.PI / 180));
-  const lonHalf = Math.min(24, 18 / cosLat);
-
-  const focusBounds = [
-    [Math.max(-85, lat - latHalf), lon - lonHalf],
-    [Math.min(85, lat + latHalf), lon + lonHalf]
-  ];
-
-  try {
-    map.fitBounds(focusBounds, {
-      paddingTopLeft:[28,28],
-      paddingBottomRight:[28,28],
-      animate:true
-    });
-  } catch (err) {
-    console.warn("NOAA airport focus fitBounds failed:", err);
-    fitMapToNoaaChartBounds_(data, referenceLon);
-  }
+  // 모든 지역에서 미국과 동일하게 MAG 일기도 전체 영역을 그대로 표시한다.
+  // 공항/국가별 별도 확대는 하지 않는다.
+  fitMapToNoaaChartBounds_(data, referenceLon);
 }
 
 function createNoaaMagOverlay(data, referenceLon) {
