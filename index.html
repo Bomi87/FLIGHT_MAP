@@ -2482,6 +2482,40 @@
   margin-top: 4px !important;
 }
 
+
+
+/* ===== NOAA time row compact controls v25 ===== */
+.leaflet-control-noaa-model.model-expanded .noaa-model-time-row {
+  display: grid !important;
+  grid-template-columns: 28px minmax(0,1fr) 28px !important;
+  align-items: center !important;
+  gap: 5px !important;
+  width: 100% !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-time-row button {
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  line-height: 24px !important;
+  box-sizing: border-box !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-valid {
+  min-width: 0 !important;
+  font-size: 10px !important;
+  line-height: 1.1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: clip !important;
+  text-align: center !important;
+}
+
 </style>
 </head>
 <body>
@@ -7850,8 +7884,7 @@ async function loadNoaaModelOverlay() {
           : "강수";
       noaaModelUi.modelMeta.textContent =
         `${data.modelLabel || data.model || ""} · ${data.regionLabel || data.area || ""} · ${selectedLabel}`;
-      noaaModelUi.valid.textContent =
-        `VALID ${noaaModelFormatUtc(data.validIso)} · F${String(data.fhr).padStart(3,"0")}`;
+      noaaModelUi.valid.textContent = `VALID ${noaaModelFormatUtc(data.validIso)}`;
     }
     // 정상 표시 후에는 하단 상태 문구를 비워 둔다.
     setNoaaModelStatus("", false);
