@@ -7219,7 +7219,10 @@ function spcHeadlineRiskClass(properties, headlineText) {
 }
 
 function addSpcEnglishDetailSection(parent, title, text) {
-  const source = cleanSevereText(text);
+  const source = String(text || "")
+    .replace(/\r/g, "")
+    .trim();
+
   if (!source) return;
 
   const sectionTitle = document.createElement("div");
@@ -7231,7 +7234,7 @@ function addSpcEnglishDetailSection(parent, title, text) {
   const firstIndex = lines.findIndex(line => line.trim());
   if (firstIndex < 0) return;
 
-  // 첫 줄은 SPC 지역 소제목으로 별도 강조.
+  // 첫 줄은 SPC 지역 소제목.
   const subheading = document.createElement("div");
   subheading.className = "spc-detail-subheading";
   subheading.textContent = lines[firstIndex].trim();
@@ -7240,24 +7243,23 @@ function addSpcEnglishDetailSection(parent, title, text) {
   const rawBody = lines.slice(firstIndex + 1).join("\n").trim();
   if (!rawBody) return;
 
-  // SPC 원문은 70~80자 폭에서 강제 줄바꿈되어 들어오므로,
-  // 단일 줄바꿈은 같은 문단 안의 줄바꿈으로 보고 공백으로 합친다.
-  // 원문에 실제 빈 줄(\n\n)이 있으면 문단 구분으로 그대로 보존한다.
+  // 중요:
+  // 1) 원문 자체의 빈 줄(연속 개행)은 문단 구분으로 반드시 보존한다.
+  // 2) SPC PRE의 폭 제한 때문에 생긴 단일 개행은 같은 문단이므로 공백으로 이어 붙인다.
+  // 3) 문단 안에서는 문장 끝마다 한 줄씩 내려 읽기 쉽게 표시한다.
   const paragraphs = rawBody
-    .split(/\n\s*\n+/)
+    .split(/\n[ \t]*\n+/)
     .map(paragraph =>
       paragraph
         .split("\n")
         .map(line => line.trim())
         .filter(Boolean)
         .join(" ")
-        .replace(/\s{2,}/g, " ")
+        .replace(/[ \t]{2,}/g, " ")
         .trim()
     )
     .filter(Boolean);
 
-  // 각 문단 안에서는 문장 마침표/물음표/느낌표 뒤에서 줄을 바꾼다.
-  // 문단 사이에는 빈 줄 하나를 유지한다.
   const formattedBody = paragraphs
     .map(paragraph =>
       paragraph.replace(/([.!?])\s+(?=[A-Z])/g, "$1\n")
@@ -7358,8 +7360,10 @@ async function fetchOfficialSpcNarrative_(day) {
 
   const officialUrl = `https://www.spc.noaa.gov/products/outlook/day${d}otlk.html`;
   const urls = [
-    `https://r.jina.ai/https://www.spc.noaa.gov/products/outlook/day${d}otlk.html`,
-    officialUrl
+    // 공식 SPC HTML의 <pre> 원문을 우선 사용해 실제 빈 줄/문단 구분을 보존한다.
+    officialUrl,
+    // 직접 접근 실패 시에만 Reader를 fallback으로 사용한다.
+    `https://r.jina.ai/https://www.spc.noaa.gov/products/outlook/day${d}otlk.html`
   ];
 
   let lastError = null;
@@ -7450,7 +7454,8 @@ async function fillSpcExtraDetails(target, properties, day) {
       (!outlook.risk?.tornado || !outlook.risk?.hail || !outlook.risk?.wind);
 
     const [officialNarrativeResult, officialRiskResult] = await Promise.allSettled([
-      needsNarrativeFallback
+      // 상세 전망은 원문의 문단/빈 줄 보존을 위해 공식 SPC 원문을 항상 확인한다.
+      ['1','2','3'].includes(String(day))
         ? fetchOfficialSpcNarrative_(day)
         : Promise.resolve({ headline:'', summary:'', synopsis:'' }),
       needsRiskFallback
@@ -7464,10 +7469,14 @@ async function fillSpcExtraDetails(target, properties, day) {
         ...outlook,
         headline: outlook.headline || official.headline || '',
         summary: outlook.summary || official.summary || '',
-        synopsis: outlook.synopsis || official.synopsis || ''
+        // 상세 전망은 공식 SPC <pre> 원문을 우선 사용.
+        // 따라서 원문에 빈 줄이 있으면 그 문단 구분이 그대로 살아 있다.
+        synopsis: official.synopsis || outlook.synopsis || ''
       };
     } else if (needsNarrativeFallback) {
       console.warn('SPC 공식 상세전망 보강 실패:', officialNarrativeResult.reason);
+    } else {
+      console.warn('SPC 공식 원문 조회 실패, 기존 상세 전망 사용:', officialNarrativeResult.reason);
     }
 
     if (officialRiskResult.status === 'fulfilled') {
