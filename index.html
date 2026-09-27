@@ -6947,10 +6947,8 @@ async function loadNoaaModelOverlay() {
       noaaModelUi.valid.textContent =
         `VALID ${noaaModelFormatUtc(data.validIso)} · F${String(data.fhr).padStart(3,"0")}`;
     }
-    setNoaaModelStatus(
-      `INIT ${noaaModelFormatUtc(data.initIso)} · NOAA/NCEP MAG 일기도 · 최상위 100% 불투명`,
-      false
-    );
+    // 정상 표시 후에는 하단 상태 문구를 비워 둔다.
+    setNoaaModelStatus("", false);
   } catch (err) {
     if (id !== noaaModelRequestId) return;
     console.error("NOAA model overlay failed:", err);
@@ -6961,7 +6959,6 @@ async function loadNoaaModelOverlay() {
 
 
 createTrackingSearchStackControl().addTo(map);
-createNoaaModelControl().addTo(map);
 updateSearchedAirspaceLabelZoom();
 createNdbToggleControl().addTo(map);
 createFirToggleControl().addTo(map);
@@ -7147,6 +7144,7 @@ function createTokyoVaacControl() {
 createTyphoonControl().addTo(map);
 createTokyoVaacControl().addTo(map);
 createSpcControl().addTo(map);
+createNoaaModelControl().addTo(map);
 
 
 
