@@ -5222,6 +5222,7 @@ function shiftGeometryLongitude(geometry, shift = US_RIGHT_WORLD_SHIFT) {
 }
 
 const severeOutlookCache = new Map();
+const SEVERE_OUTLOOK_CACHE_MS = 30 * 60 * 1000;
 const severeTranslateCache = new Map();
 
 function spcOutlookDate(properties) {
@@ -5248,23 +5249,80 @@ function extractMarkdownSection(text, heading) {
   return match ? cleanSevereText(match[1]) : "";
 }
 
-function parseSevereWeatherMarkdown(markdown) {
+// ## Detailed Outlook처럼 H2 아래에 여러 개의 ### 하위 섹션이 있는 경우,
+// 다음 H2가 나올 때까지 전체를 가져온다.
+function extractMarkdownH2Section(text, heading) {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const rx = new RegExp(`(?:^|\\n)##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i");
+  const match = text.match(rx);
+  return match ? cleanSevereText(match[1]) : "";
+}
+
+function severeDateLabel(dateKey) {
+  const d = new Date(`${dateKey}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return "";
+  const weekday = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getUTCDay()];
+  const month = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][d.getUTCMonth()];
+  return `${weekday}, ${month} ${d.getUTCDate()}`;
+}
+
+function parseRiskValue(value) {
+  return cleanSevereText(value)
+    .replace(/^[\s:*\-]+|[\s:*\-]+$/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function parseSevereWeatherMarkdown(markdown, dateKey) {
   const text = cleanSevereText(markdown);
-  const detailed = extractMarkdownSection(text, "Detailed Outlook") || text;
+
+  // 중요: Detailed Outlook은 ### 하위 제목을 포함하므로 다음 ##까지 모두 읽어야 한다.
+  const detailed = extractMarkdownH2Section(text, "Detailed Outlook") || text;
 
   const headlineMatch = detailed.match(/(?:^|\n)#{3}\s+(THERE IS[^\n]+)/i) ||
-    detailed.match(/(?:^|\n)(THERE IS (?:A|AN|NO)[^\n]+)/i);
+    detailed.match(/(?:^|\n)(THERE IS (?:A|AN|NO)[^\n]+)/i) ||
+    detailed.match(/(?:^|\n)#{3}\s+(NO SEVERE THUNDERSTORM AREAS FORECAST[^\n]*)/i);
 
-  const summaryMatch = detailed.match(/(?:^|\n)#{3}\s+SUMMARY\s*\n([\s\S]*?)(?=\n#{3}\s+|$)/i);
-  const synopsisMatch = detailed.match(/(?:^|\n)#{3}\s+Synopsis\s*\n([\s\S]*?)(?=\n#{3}\s+|\n\.\.|$)/i);
+  const summaryMatch = detailed.match(
+    /(?:^|\n)#{3}\s+SUMMARY\s*\n([\s\S]*?)(?=\n#{3}\s+|\n\.\.|$)/i
+  );
+
+  const synopsisMatch = detailed.match(
+    /(?:^|\n)#{3}\s+(?:Synopsis|Discussion)\s*\n([\s\S]*?)(?=\n#{3}\s+|\n\.\.|$)/i
+  );
 
   const risk = {};
-  [["tornado", "TORNADO"], ["hail", "HAIL"], ["wind", "WIND"]].forEach(([key, label]) => {
-    const imageRx = new RegExp(`(?:^|\\n)#{3}\\s+${key}\\s+([^\\n]+)`, "i");
-    const nationalRx = new RegExp(`${label}:\\s*([^\\n]+)`, "i");
-    const m = text.match(imageRx) || text.match(nationalRx);
-    if (m) risk[key] = cleanSevereText(m[1]).replace(/\s+/g, " ");
-  });
+
+  // 1순위: 이 페이지의 Outlook Images 값만 사용한다.
+  const imageSection = extractMarkdownH2Section(text, "Outlook Images");
+  if (imageSection) {
+    [["tornado", "tornado"], ["hail", "hail"], ["wind", "wind"]].forEach(([key, label]) => {
+      const rx = new RegExp(`(?:^|\\n)#{3,4}\\s+${label}\\s+([^\\n]+)`, "i");
+      const m = imageSection.match(rx);
+      if (m) risk[key] = parseRiskValue(m[1]);
+    });
+  }
+
+  // 2순위: Outlook Images에 값이 없을 때만 National Risk Overview에서
+  // '해당 날짜' 행을 찾아 사용한다. 첫 번째 TORNADO/HAIL/WIND를 절대 집지 않는다.
+  const national = extractMarkdownH2Section(text, "National Risk Overview");
+  const dateLabel = severeDateLabel(dateKey);
+  if (national && dateLabel && (!risk.tornado || !risk.hail || !risk.wind)) {
+    const lines = national.split("\n").map(x => x.trim()).filter(Boolean);
+    const dateIndex = lines.findIndex(line => line.toLowerCase().startsWith(dateLabel.toLowerCase()));
+    if (dateIndex >= 0) {
+      const slice = [];
+      for (let i = dateIndex + 1; i < lines.length; i++) {
+        if (/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),\s+/i.test(lines[i])) break;
+        slice.push(lines[i]);
+      }
+      const block = slice.join("\n");
+      [["tornado", "TORNADO"], ["hail", "HAIL"], ["wind", "WIND"]].forEach(([key, label]) => {
+        if (risk[key]) return;
+        const m = block.match(new RegExp(`${label}:\\s*([^\\n]+)`, "i"));
+        if (m) risk[key] = parseRiskValue(m[1]);
+      });
+    }
+  }
 
   return {
     headline: headlineMatch ? cleanSevereText(headlineMatch[1]) : "",
@@ -5275,7 +5333,9 @@ function parseSevereWeatherMarkdown(markdown) {
 }
 
 async function fetchSevereWeatherPage(dateKey) {
-  if (severeOutlookCache.has(dateKey)) return severeOutlookCache.get(dateKey);
+  const cached = severeOutlookCache.get(dateKey);
+  if (cached && Date.now() - cached.savedAt < SEVERE_OUTLOOK_CACHE_MS) return cached.promise;
+  if (cached) severeOutlookCache.delete(dateKey);
 
   const pageUrl = `https://www.severeweatheroutlook.com/${dateKey}/`;
   const readerUrl = `https://r.jina.ai/https://www.severeweatheroutlook.com/${dateKey}/`;
@@ -5296,7 +5356,7 @@ async function fetchSevereWeatherPage(dateKey) {
           body = doc.body?.innerText || body;
         }
 
-        const parsed = parseSevereWeatherMarkdown(body);
+        const parsed = parseSevereWeatherMarkdown(body, dateKey);
         if (parsed.headline || parsed.summary || parsed.synopsis || Object.keys(parsed.risk).length) {
           return { ...parsed, pageUrl };
         }
@@ -5309,7 +5369,7 @@ async function fetchSevereWeatherPage(dateKey) {
     throw lastError || new Error("Severe Weather Outlook 연결 실패");
   })();
 
-  severeOutlookCache.set(dateKey, promise);
+  severeOutlookCache.set(dateKey, { savedAt: Date.now(), promise });
   try {
     return await promise;
   } catch (error) {
@@ -5464,11 +5524,17 @@ function spcPopup(properties, day, type) {
 }
 function createSpcControl() {
   const control = L.control({ position: "topright" });
+
   control.onAdd = function () {
     const container = L.DomUtil.create("div", "leaflet-control leaflet-control-spc");
+
     const button = L.DomUtil.create("button", "", container);
     button.type = "button";
-    button.textContent = "미국 대류예보 OFF";
+    button.textContent = "미국 SPC 예보 OFF";
+
+    // 대류 위험 / 토네이도 확률 드롭다운은 제거하고 Day만 선택한다.
+    // Day 1/2에서는 Categorical + Tornado를 동시에 겹쳐 표시한다.
+    // Day 3은 SPC에서 개별 Tornado 확률 GeoJSON이 없으므로 Categorical만 표시한다.
     const daySelect = L.DomUtil.create("select", "", container);
     [1, 2, 3].forEach(day => {
       const option = document.createElement("option");
@@ -5476,81 +5542,184 @@ function createSpcControl() {
       option.textContent = `Day ${day}`;
       daySelect.appendChild(option);
     });
-    const typeSelect = L.DomUtil.create("select", "", container);
-    [["convective", "대류 위험"], ["tornado", "토네이도 확률"]].forEach(([value, label]) => {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = label;
-      typeSelect.appendChild(option);
-    });
+
     const status = L.DomUtil.create("div", "spc-status", container);
-    status.textContent = "SPC 예보 유효기간 기준";
+    status.textContent = "SPC 대류위험 + 토네이도 확률";
+
     let enabled = false;
     let requestId = 0;
+
+    async function fetchSpcGeoJson(file) {
+      const response = await fetch(`${SPC_SERVICE}/${file}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`${file}: HTTP ${response.status}`);
+
+      const data = await response.json();
+      if (data.error || !Array.isArray(data.features)) {
+        throw new Error(data.error?.message || `${file}: 잘못된 GeoJSON`);
+      }
+      return data;
+    }
+
+    function usableFeatures(data) {
+      return data.features
+        .filter(feature =>
+          feature.geometry && ["Polygon", "MultiPolygon"].includes(feature.geometry.type))
+        .sort((a, b) => Number(a.properties?.DN) - Number(b.properties?.DN));
+    }
+
+    function shiftedFeatures(features) {
+      return features.map(feature => ({
+        ...feature,
+        geometry: shiftGeometryLongitude(feature.geometry)
+      }));
+    }
+
+    function addConvectiveLayer(features, day) {
+      const layer = L.geoJSON(
+        { type: "FeatureCollection", features: shiftedFeatures(features) },
+        {
+          // Categorical은 넓은 면을 연하게 표시한다.
+          style: feature => ({
+            color: spcConvectiveColors[Number(feature.properties?.DN)] || "#64748b",
+            weight: 1.5,
+            opacity: 0.9,
+            fillOpacity: 0.18
+          }),
+          onEachFeature: (feature, layer) => {
+            layer.bindPopup(
+              spcPopup(feature.properties, day, "convective"),
+              { maxWidth: 440, minWidth: 280 }
+            );
+          }
+        }
+      );
+
+      spcLayer.addLayer(layer);
+    }
+
+    function addTornadoLayer(features, day) {
+      const layer = L.geoJSON(
+        { type: "FeatureCollection", features: shiftedFeatures(features) },
+        {
+          // Tornado 확률은 Categorical 위에서 알아보기 쉽게 점선 테두리 중심으로 표시한다.
+          style: feature => ({
+            color: spcTornadoColors[Number(feature.properties?.DN)] || "#7c3aed",
+            weight: 2.5,
+            opacity: 1,
+            fillOpacity: 0.05,
+            dashArray: "6,4"
+          }),
+          onEachFeature: (feature, layer) => {
+            layer.bindPopup(
+              spcPopup(feature.properties, day, "tornado"),
+              { maxWidth: 440, minWidth: 280 }
+            );
+          }
+        }
+      );
+
+      // Categorical 다음에 추가하여 Tornado 경계선이 위에 보이게 한다.
+      spcLayer.addLayer(layer);
+    }
+
     const refresh = async () => {
       const id = ++requestId;
       if (!enabled) return;
-      const day = daySelect.value;
-      const type = typeSelect.value;
-      const file = spcFiles[`${day}-${type}`];
-      if (!file) {
-        spcLayer.clearLayers();
-        status.textContent = "Day 3에는 토네이도 개별 확률 예보가 없습니다.";
-        return;
-      }
-      status.textContent = "SPC 자료 읽는 중...";
-      try {
-        const response = await fetch(`${SPC_SERVICE}/${file}`, { cache: "no-store" });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        if (data.error || !Array.isArray(data.features)) throw new Error(data.error?.message || "잘못된 GeoJSON");
-        if (id !== requestId || !enabled) return;
-        const colors = type === "tornado" ? spcTornadoColors : spcConvectiveColors;
-        const features = data.features.filter(feature =>
-          feature.geometry && ["Polygon", "MultiPolygon"].includes(feature.geometry.type))
-          .sort((a, b) => Number(a.properties?.DN) - Number(b.properties?.DN));
-        // SPC 원본은 -180~180 경도이므로 오른쪽 미국 world copy로 +360° 이동한다.
-        const shiftedFeatures = features.map(feature => ({
-          ...feature,
-          geometry: shiftGeometryLongitude(feature.geometry)
-        }));
 
-        const geojson = L.geoJSON({ type: "FeatureCollection", features: shiftedFeatures }, {
-          style: feature => ({ color: colors[Number(feature.properties?.DN)] || "#64748b",
-            weight: 1.5, opacity: .9, fillOpacity: .24 }),
-          onEachFeature: (feature, layer) => layer.bindPopup(spcPopup(feature.properties, day, type), { maxWidth: 440, minWidth: 280 })
-        });
+      const day = daySelect.value;
+      const convectiveFile = spcFiles[`${day}-convective`];
+      const tornadoFile = spcFiles[`${day}-tornado`];
+
+      status.textContent = "SPC 자료 읽는 중...";
+
+      try {
+        // Day 1/2는 두 자료를 동시에 가져오고, Day 3은 Categorical만 가져온다.
+        const [convectiveResult, tornadoResult] = await Promise.allSettled([
+          fetchSpcGeoJson(convectiveFile),
+          tornadoFile ? fetchSpcGeoJson(tornadoFile) : Promise.resolve(null)
+        ]);
+
+        if (id !== requestId || !enabled) return;
+
+        if (convectiveResult.status !== "fulfilled") {
+          throw convectiveResult.reason;
+        }
+
+        const convectiveData = convectiveResult.value;
+        const convectiveFeatures = usableFeatures(convectiveData);
+
+        let tornadoData = null;
+        let tornadoFeatures = [];
+        let tornadoError = "";
+
+        if (tornadoResult.status === "fulfilled" && tornadoResult.value) {
+          tornadoData = tornadoResult.value;
+          tornadoFeatures = usableFeatures(tornadoData);
+        } else if (tornadoFile && tornadoResult.status === "rejected") {
+          tornadoError = tornadoResult.reason?.message || String(tornadoResult.reason || "");
+          console.warn("SPC tornado outlook load failed:", tornadoResult.reason);
+        }
+
         spcLayer.clearLayers();
-        spcLayer.addLayer(geojson);
-        const p = features[0]?.properties;
-        const issued = p || data.features[0]?.properties;
-        status.textContent = issued?.VALID_ISO && issued?.EXPIRE_ISO
-          ? `유효: ${issued.VALID_ISO.slice(5,16).replace("T", " ")} ~ ${issued.EXPIRE_ISO.slice(5,16).replace("T", " ")}Z${features.length ? "" : " · 해당 위험 구역 없음"}`
-          : `SPC Day ${day} · ${features.length}개 구역`;
+        addConvectiveLayer(convectiveFeatures, day);
+
+        if (tornadoFeatures.length) {
+          addTornadoLayer(tornadoFeatures, day);
+        }
+
+        const issued =
+          convectiveFeatures[0]?.properties ||
+          convectiveData.features[0]?.properties ||
+          tornadoFeatures[0]?.properties ||
+          tornadoData?.features?.[0]?.properties;
+
+        let periodText = `SPC Day ${day}`;
+        if (issued?.VALID_ISO && issued?.EXPIRE_ISO) {
+          periodText = `유효: ${issued.VALID_ISO.slice(5,16).replace("T", " ")} ~ ${issued.EXPIRE_ISO.slice(5,16).replace("T", " ")}Z`;
+        }
+
+        if (day === "3") {
+          status.textContent = `${periodText} · 대류위험 표시 (Day 3 토네이도 개별 확률 없음)`;
+        } else if (tornadoError) {
+          status.textContent = `${periodText} · 대류위험 표시 · 토네이도 자료 연결 실패`;
+        } else if (!tornadoFeatures.length) {
+          status.textContent = `${periodText} · 대류위험 표시 · 토네이도 확률 구역 없음`;
+        } else {
+          status.textContent = `${periodText} · 대류위험 + 토네이도 확률`;
+        }
       } catch (error) {
         if (id !== requestId) return;
         console.error("SPC outlook load failed:", error);
+        spcLayer.clearLayers();
         status.textContent = `SPC 연결 실패: ${error.message || error}`;
       }
     };
+
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
+
     L.DomEvent.on(button, "click", event => {
       L.DomEvent.stop(event);
       enabled = !enabled;
-      button.textContent = enabled ? "미국 대류예보 ON" : "미국 대류예보 OFF";
+      button.textContent = enabled ? "미국 SPC 예보 ON" : "미국 SPC 예보 OFF";
       button.classList.toggle("spc-on", enabled);
-      if (enabled) { spcLayer.addTo(map); refresh(); }
-      else { ++requestId; map.removeLayer(spcLayer); status.textContent = "SPC 예보 유효기간 기준"; }
+
+      if (enabled) {
+        spcLayer.addTo(map);
+        refresh();
+      } else {
+        ++requestId;
+        spcLayer.clearLayers();
+        map.removeLayer(spcLayer);
+        status.textContent = "SPC 대류위험 + 토네이도 확률";
+      }
     });
-    L.DomEvent.on(daySelect, "change", () => {
-      typeSelect.querySelector('option[value="tornado"]').disabled = daySelect.value === "3";
-      if (daySelect.value === "3" && typeSelect.value === "tornado") typeSelect.value = "convective";
-      refresh();
-    });
-    L.DomEvent.on(typeSelect, "change", refresh);
+
+    L.DomEvent.on(daySelect, "change", refresh);
+
     return container;
   };
+
   return control;
 }
 
