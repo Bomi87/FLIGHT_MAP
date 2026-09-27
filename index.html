@@ -396,6 +396,94 @@
 .leaflet-control-spc select { width: 100%; margin-top: 4px; font-size: 11px; }
 .leaflet-control-spc .spc-status { margin-top: 4px; font-size: 10px; overflow-wrap: anywhere; }
 
+
+/* ===== SPC 상세 팝업 ===== */
+.spc-popup-wrap {
+  width: min(390px, 72vw);
+  font: 12px/1.45 Arial, sans-serif;
+  color: #1f2937;
+}
+.spc-popup-wrap .spc-popup-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 2px;
+}
+.spc-popup-wrap .spc-popup-period {
+  font-size: 11px;
+  color: #4b5563;
+  margin-bottom: 8px;
+}
+.spc-popup-wrap .spc-extra {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 7px;
+  max-height: 330px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.spc-popup-wrap .spc-extra-loading,
+.spc-popup-wrap .spc-extra-error {
+  font-size: 11px;
+  color: #6b7280;
+}
+.spc-popup-wrap .spc-risk-headline {
+  margin: 0 0 7px;
+  padding: 6px 7px;
+  border-radius: 5px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 800;
+}
+.spc-popup-wrap .spc-section-title {
+  margin-top: 7px;
+  font-weight: 800;
+  color: #111827;
+}
+.spc-popup-wrap .spc-section-text {
+  margin-top: 2px;
+  white-space: pre-wrap;
+}
+.spc-popup-wrap .spc-risk-values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 8px 0;
+}
+.spc-popup-wrap .spc-risk-value {
+  padding: 4px 3px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #f8fafc;
+  text-align: center;
+  font-size: 10px;
+}
+.spc-popup-wrap .spc-risk-value b {
+  display: block;
+  color: #111827;
+  font-size: 9px;
+}
+.spc-popup-wrap details {
+  margin-top: 6px;
+}
+.spc-popup-wrap details > summary {
+  cursor: pointer;
+  color: #2563eb;
+  font-weight: 700;
+  user-select: none;
+}
+.spc-popup-wrap .spc-source {
+  margin-top: 7px;
+  padding-top: 5px;
+  border-top: 1px solid #e5e7eb;
+  color: #6b7280;
+  font-size: 9px;
+}
+@media (max-width: 767px) {
+  .spc-popup-wrap { width: min(330px, 76vw); }
+  .spc-popup-wrap .spc-extra { max-height: 280px; }
+}
+/* ===== SPC 상세 팝업 끝 ===== */
+
 .leaflet-control-us-model {
   background: #fff;
   color: #14213d;
@@ -5133,26 +5221,245 @@ function shiftGeometryLongitude(geometry, shift = US_RIGHT_WORLD_SHIFT) {
   };
 }
 
+const severeOutlookCache = new Map();
+const severeTranslateCache = new Map();
+
+function spcOutlookDate(properties) {
+  const raw = properties?.VALID_ISO || properties?.ISSUE_ISO || "";
+  const date = raw ? new Date(raw) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function cleanSevereText(value) {
+  return String(value || "")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/\r/g, "")
+    .replace(/\*\*/g, "")
+    .replace(/\s+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function extractMarkdownSection(text, heading) {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const rx = new RegExp(`(?:^|\\n)#{2,3}\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n#{2,3}\\s+|$)`, "i");
+  const match = text.match(rx);
+  return match ? cleanSevereText(match[1]) : "";
+}
+
+function parseSevereWeatherMarkdown(markdown) {
+  const text = cleanSevereText(markdown);
+  const detailed = extractMarkdownSection(text, "Detailed Outlook") || text;
+
+  const headlineMatch = detailed.match(/(?:^|\n)#{3}\s+(THERE IS[^\n]+)/i) ||
+    detailed.match(/(?:^|\n)(THERE IS (?:A|AN|NO)[^\n]+)/i);
+
+  const summaryMatch = detailed.match(/(?:^|\n)#{3}\s+SUMMARY\s*\n([\s\S]*?)(?=\n#{3}\s+|$)/i);
+  const synopsisMatch = detailed.match(/(?:^|\n)#{3}\s+Synopsis\s*\n([\s\S]*?)(?=\n#{3}\s+|\n\.\.|$)/i);
+
+  const risk = {};
+  [["tornado", "TORNADO"], ["hail", "HAIL"], ["wind", "WIND"]].forEach(([key, label]) => {
+    const imageRx = new RegExp(`(?:^|\\n)#{3}\\s+${key}\\s+([^\\n]+)`, "i");
+    const nationalRx = new RegExp(`${label}:\\s*([^\\n]+)`, "i");
+    const m = text.match(imageRx) || text.match(nationalRx);
+    if (m) risk[key] = cleanSevereText(m[1]).replace(/\s+/g, " ");
+  });
+
+  return {
+    headline: headlineMatch ? cleanSevereText(headlineMatch[1]) : "",
+    summary: summaryMatch ? cleanSevereText(summaryMatch[1]) : extractMarkdownSection(text, "Outlook Summary"),
+    synopsis: synopsisMatch ? cleanSevereText(synopsisMatch[1]) : "",
+    risk
+  };
+}
+
+async function fetchSevereWeatherPage(dateKey) {
+  if (severeOutlookCache.has(dateKey)) return severeOutlookCache.get(dateKey);
+
+  const pageUrl = `https://www.severeweatheroutlook.com/${dateKey}/`;
+  const readerUrl = `https://r.jina.ai/https://www.severeweatheroutlook.com/${dateKey}/`;
+
+  const promise = (async () => {
+    let lastError = null;
+
+    // Jina Reader는 HTML을 읽기 쉬운 Markdown으로 바꿔 주며 브라우저 CORS 문제도 피하기 쉽다.
+    for (const url of [readerUrl, pageUrl]) {
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        let body = await response.text();
+
+        // 직접 HTML 응답인 경우 텍스트로 변환한다. Reader 응답은 그대로 Markdown이다.
+        if (/^\s*<!doctype html|<html[\s>]/i.test(body)) {
+          const doc = new DOMParser().parseFromString(body, "text/html");
+          body = doc.body?.innerText || body;
+        }
+
+        const parsed = parseSevereWeatherMarkdown(body);
+        if (parsed.headline || parsed.summary || parsed.synopsis || Object.keys(parsed.risk).length) {
+          return { ...parsed, pageUrl };
+        }
+        throw new Error("상세 예보 본문을 찾지 못했습니다.");
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error("Severe Weather Outlook 연결 실패");
+  })();
+
+  severeOutlookCache.set(dateKey, promise);
+  try {
+    return await promise;
+  } catch (error) {
+    severeOutlookCache.delete(dateKey);
+    throw error;
+  }
+}
+
+async function translateSevereText(text) {
+  const source = cleanSevereText(text);
+  if (!source) return "";
+  if (severeTranslateCache.has(source)) return severeTranslateCache.get(source);
+
+  const promise = (async () => {
+    try {
+      // 키가 필요 없는 Google Translate 웹 엔드포인트. 실패하면 영어 원문을 그대로 사용한다.
+      const url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ko&dt=t&q=" +
+        encodeURIComponent(source);
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`번역 HTTP ${response.status}`);
+      const data = await response.json();
+      const translated = Array.isArray(data?.[0])
+        ? data[0].map(item => Array.isArray(item) ? (item[0] || "") : "").join("")
+        : "";
+      return translated.trim() || source;
+    } catch (_) {
+      return source;
+    }
+  })();
+
+  severeTranslateCache.set(source, promise);
+  return promise;
+}
+
+function addSpcSection(parent, title, text) {
+  if (!text) return;
+  const heading = document.createElement("div");
+  heading.className = "spc-section-title";
+  heading.textContent = title;
+  parent.appendChild(heading);
+
+  const body = document.createElement("div");
+  body.className = "spc-section-text";
+  body.textContent = text;
+  parent.appendChild(body);
+}
+
+async function fillSpcExtraDetails(target, properties) {
+  const dateKey = spcOutlookDate(properties);
+  target.className = "spc-extra";
+  target.innerHTML = '<div class="spc-extra-loading">상세 SPC 전망을 불러오는 중...</div>';
+
+  try {
+    const outlook = await fetchSevereWeatherPage(dateKey);
+    const [headlineKo, summaryKo, synopsisKo] = await Promise.all([
+      translateSevereText(outlook.headline),
+      translateSevereText(outlook.summary),
+      translateSevereText(outlook.synopsis)
+    ]);
+
+    target.replaceChildren();
+
+    if (headlineKo) {
+      const headline = document.createElement("div");
+      headline.className = "spc-risk-headline";
+      headline.textContent = headlineKo;
+      target.appendChild(headline);
+    }
+
+    const riskKeys = [
+      ["tornado", "TORNADO"],
+      ["hail", "HAIL"],
+      ["wind", "WIND"]
+    ].filter(([key]) => outlook.risk?.[key]);
+
+    if (riskKeys.length) {
+      const riskBox = document.createElement("div");
+      riskBox.className = "spc-risk-values";
+      riskKeys.forEach(([key, label]) => {
+        const item = document.createElement("div");
+        item.className = "spc-risk-value";
+        const labelNode = document.createElement("b");
+        labelNode.textContent = label;
+        const valueNode = document.createElement("span");
+        valueNode.textContent = outlook.risk[key];
+        item.append(labelNode, valueNode);
+        riskBox.appendChild(item);
+      });
+      target.appendChild(riskBox);
+    }
+
+    addSpcSection(target, "요약", summaryKo);
+
+    if (synopsisKo) {
+      const details = document.createElement("details");
+      details.open = true;
+      const summary = document.createElement("summary");
+      summary.textContent = "상세 전망 접기 / 펼치기";
+      details.appendChild(summary);
+      addSpcSection(details, "상세 전망", synopsisKo);
+      target.appendChild(details);
+    }
+
+    const source = document.createElement("div");
+    source.className = "spc-source";
+    source.textContent = `출처: SevereWeatherOutlook / SPC · ${dateKey}`;
+    target.appendChild(source);
+  } catch (error) {
+    target.innerHTML = "";
+    const message = document.createElement("div");
+    message.className = "spc-extra-error";
+    message.textContent = `상세 전망 연결 실패: ${error.message || error}`;
+    target.appendChild(message);
+  }
+}
+
 function spcPopup(properties, day, type) {
   const p = properties || {};
   const node = document.createElement("div");
-  const heading = document.createElement("strong");
+  node.className = "spc-popup-wrap";
+
+  const heading = document.createElement("div");
+  heading.className = "spc-popup-title";
   const n = Number(p.DN);
   heading.textContent = type === "tornado"
     ? `SPC Day ${day} 토네이도 확률 ${n}%`
     : `SPC Day ${day} 대류 위험: ${spcConvectiveNames[n] || p.LABEL || n}`;
   node.appendChild(heading);
+
   if (p.VALID_ISO || p.EXPIRE_ISO) {
     const period = document.createElement("div");
-    const displayTime = value => value ? new Date(value).toISOString().slice(0, 16).replace("T", " ") : "?";
+    period.className = "spc-popup-period";
+    const displayTime = value => value
+      ? new Date(value).toISOString().slice(0, 16).replace("T", " ")
+      : "?";
     period.textContent = `유효: ${displayTime(p.VALID_ISO)} ~ ${displayTime(p.EXPIRE_ISO)} UTC`;
     node.appendChild(period);
   }
+
   if (type === "tornado") {
     const explanation = document.createElement("div");
     explanation.textContent = "해당 지점 반경 25마일 내 토네이도 발생 확률";
+    explanation.style.marginBottom = "7px";
     node.appendChild(explanation);
   }
+
+  const extra = document.createElement("div");
+  node.appendChild(extra);
+  fillSpcExtraDetails(extra, p);
+
   return node;
 }
 function createSpcControl() {
@@ -5211,7 +5518,7 @@ function createSpcControl() {
         const geojson = L.geoJSON({ type: "FeatureCollection", features: shiftedFeatures }, {
           style: feature => ({ color: colors[Number(feature.properties?.DN)] || "#64748b",
             weight: 1.5, opacity: .9, fillOpacity: .24 }),
-          onEachFeature: (feature, layer) => layer.bindPopup(spcPopup(feature.properties, day, type))
+          onEachFeature: (feature, layer) => layer.bindPopup(spcPopup(feature.properties, day, type), { maxWidth: 440, minWidth: 280 })
         });
         spcLayer.clearLayers();
         spcLayer.addLayer(geojson);
