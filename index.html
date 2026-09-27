@@ -5331,6 +5331,22 @@ const tokyoVaacLayer = L.featureGroup();
 let tokyoVaacEnabled = false;
 let tokyoVaacData = null;
 let tokyoVaacRequest = 0;
+// 주소 뒤에 ?vaacTest=1 을 붙인 경우에만 실제 백엔드 대신 예시 폴리곤을 표시한다.
+// ?vaacTest=partial 은 일부 시간대의 드롭다운 숨김도 확인한다.
+const tokyoVaacTestMode = new URLSearchParams(window.location.search).get('vaacTest');
+function tokyoVaacSampleData() {
+  const now = Date.now();
+  const hours = tokyoVaacTestMode === 'partial' ? [0, 6] : [0, 6, 12, 18];
+  return {ok:true, test:true, advisories:[{
+    id:'TEST_SAKURAJIMA', volcano:'TEST · SAKURAJIMA (실제 예보 아님)',
+    advisory:'TEST', issued:new Date(now).toISOString(), sourceUrl:'',
+    phases:hours.map((hour,index)=>({hour,valid:new Date(now+hour*3600000).toISOString(),
+      polygons:[{level:'SFC/FL200',coordinates:[
+        [130.5+index*.3,31.4+index*.15], [130.9+index*.3,31.45+index*.15],
+        [131.1+index*.3,31.8+index*.15], [130.6+index*.3,31.9+index*.15]
+      ]}]}))
+  }]};
+}
 
 function tokyoVaacJsonp() {
   return new Promise((resolve, reject) => {
@@ -5369,10 +5385,11 @@ function renderTokyoVaac(hour) {
       const ctx = {referenceLon:GLOBAL_WORLD_REFERENCE_LON};
       const points = coords.map(c => toRenderLatLng(c[1],c[0],ctx));
       const url = /^https:\/\/www\.data\.jma\.go\.jp\/vaac\/data\/TextData\//.test(a.sourceUrl) ? a.sourceUrl : 'https://www.data.jma.go.jp/vaac/data/vaac_list.html';
-      const popup = '<b>' + escapeHtml(a.volcano) + '</b> · Tokyo VAAC ' + escapeHtml(a.advisory) +
+      const popup = (tokyoVaacData.test ? '<b>테스트 데이터 · 실제 화산재 예보 아님</b><br>' : '') +
+        '<b>' + escapeHtml(a.volcano) + '</b> · Tokyo VAAC ' + escapeHtml(a.advisory) +
         '<br>' + (hour ? '+' + hour + 'h 예보' : '관측') + ' · ' + escapeHtml(p.level) +
         '<br>유효: ' + escapeHtml(phase.valid.replace('T',' ').slice(0,16)) + 'Z' +
-        '<br><a href="' + url + '" target="_blank" rel="noopener noreferrer">원문 VAA</a>';
+        (tokyoVaacData.test ? '' : '<br><a href="' + url + '" target="_blank" rel="noopener noreferrer">원문 VAA</a>');
       L.polygon(points,{color:hour?'#e11d48':'#a21caf',weight:2,fillOpacity:0.18,dashArray:hour?'7 5':null})
         .bindPopup(popup).addTo(tokyoVaacLayer);
       count++;
@@ -5416,14 +5433,15 @@ function createTokyoVaacControl() {
       const request=++tokyoVaacRequest;
       button.disabled=true; button.textContent='확인 중…';
       try {
-        const data=await tokyoVaacJsonp();
+        const data=tokyoVaacTestMode === '1' || tokyoVaacTestMode === 'partial'
+          ? tokyoVaacSampleData() : await tokyoVaacJsonp();
         if (request!==tokyoVaacRequest) return;
         if (!data?.ok || !Array.isArray(data.advisories)) throw new Error(data?.error||'VAAC 응답 형식 오류');
         tokyoVaacData=data; tokyoVaacEnabled=true;
         updateChoices();
         renderTokyoVaac(Number(select.value));
         tokyoVaacLayer.addTo(map);
-        button.classList.add('vaac-on'); button.textContent='화산재 ON';
+        button.classList.add('vaac-on'); button.textContent=data.test ? 'TEST ON' : '화산재 ON';
       } catch(error) {
         if (request===tokyoVaacRequest) {button.textContent='화산재 OFF'; alert('화산재 예보 실패: '+(error.message||String(error)));}
       } finally {if(request===tokyoVaacRequest) button.disabled=false;}
