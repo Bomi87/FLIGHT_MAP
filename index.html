@@ -1051,7 +1051,7 @@
   overflow:visible;
 }
 .leaflet-control-noaa-model.model-expanded {
-  width:250px;
+  width:190px;
   padding:0 8px 8px;
   border-radius:7px;
   background:rgba(255,255,255,.96);
@@ -1093,6 +1093,40 @@
 .leaflet-control-noaa-model:not(.model-expanded) .noaa-model-time-row,
 .leaflet-control-noaa-model:not(.model-expanded) .noaa-model-status {
   display:none;
+}
+
+.leaflet-control-noaa-model:not(.model-expanded) .noaa-model-product {
+  display:none;
+}
+.noaa-model-product {
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  height:27px;
+  margin:0 0 5px;
+  padding:0 24px 0 8px;
+  appearance:none;
+  -webkit-appearance:none;
+  border:1px solid rgba(37,99,235,.40);
+  border-radius:7px;
+  background:
+    linear-gradient(45deg, transparent 50%, #2563eb 50%) calc(100% - 13px) 11px/4px 4px no-repeat,
+    linear-gradient(135deg, #2563eb 50%, transparent 50%) calc(100% - 9px) 11px/4px 4px no-repeat,
+    linear-gradient(180deg,#eff6ff 0%,#dbeafe 100%);
+  color:#1e3a8a;
+  font:800 10px Arial,sans-serif;
+  cursor:pointer;
+  outline:none;
+}
+.noaa-model-product:hover { border-color:#2563eb; }
+.noaa-model-product:focus {
+  border-color:#1d4ed8;
+  box-shadow:0 0 0 2px rgba(37,99,235,.12);
+}
+.noaa-model-product option {
+  background:#fff;
+  color:#1e3a8a;
+  font-weight:700;
 }
 .noaa-model-meta {
   margin: 3px 0;
@@ -6622,11 +6656,16 @@ function createNoaaModelControl() {
     toggle.type = "button";
     toggle.textContent = "일기도 OFF";
 
+    const productSelect = L.DomUtil.create("select", "noaa-model-product", container);
+    productSelect.innerHTML =
+      '<option value="precip">강수</option>' +
+      '<option value="maxwind">Max Wind</option>';
+
     const airportMeta = L.DomUtil.create("div", "noaa-model-meta", container);
     airportMeta.textContent = "공항검색에서 ICAO를 먼저 선택하세요.";
 
     const modelMeta = L.DomUtil.create("div", "noaa-model-meta", container);
-    modelMeta.textContent = "미국: NAM 1HR Precip Chart · 그 외: GFS 1HR Precip Chart";
+    modelMeta.textContent = "NOAA/NCEP MAG";
 
     const timeRow = L.DomUtil.create("div", "noaa-model-time-row", container);
     const prev = L.DomUtil.create("button", "", timeRow);
@@ -6641,7 +6680,7 @@ function createNoaaModelControl() {
     const status = L.DomUtil.create("div", "noaa-model-status", container);
     status.textContent = "NOAA/NCEP MAG 일기도";
 
-    noaaModelUi = { container, toggle, airportMeta, modelMeta, valid, status, prev, next };
+    noaaModelUi = { container, toggle, productSelect, airportMeta, modelMeta, valid, status, prev, next };
 
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
@@ -6679,6 +6718,13 @@ function createNoaaModelControl() {
       L.DomEvent.stop(event);
       if (!noaaModelEnabled || !noaaModelAirport) return;
       noaaModelStep += 1;
+      loadNoaaModelOverlay();
+    });
+
+    L.DomEvent.on(productSelect, "change", event => {
+      L.DomEvent.stop(event);
+      noaaModelStep = 0;
+      if (!noaaModelEnabled || !noaaModelAirport) return;
       loadNoaaModelOverlay();
     });
 
@@ -6743,7 +6789,7 @@ function noaaModelShiftBounds(bounds, referenceLon) {
   return [[south, west], [north, east]];
 }
 
-function callNoaaModelJsonp(airport, step) {
+function callNoaaModelJsonp(airport, step, product) {
   return new Promise((resolve, reject) => {
     const callbackName =
       "noaaModelCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
@@ -6754,6 +6800,7 @@ function callNoaaModelJsonp(airport, step) {
       lon: String(airport.lon),
       icao: String(airport.icao || ""),
       step: String(step || 0),
+      product: String(product || "precip"),
       callback: callbackName,
       _: String(Date.now())
     });
@@ -6850,10 +6897,21 @@ async function loadNoaaModelOverlay() {
   if (!noaaModelEnabled || !noaaModelAirport) return;
 
   const id = ++noaaModelRequestId;
-  setNoaaModelStatus("최신 모델 일기도 확인 중...", false);
+  const modeLabel =
+    (noaaModelUi && noaaModelUi.productSelect && noaaModelUi.productSelect.value === "maxwind")
+      ? "Max Wind"
+      : "강수";
+  setNoaaModelStatus(modeLabel + " 일기도 확인 중...", false);
 
   try {
-    const data = await callNoaaModelJsonp(noaaModelAirport, noaaModelStep);
+    const selectedProduct =
+      (noaaModelUi && noaaModelUi.productSelect && noaaModelUi.productSelect.value) || "precip";
+
+    const data = await callNoaaModelJsonp(
+      noaaModelAirport,
+      noaaModelStep,
+      selectedProduct
+    );
     if (id !== noaaModelRequestId || !noaaModelEnabled) return;
 
     if (!data || !data.ok) {
