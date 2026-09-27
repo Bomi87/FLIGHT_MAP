@@ -1244,7 +1244,13 @@
         font-size: 13px;
       }
     }
-  </style>
+  
+.leaflet-control-vaac { background:#fff; padding:8px; border-radius:6px; min-width:155px; max-width:225px; box-shadow:0 2px 8px #0003; font:12px/1.35 sans-serif; }
+.leaflet-control-vaac button { width:100%; cursor:pointer; border:0; background:#475569; color:#fff; border-radius:4px; padding:6px; }
+.leaflet-control-vaac button.vaac-on { background:#9a3412; }
+.leaflet-control-vaac select { width:100%; margin-top:5px; padding:4px; }
+.leaflet-control-vaac small { display:block; margin-top:5px; overflow-wrap:anywhere; }
+</style>
 </head>
 <body>
 
@@ -4835,9 +4841,21 @@ async function loadNhcAtlanticStorms() {
     const title = `${type} ${id.slice(2)}L (${name})`;
     const context = { referenceLon: GLOBAL_WORLD_REFERENCE_LON };
     const group = L.featureGroup();
+    // 화면에 반복된 세계지도 중 오른쪽 복제 지도에 대서양 폭풍을 표시한다.
+    // 한 폭풍의 모든 점에는 같은 360도 이동값을 적용해 경로가 끊기지 않게 한다.
+    const firstCoord = current.geometry.coordinates;
+    const baseFirst = toRenderLatLng(firstCoord[1], firstCoord[0], context);
+    const mapWidth = map.getSize().x;
+    const copies = [-720, -360, 0, 360, 720].map(shift => ({
+      shift, x: map.latLngToContainerPoint([baseFirst[0], baseFirst[1] + shift]).x
+    }));
+    const visibleCopies = copies.filter(c => c.x >= 0 && c.x <= mapWidth);
+    const bestCopy = (visibleCopies.length ? visibleCopies : copies)
+      .sort((a, b) => Math.abs(a.x - mapWidth * 0.77) - Math.abs(b.x - mapWidth * 0.77))[0];
     const positions = points.map(item => {
       const [lon, lat] = item.geometry.coordinates;
-      return toRenderLatLng(lat, lon, context);
+      const rendered = toRenderLatLng(lat, lon, context);
+      return [rendered[0], rendered[1] + bestCopy.shift];
     });
     if (positions.length > 1) {
       L.polyline(positions, { color: "#dc2626", weight: 3, dashArray: "8 5", interactive: false })
@@ -5291,7 +5309,106 @@ updateSearchedAirspaceLabelZoom();
 createNdbToggleControl().addTo(map);
 createFirToggleControl().addTo(map);
 createArtccToggleControl().addTo(map);
+
+// 공개 Tokyo VAAC 권고문을 읽는 별도 Apps Script Web App URL을 입력한다.
+const TOKYO_VAAC_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxtD7OZ7e57_j98NKVVaGnxAxAm2L2oNFrbJ6eskt3j8erz57KHA0R867BXAJZfDZ7SXg/exec";
+const tokyoVaacLayer = L.featureGroup();
+let tokyoVaacEnabled = false;
+let tokyoVaacData = null;
+let tokyoVaacRequest = 0;
+
+function tokyoVaacJsonp() {
+  return new Promise((resolve, reject) => {
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/.test(TOKYO_VAAC_BACKEND_URL)) {
+      reject(new Error('Tokyo VAAC 백엔드 URL을 설정하세요')); return;
+    }
+    const callback = 'tokyoVaacCb' + Date.now() + Math.floor(Math.random()*100000);
+    const script = document.createElement('script');
+    const timer = setTimeout(() => finish(new Error('VAAC 요청 시간 초과')), 25000);
+    let settled = false;
+    function finish(error, value) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      delete window[callback];
+      script.remove();
+      if (error) reject(error); else resolve(value);
+    }
+    window[callback] = value => finish(null, value);
+    script.onerror = () => finish(new Error('VAAC 백엔드 연결 실패'));
+    const join = TOKYO_VAAC_BACKEND_URL.includes('?') ? '&' : '?';
+    script.src = TOKYO_VAAC_BACKEND_URL + join + 'callback=' + callback;
+    document.head.appendChild(script);
+  });
+}
+function renderTokyoVaac(hour) {
+  tokyoVaacLayer.clearLayers();
+  if (!tokyoVaacData?.advisories) return 0;
+  let count = 0;
+  for (const a of tokyoVaacData.advisories) {
+    const phase = a.phases.find(p => p.hour === hour);
+    if (!phase || !phase.polygons.length || Date.parse(phase.valid) < Date.now() - 6*3600000) continue;
+    for (const p of phase.polygons) {
+      const coords = p.coordinates;
+      if (!Array.isArray(coords) || coords.length < 3) continue;
+      const ctx = {referenceLon:GLOBAL_WORLD_REFERENCE_LON};
+      const points = coords.map(c => toRenderLatLng(c[1],c[0],ctx));
+      const url = /^https:\/\/www\.data\.jma\.go\.jp\/vaac\/data\/TextData\//.test(a.sourceUrl) ? a.sourceUrl : 'https://www.data.jma.go.jp/vaac/data/vaac_list.html';
+      const popup = '<b>' + escapeHtml(a.volcano) + '</b> · Tokyo VAAC ' + escapeHtml(a.advisory) +
+        '<br>' + (hour ? '+' + hour + 'h 예보' : '관측') + ' · ' + escapeHtml(p.level) +
+        '<br>유효: ' + escapeHtml(phase.valid.replace('T',' ').slice(0,16)) + 'Z' +
+        '<br><a href="' + url + '" target="_blank" rel="noopener noreferrer">원문 VAA</a>';
+      L.polygon(points,{color:hour?'#e11d48':'#a21caf',weight:2,fillOpacity:0.18,dashArray:hour?'7 5':null})
+        .bindPopup(popup).addTo(tokyoVaacLayer);
+      count++;
+    }
+  }
+  return count;
+}
+function createTokyoVaacControl() {
+  const control=L.control({position:'topright'});
+  control.onAdd=function() {
+    const box=L.DomUtil.create('div','leaflet-control-vaac');
+    const button=L.DomUtil.create('button','',box); button.textContent='화산재 예보 OFF'; button.type='button';
+    const select=L.DomUtil.create('select','',box);
+    [[0,'현재 관측'],[6,'+6시간'],[12,'+12시간'],[18,'+18시간']].forEach(([v,label])=>{
+      const o=document.createElement('option'); o.value=v; o.textContent=label; select.appendChild(o);
+    });
+    const status=L.DomUtil.create('small','',box); status.textContent='Tokyo VAAC · UTC';
+    L.DomEvent.disableClickPropagation(box); L.DomEvent.disableScrollPropagation(box);
+    select.addEventListener('change',()=>{
+      if (!tokyoVaacEnabled) return;
+      const count=renderTokyoVaac(Number(select.value));
+      status.textContent=count ? `${count}개 화산재 영역 · Tokyo VAAC` : '선택 시각에 표시할 화산재 영역 없음';
+    });
+    button.addEventListener('click',async()=>{
+      if (tokyoVaacEnabled) {
+        ++tokyoVaacRequest; tokyoVaacEnabled=false;
+        map.removeLayer(tokyoVaacLayer); button.textContent='화산재 예보 OFF';
+        button.classList.remove('vaac-on'); status.textContent='Tokyo VAAC · UTC'; return;
+      }
+      const request=++tokyoVaacRequest;
+      button.disabled=true; button.textContent='화산재 확인 중…';
+      try {
+        const data=await tokyoVaacJsonp();
+        if (request!==tokyoVaacRequest) return;
+        if (!data?.ok || !Array.isArray(data.advisories)) throw new Error(data?.error||'VAAC 응답 형식 오류');
+        tokyoVaacData=data; tokyoVaacEnabled=true;
+        const count=renderTokyoVaac(Number(select.value));
+        tokyoVaacLayer.addTo(map);
+        button.classList.add('vaac-on'); button.textContent='화산재 예보 ON';
+        status.textContent=count ? `${count}개 화산재 영역 · Tokyo VAAC` : '선택 시각에 표시할 화산재 영역 없음';
+      } catch(error) {
+        if (request===tokyoVaacRequest) {button.textContent='화산재 예보 OFF'; status.textContent=error.message||String(error);}
+      } finally {if(request===tokyoVaacRequest) button.disabled=false;}
+    });
+    return box;
+  };
+  return control;
+}
+
 createTyphoonControl().addTo(map);
+createTokyoVaacControl().addTo(map);
 createSpcControl().addTo(map);
 createUsModelControl().addTo(map);
 
