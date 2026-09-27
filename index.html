@@ -7121,13 +7121,177 @@ function spcHeadlineRiskClass(properties, headlineText) {
   return spcRiskCssClass(spcRiskMeta(properties, headlineText).tone);
 }
 
-async function fillSpcExtraDetails(target, properties) {
+
+// ===== SPC 상세정보 보강: Day 1/2 누락 방지 =====
+// SevereWeatherOutlook 쪽에서 현재 Day 1 상세전망/확률 일부가 비어 오는 경우,
+// 공식 SPC Day 1/2 narrative와 확률 GeoJSON으로 '누락된 항목만' 보완한다.
+function parseOfficialSpcNarrative_(rawText) {
+  let text = String(rawText || '')
+    .replace(/\r/g, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/\*\*/g, '')
+    .replace(/^\s*#{1,6}\s*/gm, '')
+    .trim();
+
+  if (!text) return { headline:'', summary:'', synopsis:'' };
+
+  // headline
+  const headlineMatch = text.match(/(?:^|\n)\s*(?:\.\.\.)?\s*(THERE IS[^\n]+|NO SEVERE THUNDERSTORM AREAS FORECAST[^\n]*)(?:\.\.\.)?\s*(?:\n|$)/i);
+
+  // SUMMARY marker supports both SPC plain-text (...SUMMARY...) and markdown headings.
+  const summaryMarker = /(?:^|\n)\s*(?:\.\.\.)?\s*SUMMARY\s*(?:\.\.\.)?\s*(?:\n|$)/i;
+  const sm = summaryMarker.exec(text);
+  let summary = '';
+  let synopsis = '';
+
+  if (sm) {
+    const afterSummary = text.slice(sm.index + sm[0].length);
+
+    // Next SPC section marker, e.g. ...Synopsis..., ...20z Update..., ...Southern Plains...
+    const nextSection = /(?:^|\n)\s*\.\.\.\s*([^\n.][^\n]*?)\s*\.\.\.\s*(?:\n|$)/i.exec(afterSummary);
+
+    if (nextSection) {
+      summary = afterSummary.slice(0, nextSection.index).trim();
+
+      // Keep everything after the next section title as the detailed outlook,
+      // including later regional subsections, but trim forecaster/product footer.
+      const detailTitle = String(nextSection[1] || '').trim();
+      let detailBody = afterSummary.slice(nextSection.index + nextSection[0].length).trim();
+      detailBody = trimSpcOutlookTail(detailBody);
+      if (detailBody) {
+        // 'Synopsis' itself does not need to be repeated because the UI title is 상세 전망.
+        // For update/regional headings, retain the heading so context is not lost.
+        synopsis = /^synopsis$/i.test(detailTitle)
+          ? detailBody
+          : `${detailTitle}\n\n${detailBody}`;
+      }
+    } else {
+      // Fallback: no dotted section marker. Split before the forecaster signature.
+      const cut = afterSummary.search(/\n\.\.[A-Za-z][^\n]{0,100}\.\./);
+      summary = (cut >= 0 ? afterSummary.slice(0, cut) : afterSummary).trim();
+    }
+  }
+
+  return {
+    headline: headlineMatch ? cleanSevereText(headlineMatch[1]) : '',
+    summary: cleanSevereText(summary),
+    synopsis: cleanSevereText(synopsis)
+  };
+}
+
+async function fetchOfficialSpcNarrative_(day) {
+  const d = String(day || '');
+  if (!['1','2','3'].includes(d)) return { headline:'', summary:'', synopsis:'' };
+
+  const officialUrl = `https://www.spc.noaa.gov/products/outlook/day${d}otlk.html`;
+  const urls = [
+    `https://r.jina.ai/https://www.spc.noaa.gov/products/outlook/day${d}otlk.html`,
+    officialUrl
+  ];
+
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { cache:'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      let body = await response.text();
+
+      if (/^\s*<!doctype html|<html[\s>]/i.test(body)) {
+        const doc = new DOMParser().parseFromString(body, 'text/html');
+        body = doc.body?.innerText || body;
+      }
+
+      const parsed = parseOfficialSpcNarrative_(body);
+      if (parsed.headline || parsed.summary || parsed.synopsis) return parsed;
+      throw new Error('SPC 공식 상세 본문을 찾지 못했습니다.');
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('SPC 공식 상세 전망 연결 실패');
+}
+
+async function fetchOfficialSpcRiskValues_(day) {
+  const d = String(day || '');
+  if (!['1','2'].includes(d)) return {};
+
+  const files = {
+    tornado: `day${d}otlk_torn.nolyr.geojson`,
+    hail: `day${d}otlk_hail.nolyr.geojson`,
+    wind: `day${d}otlk_wind.nolyr.geojson`
+  };
+
+  const entries = Object.entries(files);
+  const results = await Promise.allSettled(entries.map(async ([, file]) => {
+    const response = await fetch(`${SPC_SERVICE}/${file}`, { cache:'no-store' });
+    if (!response.ok) throw new Error(`${file}: HTTP ${response.status}`);
+    const data = await response.json();
+    if (data?.error || !Array.isArray(data?.features)) {
+      throw new Error(`${file}: 잘못된 GeoJSON`);
+    }
+    return data;
+  }));
+
+  const risk = {};
+  results.forEach((result, index) => {
+    const [key] = entries[index];
+    if (result.status !== 'fulfilled') {
+      console.warn(`SPC ${key} 확률 보강 실패:`, result.reason);
+      return;
+    }
+
+    const values = result.value.features
+      .map(feature => Number(feature?.properties?.DN))
+      .filter(value => Number.isFinite(value) && value > 0);
+
+    risk[key] = values.length ? `${Math.max(...values)}%` : 'low';
+  });
+
+  return risk;
+}
+
+async function fillSpcExtraDetails(target, properties, day) {
   const dateKey = spcOutlookDate(properties);
   target.className = "spc-extra";
   target.innerHTML = '<div class="spc-extra-loading">상세 SPC 전망을 불러오는 중...</div>';
 
   try {
-    const outlook = await fetchSevereWeatherPage(dateKey);
+    let outlook = await fetchSevereWeatherPage(dateKey);
+
+    // Day 1/2는 상세전망 또는 TORNADO/HAIL/WIND가 하나라도 빠지면 공식 SPC로 보강한다.
+    // SevereWeatherOutlook에서 정상 제공되는 값은 그대로 우선 사용한다.
+    const needsNarrativeFallback = !outlook.summary || !outlook.synopsis;
+    const needsRiskFallback = ['1','2'].includes(String(day)) &&
+      (!outlook.risk?.tornado || !outlook.risk?.hail || !outlook.risk?.wind);
+
+    const [officialNarrativeResult, officialRiskResult] = await Promise.allSettled([
+      needsNarrativeFallback
+        ? fetchOfficialSpcNarrative_(day)
+        : Promise.resolve({ headline:'', summary:'', synopsis:'' }),
+      needsRiskFallback
+        ? fetchOfficialSpcRiskValues_(day)
+        : Promise.resolve({})
+    ]);
+
+    if (officialNarrativeResult.status === 'fulfilled') {
+      const official = officialNarrativeResult.value || {};
+      outlook = {
+        ...outlook,
+        headline: outlook.headline || official.headline || '',
+        summary: outlook.summary || official.summary || '',
+        synopsis: outlook.synopsis || official.synopsis || ''
+      };
+    } else if (needsNarrativeFallback) {
+      console.warn('SPC 공식 상세전망 보강 실패:', officialNarrativeResult.reason);
+    }
+
+    if (officialRiskResult.status === 'fulfilled') {
+      outlook.risk = { ...(officialRiskResult.value || {}), ...(outlook.risk || {}) };
+    } else if (needsRiskFallback) {
+      console.warn('SPC 공식 확률 보강 실패:', officialRiskResult.reason);
+    }
+
     const [summaryKo, synopsisKo] = await Promise.all([
       translateSevereText(outlook.summary),
       translateSevereText(outlook.synopsis)
@@ -7162,11 +7326,14 @@ async function fillSpcExtraDetails(target, properties) {
     headline.append(riskLabel, riskDesc);
     target.appendChild(headline);
 
-    const riskKeys = [
+    const baseRiskKeys = [
       ["tornado", "TORNADO"],
       ["hail", "HAIL"],
       ["wind", "WIND"]
-    ].filter(([key]) => outlook.risk?.[key]);
+    ];
+    const riskKeys = ['1','2'].includes(String(day))
+      ? baseRiskKeys
+      : baseRiskKeys.filter(([key]) => outlook.risk?.[key]);
 
     if (riskKeys.length) {
       const riskBox = document.createElement("div");
@@ -7177,7 +7344,7 @@ async function fillSpcExtraDetails(target, properties) {
         const labelNode = document.createElement("b");
         labelNode.textContent = label;
         const valueNode = document.createElement("span");
-        valueNode.textContent = outlook.risk[key];
+        valueNode.textContent = outlook.risk?.[key] || "low";
         item.append(labelNode, valueNode);
         riskBox.appendChild(item);
       });
@@ -7269,7 +7436,7 @@ function spcPopup(properties, day, type) {
 
   const extra = document.createElement("div");
   node.appendChild(extra);
-  fillSpcExtraDetails(extra, p);
+  fillSpcExtraDetails(extra, p, day);
 
   return node;
 }
