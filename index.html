@@ -6875,6 +6875,51 @@ function fitMapToNoaaChartBounds_(data, referenceLon) {
   }
 }
 
+
+function fitMapToNoaaAirportFocus_(data, airport, referenceLon) {
+  if (!airport) return;
+
+  const model = String(data && data.model || "").toLowerCase();
+
+  // U.S./NAM-HIRES already uses regional MAG domains, so keep the full chart.
+  if (model === "nam-hires") {
+    fitMapToNoaaChartBounds_(data, referenceLon);
+    return;
+  }
+
+  // GFS uses broad continental/oceanic domains. Focus the map around the
+  // selected airport while keeping enough surrounding synoptic context.
+  const lat = Number(airport.lat);
+  let lon = Number(airport.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    fitMapToNoaaChartBounds_(data, referenceLon);
+    return;
+  }
+
+  lon = shiftLonNearReference(lon, referenceLon);
+
+  // Regional focus window. A little wider in longitude at high latitudes.
+  const latHalf = 10;
+  const cosLat = Math.max(0.45, Math.cos(lat * Math.PI / 180));
+  const lonHalf = Math.min(18, 12 / cosLat);
+
+  const focusBounds = [
+    [Math.max(-85, lat - latHalf), lon - lonHalf],
+    [Math.min(85, lat + latHalf), lon + lonHalf]
+  ];
+
+  try {
+    map.fitBounds(focusBounds, {
+      paddingTopLeft: [28, 28],
+      paddingBottomRight: [28, 28],
+      animate: true
+    });
+  } catch (err) {
+    console.warn("NOAA airport focus fitBounds failed:", err);
+    fitMapToNoaaChartBounds_(data, referenceLon);
+  }
+}
+
 function createNoaaMagOverlay(data, referenceLon) {
   const bounds = noaaModelShiftBounds(data.bounds, referenceLon);
   if (!bounds) return null;
@@ -6938,8 +6983,10 @@ async function loadNoaaModelOverlay() {
 
     noaaModelLayer.addTo(map);
 
-    // Fit the map so the full weather chart is visible at a glance.
-    fitMapToNoaaChartBounds_(data, refLon);
+    // NAM-HIRES: show full regional chart.
+    // GFS: zoom to the selected airport region so Korea/Japan/China etc.
+    // do not appear as the entire ASIA domain.
+    fitMapToNoaaAirportFocus_(data, noaaModelAirport, refLon);
 
     if (noaaModelUi) {
       noaaModelUi.modelMeta.textContent =
