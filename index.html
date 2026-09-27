@@ -551,6 +551,26 @@
   background: #f8fafc;
   color: #334155;
 }
+
+.spc-popup-wrap .spc-risk-headline .spc-risk-label {
+  font-weight: 800;
+}
+.spc-popup-wrap .spc-risk-headline.risk-green .spc-risk-label {
+  color: #166534;
+}
+.spc-popup-wrap .spc-risk-headline.risk-orange .spc-risk-label {
+  color: #9a3412;
+}
+.spc-popup-wrap .spc-risk-headline.risk-red .spc-risk-label {
+  color: #991b1b;
+}
+.spc-popup-wrap .spc-risk-headline.risk-neutral .spc-risk-label {
+  color: #334155;
+}
+.spc-popup-wrap .spc-risk-headline .spc-risk-desc {
+  color: #111827;
+  font-weight: 800;
+}
 .spc-popup-wrap .spc-section-title {
   margin-top: 7px;
   font-weight: 800;
@@ -601,37 +621,6 @@
 }
 /* ===== SPC 상세 팝업 끝 ===== */
 
-.leaflet-control-us-model {
-  background: #fff;
-  color: #14213d;
-  width: 192px;
-  border-radius: 4px;
-  box-shadow: 0 1px 5px rgba(0,0,0,.4);
-  padding: 6px;
-  font: 11px Arial, sans-serif;
-}
-.leaflet-control-us-model button {
-  background: #2563eb;
-  color: #fff;
-  border: 0;
-  border-radius: 3px;
-  width: 100%;
-  height: 25px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.leaflet-control-us-model button.model-on { background: #b45309; }
-.leaflet-control-us-model label { display: inline-block; margin: 5px 6px 2px 0; }
-.leaflet-control-us-model input[type="range"] { width: 100%; margin: 3px 0; }
-.leaflet-control-us-model .us-model-status { margin-top: 3px; font-size: 10px; overflow-wrap: anywhere; }
-.us-model-wind-icon { background: transparent; border: 0; white-space: nowrap; }
-.us-model-wind-icon span {
-  color: #172554;
-  background: rgba(255,255,255,.82);
-  padding: 1px 3px;
-  border-radius: 3px;
-  font: bold 10px Arial, sans-serif;
-}
 
 .leaflet-control-ndb-toggle button {
   display: block;
@@ -5313,7 +5302,7 @@ const spcTornadoColors = { 2: "#79ba7a", 5: "#bd998a",
 
 const SPC_RISK_TEXT = {
   2: { code: "TSTM", label: "일반 뇌우", tone: "green",
-       message: "· severe thunderstorm 위험 없음" },
+       message: "일반 뇌우 · severe thunderstorm 위험 없음" },
   3: { code: "MRGL", label: "Marginal Risk", tone: "orange",
        message: "Marginal Risk · 국지적인 severe thunderstorm 가능" },
   4: { code: "SLGT", label: "Slight Risk", tone: "orange",
@@ -5901,7 +5890,23 @@ async function fillSpcExtraDetails(target, properties) {
     const riskMeta = spcRiskMeta(properties, outlook.headline);
     const headline = document.createElement("div");
     headline.className = `spc-risk-headline ${spcRiskCssClass(riskMeta.tone)}`;
-    headline.textContent = riskMeta.message;
+
+    const riskLabel = document.createElement("span");
+    riskLabel.className = "spc-risk-label";
+
+    const riskDesc = document.createElement("span");
+    riskDesc.className = "spc-risk-desc";
+
+    if (riskMeta.code === "TSTM") {
+      riskLabel.textContent = "일반 뇌우";
+      riskDesc.textContent = " · severe thunderstorm 위험 없음";
+    } else {
+      const parts = String(riskMeta.message || "").split(" · ");
+      riskLabel.textContent = parts.shift() || riskMeta.label || "SPC Outlook";
+      riskDesc.textContent = parts.length ? " · " + parts.join(" · ") : "";
+    }
+
+    headline.append(riskLabel, riskDesc);
     target.appendChild(headline);
 
     const riskKeys = [
@@ -6412,227 +6417,6 @@ function createSpcControl() {
   return control;
 }
 
-// IEM serves HRRR simulated reflectivity as 256px TMS tiles. Open-Meteo
-// exposes NOAA HRRR 10 m wind at requested points; sample only the viewport.
-const US_HRRR_META_URL = "https://mesonet.agron.iastate.edu/data/gis/images/4326/hrrr/refd_0000.json";
-const US_HRRR_TMS = "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/";
-const US_HRRR_WIND_URL = "https://api.open-meteo.com/v1/gfs";
-const usWindLayer = L.featureGroup();
-let usReflectivityLayer = null;
-function usForecastHour(offset) {
-  const now = new Date();
-  return new Date(Math.floor(now.getTime() / 3600000) * 3600000 + offset * 3600000);
-}
-function usForecastLabel(time) {
-  return `${String(time.getUTCDate()).padStart(2, "0")}/${String(time.getUTCHours()).padStart(2, "0")}Z`;
-}
-function usWindSamples() {
-  const size = map.getSize();
-  const samples = [];
-
-  // 오른쪽 world copy의 미국만 표본화한다.
-  // 화면 표시 경도 235~294°는 API 요청 시 -125~-66°로 되돌린다.
-  const columns = Math.min(9, Math.max(1, Math.ceil(size.x / 115)));
-  const rows = Math.min(7, Math.max(1, Math.ceil(size.y / 115)));
-
-  for (let row = 0; row < rows; row++) {
-    for (let column = 0; column < columns; column++) {
-      const point = map.containerPointToLatLng(L.point(
-        size.x * (column + .5) / columns,
-        size.y * (row + .5) / rows
-      ));
-
-      if (point.lat < 24 || point.lat > 50) continue;
-      if (point.lng < 235 || point.lng > 294) continue;
-
-      samples.push({
-        lat: point.lat,
-        lon: point.lng - US_RIGHT_WORLD_SHIFT, // API용 실제 미국 경도
-        displayLon: point.lng                  // 지도 표시용 오른쪽 world copy 경도
-      });
-    }
-  }
-
-  return samples;
-}
-async function loadUsWind(samples) {
-  const chunks = [];
-  for (let i = 0; i < samples.length; i += 25) chunks.push(samples.slice(i, i + 25));
-  const responses = await Promise.all(chunks.map(async chunk => {
-    const params = new URLSearchParams({
-      latitude: chunk.map(p => p.lat.toFixed(4)).join(","),
-      longitude: chunk.map(p => p.lon.toFixed(4)).join(","),
-      hourly: "wind_speed_10m,wind_direction_10m",
-      models: "ncep_hrrr_conus", forecast_hours: "24", wind_speed_unit: "kn",
-      timezone: "UTC", cell_selection: "nearest"
-    });
-    const response = await fetch(`${US_HRRR_WIND_URL}?${params}`, { cache: "no-store" });
-    if (!response.ok) throw new Error(`지상풍 HTTP ${response.status}`);
-    const data = await response.json();
-    const entries = Array.isArray(data) ? data : [data];
-    if (entries.length !== chunk.length || entries.some(entry => !entry.hourly?.time))
-      throw new Error("지상풍 예보 형식 오류");
-    return chunk.map((position, index) => ({ position, hourly: entries[index].hourly }));
-  }));
-  return responses.flat();
-}
-function createUsModelControl() {
-  const control = L.control({ position: "topright" });
-  control.onAdd = function () {
-    const container = L.DomUtil.create("div", "leaflet-control leaflet-control-us-model");
-    const button = L.DomUtil.create("button", "", container);
-    button.type = "button";
-    button.textContent = "미국 HRRR 예보 OFF";
-    const echoLabel = L.DomUtil.create("label", "", container);
-    const echoCheck = L.DomUtil.create("input", "", echoLabel);
-    echoCheck.type = "checkbox";
-    echoCheck.checked = true;
-    echoLabel.append(" 강수 에코");
-    const windLabel = L.DomUtil.create("label", "", container);
-    const windCheck = L.DomUtil.create("input", "", windLabel);
-    windCheck.type = "checkbox";
-    windCheck.checked = true;
-    windLabel.append(" 지상풍 10m");
-    const timeLabel = L.DomUtil.create("div", "", container);
-    const range = L.DomUtil.create("input", "", container);
-    range.type = "range";
-    range.min = "0";
-    range.max = "12";
-    range.step = "1";
-    range.value = "0";
-    const status = L.DomUtil.create("div", "us-model-status", container);
-    status.textContent = "HRRR 모의 에코 · 지상풍은 표본 지점";
-    let enabled = false;
-    let metadata = null;
-    let windData = [];
-    let windRequestId = 0;
-    let windTimer = null;
-    let forecastStart = usForecastHour(0);
-    const validFor = offset => new Date(forecastStart.getTime() + offset * 3600000);
-    function render() {
-      if (!enabled) return;
-      const valid = validFor(Number(range.value));
-      timeLabel.textContent = `예보 ${usForecastLabel(valid)} · +${range.value}시간`;
-      if (usReflectivityLayer) { map.removeLayer(usReflectivityLayer); usReflectivityLayer = null; }
-      let echoIssue = "";
-      if (echoCheck.checked) {
-        const initialized = Date.parse(metadata?.model_init_utc || "");
-        const hours = Math.round((valid.getTime() - initialized) / 3600000);
-        if (Number.isFinite(hours) && hours >= 0 && hours <= 18 &&
-            Math.abs(initialized + hours * 3600000 - valid.getTime()) < 60000) {
-          const init = new Date(initialized).toISOString().replace(/[-:T]/g, "").slice(0, 12);
-          const minutes = String(hours * 60).padStart(4, "0");
-          const tileUrl = `${US_HRRR_TMS}hrrr::REFD-F${minutes}-${init}/{z}/{x}/{y}.png`;
-          usReflectivityLayer = L.tileLayer(tileUrl, {
-            tms: true,
-            opacity: .62,
-            maxNativeZoom: 9,
-            maxZoom: 19,
-            // 타일은 world-wrap을 사용하되 표시 영역은 오른쪽 미국으로 제한한다.
-            bounds: US_RIGHT_CONUS_BOUNDS,
-            attribution: "HRRR simulated reflectivity © Iowa Environmental Mesonet"
-          });
-          usReflectivityLayer.on("tileerror", () => { status.textContent = "에코 타일을 읽지 못했습니다. 다른 예보시각을 선택해 주세요."; });
-          usReflectivityLayer.addTo(map);
-        } else echoIssue = "해당 시각의 HRRR 에코가 아직 없습니다";
-      }
-      usWindLayer.clearLayers();
-      let count = 0;
-      if (windCheck.checked) windData.forEach(({ position, hourly }) => {
-        const index = hourly.time.indexOf(valid.toISOString().slice(0, 16));
-        const speed = Number(hourly.wind_speed_10m?.[index]);
-        const direction = Number(hourly.wind_direction_10m?.[index]);
-        if (index < 0 || !Number.isFinite(speed) || !Number.isFinite(direction) ||
-            hourly.wind_speed_10m[index] == null || hourly.wind_direction_10m[index] == null) return;
-        // Wind direction is where it comes FROM; the arrow points downwind.
-        const arrow = (direction + 180) % 360;
-        const icon = L.divIcon({ className: "us-model-wind-icon",
-          html: `<span><b style="display:inline-block;transform:rotate(${arrow}deg)">↑</b> ${Math.round(speed)}kt</span>`,
-          iconSize: [56, 18], iconAnchor: [28, 9] });
-        L.marker([position.lat, position.displayLon ?? (position.lon + US_RIGHT_WORLD_SHIFT)], { icon, keyboard: false })
-          .bindPopup(`HRRR 10m 지상풍<br>${usForecastLabel(valid)}<br>${speed.toFixed(1)} kt / ${Math.round(direction)}° (from)`)
-          .addTo(usWindLayer);
-        count++;
-      });
-      status.textContent = `${echoIssue ? `${echoIssue} · ` : ""}${windCheck.checked ? `풍향·풍속 ${count}개 지점` : "풍향·풍속 숨김"} · 에코는 모의 반사도`;
-    }
-    async function reloadWind() {
-      const id = ++windRequestId;
-      windData = [];
-      usWindLayer.clearLayers();
-      if (!enabled || !windCheck.checked) { render(); return; }
-      const samples = usWindSamples();
-      if (!samples.length) { status.textContent = "오른쪽 미국 본토가 화면에 보이도록 지도를 이동하면 지상풍이 표시됩니다."; return; }
-      status.textContent = `HRRR 지상풍 ${samples.length}개 지점 읽는 중...`;
-      try {
-        const values = await loadUsWind(samples);
-        if (id !== windRequestId || !enabled) return;
-        windData = values;
-        render();
-      } catch (error) {
-        if (id !== windRequestId || !enabled) return;
-        console.error("HRRR wind load failed:", error);
-        render();
-        status.textContent += ` · 지상풍 연결 실패: ${error.message || error}`;
-      }
-    }
-    function scheduleWind() {
-      clearTimeout(windTimer);
-      if (enabled && windCheck.checked) windTimer = setTimeout(reloadWind, 350);
-    }
-    map.on("moveend", scheduleWind);
-    L.DomEvent.disableClickPropagation(container);
-    L.DomEvent.disableScrollPropagation(container);
-    L.DomEvent.on(button, "click", async event => {
-      L.DomEvent.stop(event);
-      enabled = !enabled;
-      button.textContent = enabled ? "미국 HRRR 예보 ON" : "미국 HRRR 예보 OFF";
-      button.classList.toggle("model-on", enabled);
-      if (!enabled) {
-        ++windRequestId;
-        clearTimeout(windTimer);
-        if (usReflectivityLayer) map.removeLayer(usReflectivityLayer);
-        usReflectivityLayer = null;
-        map.removeLayer(usWindLayer);
-        status.textContent = "HRRR 모의 에코 · 지상풍은 표본 지점";
-        return;
-      }
-      forecastStart = usForecastHour(0);
-      metadata = null;
-      windData = [];
-      usWindLayer.addTo(map);
-      timeLabel.textContent = `예보 ${usForecastLabel(validFor(Number(range.value)))}`;
-      render();
-      if (echoCheck.checked) {
-        try {
-          const response = await fetch(US_HRRR_META_URL, { cache: "no-store" });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const result = await response.json();
-          if (enabled) { metadata = result; render(); }
-        } catch (error) {
-          console.error("HRRR reflectivity metadata failed:", error);
-          if (enabled) status.textContent = `에코 시각 확인 실패: ${error.message || error}`;
-        }
-      }
-      reloadWind();
-    });
-    L.DomEvent.on(range, "input", render);
-    L.DomEvent.on(echoCheck, "change", async () => {
-      if (enabled && echoCheck.checked && !metadata) {
-        try {
-          const response = await fetch(US_HRRR_META_URL, { cache: "no-store" });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          metadata = await response.json();
-        } catch (error) { status.textContent = `에코 시각 확인 실패: ${error.message || error}`; return; }
-      }
-      render();
-    });
-    L.DomEvent.on(windCheck, "change", () => { if (windCheck.checked) reloadWind(); else { ++windRequestId; render(); } });
-    return container;
-  };
-  return control;
-}
-
 createTrackingSearchStackControl().addTo(map);
 updateSearchedAirspaceLabelZoom();
 createNdbToggleControl().addTo(map);
@@ -6774,7 +6558,6 @@ function createTokyoVaacControl() {
 createTyphoonControl().addTo(map);
 createTokyoVaacControl().addTo(map);
 createSpcControl().addTo(map);
-createUsModelControl().addTo(map);
 
 
 
