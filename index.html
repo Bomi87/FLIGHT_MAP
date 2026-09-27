@@ -6623,7 +6623,7 @@ function createNoaaModelControl() {
 
     L.DomEvent.on(modeSelect, "change", event => {
       L.DomEvent.stop(event);
-      if (noaaModelEnabled && noaaModelAirport) loadNoaaModelOverlay(true);
+      if (noaaModelEnabled && noaaModelAirport) loadNoaaModelOverlay(false);
     });
 
     return container;
@@ -6769,12 +6769,14 @@ function namBuildMesh_(airport) {
   while (centerLon > 180) centerLon -= 360;
   while (centerLon < -180) centerLon += 360;
 
-  // About 450-500 km around the selected airport.
-  // 45 x 55 = 2475 samples, split into small POST requests.
-  const rows = 45;
-  const cols = 55;
-  const latSpan = 4.4;
-  const lonSpan = 6.0;
+  // Open-Meteo free endpoint applies a minutely usage limit.
+  // Keep one regional chart to 12 x 14 = 168 coordinates so a few VALID
+  // changes can still be made without immediately exhausting the quota.
+  // Coverage is roughly 350-450 km around the selected airport.
+  const rows = 12;
+  const cols = 14;
+  const latSpan = 3.6;
+  const lonSpan = 4.8;
   const south = centerLat - latSpan / 2;
   const north = centerLat + latSpan / 2;
   const west = centerLon - lonSpan / 2;
@@ -6814,6 +6816,9 @@ async function namFetchChunk_(chunk, validIso) {
 
   if (!response.ok) {
     const t = await response.text().catch(() => "");
+    if (response.status === 429) {
+      throw new Error("NAM API 요청량 제한(429) · 약 1분 후 다시 시도해 주세요.");
+    }
     throw new Error(`NAM API HTTP ${response.status}${t ? " · " + t.slice(0,160) : ""}`);
   }
 
@@ -6841,20 +6846,10 @@ async function namFetchChunk_(chunk, validIso) {
 async function namFetchGrid_(airport, valid) {
   const mesh = namBuildMesh_(airport);
   const validIso = namIsoHour_(valid);
-  const chunks = [];
-  const chunkSize = 120;
 
-  for (let i = 0; i < mesh.points.length; i += chunkSize) {
-    chunks.push(mesh.points.slice(i, i + chunkSize));
-  }
-
-  // Keep concurrency moderate to avoid hammering the public API.
-  const all = [];
-  for (let i = 0; i < chunks.length; i += 4) {
-    const batch = chunks.slice(i, i + 4);
-    const result = await Promise.all(batch.map(chunk => namFetchChunk_(chunk, validIso)));
-    result.forEach(part => all.push(...part));
-  }
+  // One HTTP request per VALID. The response still contains one item per
+  // coordinate, but avoids the burst of 20+ parallel requests used before.
+  const all = await namFetchChunk_(mesh.points, validIso);
 
   return {...mesh, points: all, validIso};
 }
@@ -7139,8 +7134,8 @@ async function loadNoaaModelOverlay(forceReload) {
 
     setNoaaModelStatus(
       mode === "wind"
-        ? "10m 풍향·풍속 · kt · 좌표 직접 렌더링"
-        : "시간강수(mm) + MSLP 4 hPa · 좌표 직접 렌더링",
+        ? "10m 풍향·풍속 · kt · 저부하 지역 좌표 렌더링"
+        : "시간강수(mm) + MSLP 4 hPa · 저부하 지역 좌표 렌더링",
       false
     );
   } catch (err) {
