@@ -374,15 +374,15 @@
 }
 
 .leaflet-control-spc {
-  width: 110px;
+  width: auto;
   background: transparent;
-  border-radius: 4px;
   padding: 0;
-  font: 11px Arial, sans-serif;
-  color: #172554;
-  box-shadow: none;
+  margin: 0;
+  font-family: Arial, sans-serif;
   text-align: right;
+  box-shadow: none;
 }
+
 .leaflet-control-spc button {
   display: block;
   box-sizing: border-box;
@@ -401,23 +401,74 @@
   cursor: pointer;
   box-shadow: 0 1px 5px rgba(0,0,0,.4);
 }
-.leaflet-control-spc button.spc-on { background: #b45309; }
+
+.leaflet-control-spc button:hover { background: #1d4ed8; }
+.leaflet-control-spc button.spc-on,
+.leaflet-control-spc button.spc-on:hover { background: #b45309; }
+
+/* SPC ON일 때만 펼쳐지는 기간 선택 UI */
+.spc-period-select-wrap {
+  position: relative;
+  display: none;
+  width: 188px;
+  margin-top: 4px;
+  margin-left: auto;
+  border: 1px solid rgba(148,163,184,.55);
+  border-radius: 7px;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  box-shadow: 0 4px 12px rgba(15,23,42,.30);
+  overflow: hidden;
+}
+
+.leaflet-control-spc.spc-expanded .spc-period-select-wrap {
+  display: block;
+}
+
+.spc-period-select-wrap::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid #cbd5e1;
+  border-bottom: 1.5px solid #cbd5e1;
+  transform: translateY(-67%) rotate(45deg);
+  pointer-events: none;
+}
+
 .leaflet-control-spc select {
   display: block;
   box-sizing: border-box;
-  width: 110px;
-  height: 24px;
-  margin-top: 2px;
-  padding: 0 2px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background: #ffffff;
-  color: #172554;
-  font: 9px Arial, sans-serif;
-  text-align: center;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 28px 0 10px;
+  border: 0;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  color: #f8fafc;
+  font: 700 10px Arial, sans-serif;
+  letter-spacing: .1px;
+  text-align: left;
   cursor: pointer;
 }
 
+.leaflet-control-spc select:focus {
+  box-shadow: inset 0 0 0 1px rgba(96,165,250,.65);
+}
+
+.leaflet-control-spc select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+@media (max-width: 767px) {
+  .spc-period-select-wrap { width: 180px; }
+  .leaflet-control-spc select { font-size: 10px; }
+}
 
 /* ===== SPC 상세 팝업 ===== */
 .spc-popup-wrap {
@@ -5264,6 +5315,27 @@ function cleanSevereText(value) {
     .trim();
 }
 
+
+// Detailed Outlook 끝의 forecaster 서명/제품 링크/다음 발행 안내는 예보 본문이 아니므로 제거한다.
+function trimSpcOutlookTail(value) {
+  let text = cleanSevereText(value);
+  if (!text) return "";
+
+  const cutPatterns = [
+    /\n\.\.[A-Za-z][^\n]{0,80}\.\.\s*(?:\d{1,2}\/\d{1,2}\/\d{4}|\d{4})?/i,
+    /\n(?:CLICK\s+TO\s+GET|CLICK\s+HERE\s+TO\s+GET)\s+WUUS01\s+PTSDY1[^\n]*/i,
+    /\nNOTE:\s*THE\s+NEXT\s+DAY\s+1\s+OUTLOOK\s+IS\s+SCHEDULED[^\n]*/i,
+    /\nWUUS01\s+PTSDY1[^\n]*/i
+  ];
+
+  let cutAt = text.length;
+  for (const rx of cutPatterns) {
+    const match = rx.exec(text);
+    if (match && match.index < cutAt) cutAt = match.index;
+  }
+  return cleanSevereText(text.slice(0, cutAt));
+}
+
 function extractMarkdownSection(text, heading) {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const rx = new RegExp(`(?:^|\\n)#{2,3}\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n#{2,3}\\s+|$)`, "i");
@@ -5351,7 +5423,7 @@ function parseSevereWeatherMarkdown(markdown, dateKey) {
   return {
     headline: headlineMatch ? cleanSevereText(headlineMatch[1]) : "",
     summary: summaryMatch ? cleanSevereText(summaryMatch[1]) : extractMarkdownSection(text, "Outlook Summary"),
-    synopsis: synopsisMatch ? cleanSevereText(synopsisMatch[1]) : "",
+    synopsis: synopsisMatch ? trimSpcOutlookTail(synopsisMatch[1]) : "",
     risk
   };
 }
@@ -5646,31 +5718,44 @@ function createSpcControl() {
     button.type = "button";
     button.textContent = "대류예보 OFF";
 
-    // Day 번호 대신 실제 UTC 날짜를 표시한다. 예: 27SEP(SUN)
-    function spcDayOptionLabel(day) {
-      const now = new Date();
-      const date = new Date(Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate() + (day - 1),
-        12, 0, 0
-      ));
-      const dd = String(date.getUTCDate()).padStart(2, "0");
-      const mon = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][date.getUTCMonth()];
-      const dow = ["SUN","MON","TUE","WED","THU","FRI","SAT"][date.getUTCDay()];
-      return `${dd}${mon}(${dow})`;
+    const periodWrap = L.DomUtil.create("div", "spc-period-select-wrap", container);
+    const daySelect = L.DomUtil.create("select", "", periodWrap);
+    daySelect.setAttribute("aria-label", "SPC 예보 유효기간 선택");
+
+    const MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+    function compactUtcLabel(date) {
+      const d = date instanceof Date ? date : new Date(date);
+      if (Number.isNaN(d.getTime())) return "?";
+      return `${String(d.getUTCHours()).padStart(2,"0")}00Z, ${String(d.getUTCDate()).padStart(2,"0")}${MONTHS[d.getUTCMonth()]}`;
     }
 
-    // 대류 위험 + 토네이도 확률은 자동으로 함께 표시한다.
-    const daySelect = L.DomUtil.create("select", "", container);
+    function periodLabel(validIso, expireIso) {
+      const valid = new Date(validIso || "");
+      const expire = new Date(expireIso || "");
+      if (!Number.isNaN(valid.getTime()) && !Number.isNaN(expire.getTime())) {
+        return `${compactUtcLabel(valid)} ~ ${compactUtcLabel(expire)}`;
+      }
+      return "";
+    }
+
+    function fallbackPeriodLabel(day) {
+      const now = new Date();
+      const start = new Date(Date.UTC(
+        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + (day - 1), 12, 0, 0
+      ));
+      const end = new Date(start.getTime() + 24 * 3600000);
+      return `${compactUtcLabel(start)} ~ ${compactUtcLabel(end)}`;
+    }
+
     [1, 2, 3].forEach(day => {
       const option = document.createElement("option");
       option.value = String(day);
-      option.textContent = spcDayOptionLabel(day);
+      option.textContent = fallbackPeriodLabel(day);
       daySelect.appendChild(option);
     });
 
-    // 화면에는 별도 상태 설명을 표시하지 않지만 내부 상태 갱신 코드는 유지한다.
+    // 화면에는 별도 상태 설명을 표시하지 않지만 내부 상태 갱신은 유지한다.
     const status = document.createElement("div");
 
     let enabled = false;
@@ -5705,7 +5790,6 @@ function createSpcControl() {
       const layer = L.geoJSON(
         { type: "FeatureCollection", features: shiftedFeatures(features) },
         {
-          // Categorical은 넓은 면을 연하게 표시한다.
           style: feature => ({
             color: spcConvectiveColors[Number(feature.properties?.DN)] || "#64748b",
             weight: 1.5,
@@ -5720,7 +5804,6 @@ function createSpcControl() {
           }
         }
       );
-
       spcLayer.addLayer(layer);
     }
 
@@ -5728,7 +5811,6 @@ function createSpcControl() {
       const layer = L.geoJSON(
         { type: "FeatureCollection", features: shiftedFeatures(features) },
         {
-          // Tornado 확률은 Categorical 위에서 알아보기 쉽게 점선 테두리 중심으로 표시한다.
           style: feature => ({
             color: spcTornadoColors[Number(feature.properties?.DN)] || "#7c3aed",
             weight: 2.5,
@@ -5744,9 +5826,14 @@ function createSpcControl() {
           }
         }
       );
-
-      // Categorical 다음에 추가하여 Tornado 경계선이 위에 보이게 한다.
       spcLayer.addLayer(layer);
+    }
+
+    function updateSelectedPeriodFromIssued(day, issued) {
+      if (!issued) return;
+      const label = periodLabel(issued.VALID_ISO, issued.EXPIRE_ISO);
+      const option = [...daySelect.options].find(opt => opt.value === String(day));
+      if (option && label) option.textContent = label;
     }
 
     const refresh = async () => {
@@ -5756,25 +5843,19 @@ function createSpcControl() {
       const day = daySelect.value;
       const convectiveFile = spcFiles[`${day}-convective`];
       const tornadoFile = spcFiles[`${day}-tornado`];
-
       status.textContent = "SPC 자료 읽는 중...";
 
       try {
-        // Day 1/2는 두 자료를 동시에 가져오고, Day 3은 Categorical만 가져온다.
         const [convectiveResult, tornadoResult] = await Promise.allSettled([
           fetchSpcGeoJson(convectiveFile),
           tornadoFile ? fetchSpcGeoJson(tornadoFile) : Promise.resolve(null)
         ]);
 
         if (id !== requestId || !enabled) return;
-
-        if (convectiveResult.status !== "fulfilled") {
-          throw convectiveResult.reason;
-        }
+        if (convectiveResult.status !== "fulfilled") throw convectiveResult.reason;
 
         const convectiveData = convectiveResult.value;
         const convectiveFeatures = usableFeatures(convectiveData);
-
         let tornadoData = null;
         let tornadoFeatures = [];
         let tornadoError = "";
@@ -5789,10 +5870,7 @@ function createSpcControl() {
 
         spcLayer.clearLayers();
         addConvectiveLayer(convectiveFeatures, day);
-
-        if (tornadoFeatures.length) {
-          addTornadoLayer(tornadoFeatures, day);
-        }
+        if (tornadoFeatures.length) addTornadoLayer(tornadoFeatures, day);
 
         const issued =
           convectiveFeatures[0]?.properties ||
@@ -5800,19 +5878,16 @@ function createSpcControl() {
           tornadoFeatures[0]?.properties ||
           tornadoData?.features?.[0]?.properties;
 
-        let periodText = `SPC Day ${day}`;
-        if (issued?.VALID_ISO && issued?.EXPIRE_ISO) {
-          periodText = `유효: ${issued.VALID_ISO.slice(5,16).replace("T", " ")} ~ ${issued.EXPIRE_ISO.slice(5,16).replace("T", " ")}Z`;
-        }
+        updateSelectedPeriodFromIssued(day, issued);
 
         if (day === "3") {
-          status.textContent = `${periodText} · 대류위험 표시 (Day 3 토네이도 개별 확률 없음)`;
+          status.textContent = "대류위험 표시 (Day 3 토네이도 개별 확률 없음)";
         } else if (tornadoError) {
-          status.textContent = `${periodText} · 대류위험 표시 · 토네이도 자료 연결 실패`;
+          status.textContent = "대류위험 표시 · 토네이도 자료 연결 실패";
         } else if (!tornadoFeatures.length) {
-          status.textContent = `${periodText} · 대류위험 표시 · 토네이도 확률 구역 없음`;
+          status.textContent = "대류위험 표시 · 토네이도 확률 구역 없음";
         } else {
-          status.textContent = `${periodText} · 대류위험 + 토네이도 확률`;
+          status.textContent = "대류위험 + 토네이도 확률";
         }
       } catch (error) {
         if (id !== requestId) return;
@@ -5830,8 +5905,11 @@ function createSpcControl() {
       enabled = !enabled;
       button.textContent = enabled ? "대류예보 ON" : "대류예보 OFF";
       button.classList.toggle("spc-on", enabled);
+      container.classList.toggle("spc-expanded", enabled);
 
       if (enabled) {
+        // ON할 때는 항상 Day 1을 기본으로 보여준다.
+        daySelect.value = "1";
         spcLayer.addTo(map);
         refresh();
       } else {
@@ -5843,7 +5921,6 @@ function createSpcControl() {
     });
 
     L.DomEvent.on(daySelect, "change", refresh);
-
     return container;
   };
 
