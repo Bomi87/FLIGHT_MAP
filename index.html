@@ -6727,15 +6727,32 @@ function callNoaaModelJsonp(airport, step) {
  * Corner order required by Leaflet.DistortableImage:
  * NW, NE, SW, SE
  */
+function ensureNoaaChartPane() {
+  let pane = map.getPane("noaaChartPane");
+  if (!pane) pane = map.createPane("noaaChartPane");
+
+  // Leaflet 기본 pane보다 위에 둔다:
+  // tile ~200 / overlay ~400 / shadow ~500 / marker ~600 /
+  // tooltip ~650 / popup ~700.
+  // 지도 control은 별도 DOM(z-index 1000)이므로 버튼은 계속 조작 가능하다.
+  pane.style.zIndex = "900";
+  pane.style.pointerEvents = "none";
+  return pane;
+}
+
 function createNoaaMagOverlay(data, referenceLon) {
   const bounds = noaaModelShiftBounds(data.bounds, referenceLon);
   if (!bounds) return null;
 
-  // 완성형 NOAA/NCEP MAG 일기도를 100% 불투명으로 표시한다.
-  // 지도와의 정밀 지리정합 대신 일기도 자체의 해안선/주 경계를 기준으로 본다.
+  ensureNoaaChartPane();
+
+  // 완성형 NOAA/NCEP MAG 일기도를 최상위 전용 pane에 100% 불투명으로 표시한다.
+  // 따라서 일기도가 켜져 있는 동안 기존 base map, route, waypoint, marker,
+  // airspace 등 지도 위에 구현한 요소들은 일기도 아래로 가려진다.
   return L.imageOverlay(data.imageUrl, bounds, {
     opacity: 1,
     interactive: false,
+    pane: "noaaChartPane",
     className: "noaa-model-image-overlay",
     attribution: "NOAA/NCEP MAG"
   });
@@ -6782,7 +6799,7 @@ async function loadNoaaModelOverlay() {
         `VALID ${noaaModelFormatUtc(data.validIso)} · F${String(data.fhr).padStart(3,"0")}`;
     }
     setNoaaModelStatus(
-      `INIT ${noaaModelFormatUtc(data.initIso)} · NOAA/NCEP MAG 일기도 · 100% 불투명`,
+      `INIT ${noaaModelFormatUtc(data.initIso)} · NOAA/NCEP MAG 일기도 · 최상위 100% 불투명`,
       false
     );
   } catch (err) {
