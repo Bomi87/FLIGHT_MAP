@@ -6852,23 +6852,48 @@ function tokyoVaacJsonp() {
 function renderTokyoVaac(hour) {
   tokyoVaacLayer.clearLayers();
   if (!tokyoVaacData?.advisories) return 0;
+
+  // hour === 'all' 이면 현재 +6/+12/+18hr 를 한 번에 표시한다.
+  const targetHours = hour === 'all' ? [0,6,12,18] : [Number(hour)];
+  const styleByHour = {
+    0:  {color:'#a21caf', fillOpacity:0.20, dashArray:null},
+    6:  {color:'#e11d48', fillOpacity:0.15, dashArray:'7 5'},
+    12: {color:'#f97316', fillOpacity:0.13, dashArray:'5 5'},
+    18: {color:'#ca8a04', fillOpacity:0.11, dashArray:'3 5'}
+  };
+
   let count = 0;
   for (const a of tokyoVaacData.advisories) {
-    const phase = a.phases.find(p => p.hour === hour);
-    if (!phase || !phase.polygons.length || Date.parse(phase.valid) < Date.now() - 6*3600000) continue;
-    for (const p of phase.polygons) {
-      const coords = p.coordinates;
-      if (!Array.isArray(coords) || coords.length < 3) continue;
-      const ctx = {referenceLon:GLOBAL_WORLD_REFERENCE_LON};
-      const points = coords.map(c => toRenderLatLng(c[1],c[0],ctx));
-      const url = /^https:\/\/www\.data\.jma\.go\.jp\/vaac\/data\/TextData\//.test(a.sourceUrl) ? a.sourceUrl : 'https://www.data.jma.go.jp/vaac/data/vaac_list.html';
-      const popup = '<b>' + escapeHtml(a.volcano) + '</b> · Tokyo VAAC ' + escapeHtml(a.advisory) +
-        '<br>' + (hour ? '+' + hour + 'h 예보' : '관측') + ' · ' + escapeHtml(p.level) +
-        '<br>유효: ' + escapeHtml(phase.valid.replace('T',' ').slice(0,16)) + 'Z' +
-        '<br><a href="' + url + '" target="_blank" rel="noopener noreferrer">원문 VAA</a>';
-      L.polygon(points,{color:hour?'#e11d48':'#a21caf',weight:2,fillOpacity:0.18,dashArray:hour?'7 5':null})
-        .bindPopup(popup).addTo(tokyoVaacLayer);
-      count++;
+    for (const targetHour of targetHours) {
+      const phase = a.phases.find(p => p.hour === targetHour);
+      if (!phase || !phase.polygons.length || Date.parse(phase.valid) < Date.now() - 6*3600000) continue;
+
+      for (const p of phase.polygons) {
+        const coords = p.coordinates;
+        if (!Array.isArray(coords) || coords.length < 3) continue;
+
+        const ctx = {referenceLon:GLOBAL_WORLD_REFERENCE_LON};
+        const points = coords.map(c => toRenderLatLng(c[1],c[0],ctx));
+        const url = /^https:\/\/www\.data\.jma\.go\.jp\/vaac\/data\/TextData\//.test(a.sourceUrl)
+          ? a.sourceUrl
+          : 'https://www.data.jma.go.jp/vaac/data/vaac_list.html';
+
+        const phaseLabel = targetHour ? '+' + targetHour + 'h 예보' : '현재';
+        const popup = '<b>' + escapeHtml(a.volcano) + '</b> · Tokyo VAAC ' + escapeHtml(a.advisory) +
+          '<br>' + phaseLabel + ' · ' + escapeHtml(p.level) +
+          '<br>유효: ' + escapeHtml(phase.valid.replace('T',' ').slice(0,16)) + 'Z' +
+          '<br><a href="' + url + '" target="_blank" rel="noopener noreferrer">원문 VAA</a>';
+
+        const style = styleByHour[targetHour] || styleByHour[6];
+        L.polygon(points,{
+          color:style.color,
+          weight:2,
+          fillOpacity:style.fillOpacity,
+          dashArray:style.dashArray
+        }).bindPopup(popup).addTo(tokyoVaacLayer);
+
+        count++;
+      }
     }
   }
   return count;
@@ -6882,17 +6907,36 @@ function createTokyoVaacControl() {
     select.style.display='none';
     const choices=[[0,'현재'],[6,'+6hr'],[12,'+12hr'],[18,'+18hr']];
     const updateChoices=()=>{
-      const preferred=select.value;
+      const preferred=select.value || 'all';
       select.replaceChildren();
-      for (const [hour,label] of choices) {
-        const available=tokyoVaacData?.advisories.some(a=>a.phases?.some(phase=>
+
+      const availableHours = choices.filter(([hour]) =>
+        tokyoVaacData?.advisories.some(a=>a.phases?.some(phase=>
           phase.hour===hour && Date.parse(phase.valid)>=Date.now()-6*3600000 &&
-          phase.polygons?.some(p=>Array.isArray(p.coordinates) && p.coordinates.length>=3)));
-        if (!available) continue;
-        const option=document.createElement('option');
-        option.value=String(hour); option.textContent=label; select.appendChild(option);
+          phase.polygons?.some(p=>Array.isArray(p.coordinates) && p.coordinates.length>=3)))
+      );
+
+      // 하나라도 유효한 phase가 있으면 첫 항목은 항상 "전체".
+      if (availableHours.length) {
+        const allOption=document.createElement('option');
+        allOption.value='all';
+        allOption.textContent='전체 (현재 +6/+12/+18hr)';
+        select.appendChild(allOption);
       }
-      if ([...select.options].some(option=>option.value===preferred)) select.value=preferred;
+
+      for (const [hour,label] of availableHours) {
+        const option=document.createElement('option');
+        option.value=String(hour);
+        option.textContent=label;
+        select.appendChild(option);
+      }
+
+      if ([...select.options].some(option=>option.value===preferred)) {
+        select.value=preferred;
+      } else if ([...select.options].some(option=>option.value==='all')) {
+        select.value='all';
+      }
+
       select.style.display=tokyoVaacEnabled && select.options.length ? 'block' : 'none';
     };
     // 처음 열 때도 실제 예보 유무를 표시하되, 지도 표시는 사용자가 켤 때만 시작한다.
@@ -6916,7 +6960,7 @@ function createTokyoVaacControl() {
     L.DomEvent.disableClickPropagation(box); L.DomEvent.disableScrollPropagation(box);
     select.addEventListener('change',()=>{
       if (!tokyoVaacEnabled) return;
-      renderTokyoVaac(Number(select.value));
+      renderTokyoVaac(select.value === 'all' ? 'all' : Number(select.value));
     });
     button.addEventListener('click',async()=>{
       if (tokyoVaacEnabled) {
@@ -6937,7 +6981,8 @@ function createTokyoVaacControl() {
           button.classList.remove('vaac-on'); button.textContent='화산재 없음';
           return;
         }
-        renderTokyoVaac(Number(select.value));
+        select.value = [...select.options].some(option=>option.value==='all') ? 'all' : select.value;
+        renderTokyoVaac(select.value === 'all' ? 'all' : Number(select.value));
         tokyoVaacLayer.addTo(map);
         button.classList.add('vaac-on'); button.textContent='화산재 ON';
       } catch(error) {
