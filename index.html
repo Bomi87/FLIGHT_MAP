@@ -1037,6 +1037,64 @@
 }
 /* ===== ICAO 공항 검색 CSS 끝 ===== */
 
+/* ===== NOAA NAM 3km / GFS 모델 일기도 overlay ===== */
+.leaflet-control-noaa-model {
+  min-width: 250px;
+  max-width: 300px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 1px 6px rgba(0,0,0,.28);
+  font: 12px/1.35 Arial, sans-serif;
+}
+.leaflet-control-noaa-model button {
+  cursor: pointer;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  background: #fff;
+  padding: 5px 8px;
+  font-weight: 700;
+}
+.leaflet-control-noaa-model .noaa-model-toggle {
+  width: 100%;
+  margin-bottom: 6px;
+}
+.leaflet-control-noaa-model .noaa-model-toggle.model-on {
+  background: #e0f2fe;
+  border-color: #0284c7;
+  color: #075985;
+}
+.noaa-model-meta {
+  margin: 3px 0;
+  color: #334155;
+  word-break: keep-all;
+}
+.noaa-model-time-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.noaa-model-time-row button {
+  width: 34px;
+  padding: 4px 0;
+}
+.noaa-model-valid {
+  flex: 1;
+  text-align: center;
+  font-weight: 800;
+  color: #111827;
+}
+.noaa-model-status {
+  margin-top: 5px;
+  color: #64748b;
+}
+.noaa-model-status.error {
+  color: #b91c1c;
+}
+/* ===== NOAA NAM 3km / GFS 모델 일기도 overlay 끝 ===== */
+
+
 /* 모바일: 검색 컨트롤 위치/폭만 별도 보정 (접힘/펼침 동작은 PC와 공통) */
 @media (max-width: 767px) {
   /* A/C LIST(z-index:99999)보다 위에서 검색 버튼 터치를 받는다. */
@@ -1593,6 +1651,16 @@ const airportSearchLayer = L.featureGroup().addTo(map);
 let airportSearchUi = null;
 let isAirportSearching = false;
 /* ===== ICAO 공항 검색 설정 끝 ===== */
+
+/* ===== NOAA 모델 overlay 상태 ===== */
+let noaaModelUi = null;
+let noaaModelEnabled = false;
+let noaaModelAirport = null;
+let noaaModelStep = 0;
+let noaaModelLayer = null;
+let noaaModelRequestId = 0;
+/* ===== NOAA 모델 overlay 상태 끝 ===== */
+
     
 let firVisible = false;
 let firLoaded = false;
@@ -4603,6 +4671,14 @@ async function searchAirportOnTrackingMap(rawIcao) {
       [icao, airportName, countryName].filter(Boolean).join(" · "),
       false
     );
+
+    // NOAA 모델 overlay도 같은 공항 좌표를 사용한다.
+    setNoaaModelAirport({
+      icao,
+      lat,
+      lon: rawLon,
+      name: airportName || ""
+    });
   } catch (err) {
     console.error(err);
     setAirportSearchStatus(err.message || String(err), true);
@@ -5079,6 +5155,34 @@ async function loadNhcAtlanticStorms() {
     storms.get(id).push(feature);
   }
 
+  // NHC polygon/path coordinates must be unwrapped as ONE continuous sequence.
+  // Rendering every longitude independently can put one vertex on a neighboring
+  // 360° world copy and create a long line across the map.
+  function renderNhcSequence_(coordinates, anchorLon) {
+    if (!Array.isArray(coordinates) || !coordinates.length) return [];
+
+    const first = coordinates[0];
+    if (!Array.isArray(first) || first.length < 2) return [];
+
+    let prevLon = shiftLonNearReference(Number(first[0]), anchorLon);
+    const out = [[Number(first[1]), prevLon]];
+
+    for (let i = 1; i < coordinates.length; i++) {
+      const pair = coordinates[i];
+      if (!Array.isArray(pair) || pair.length < 2) continue;
+
+      const lat = Number(pair[1]);
+      const lon = Number(pair[0]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+      const nextLon = unwrapLonNext(prevLon, lon);
+      out.push([lat, nextLon]);
+      prevLon = nextLon;
+    }
+
+    return out;
+  }
+
   const layers = [];
   for (const [id, entries] of storms) {
     // 같은 폭풍의 새 예보가 들어오면 최신 발표의 위치만 사용한다.
@@ -5107,6 +5211,7 @@ async function loadNhcAtlanticStorms() {
     const visibleCopies = copies.filter(c => c.x >= 0 && c.x <= mapWidth);
     const bestCopy = (visibleCopies.length ? visibleCopies : copies)
       .sort((a, b) => Math.abs(a.x - mapWidth * 0.77) - Math.abs(b.x - mapWidth * 0.77))[0];
+    const stormAnchorLon = baseFirst[1] + bestCopy.shift;
     // 해당 폭풍의 같은 발표 시각에 나온 cone만 사용한다.
     for (const cone of coneFeatures) {
       const p = cone.properties || {};
@@ -5116,10 +5221,9 @@ async function loadNhcAtlanticStorms() {
       const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
       for (const rings of polygons) {
         if (!Array.isArray(rings) || !Array.isArray(rings[0]) || rings[0].length < 3) continue;
-        const latlngs = rings.map(ring => ring.map(([lon,lat]) => {
-          const point = toRenderLatLng(lat, lon, context);
-          return [point[0], point[1] + bestCopy.shift];
-        }));
+        const latlngs = rings
+          .map(ring => renderNhcSequence_(ring, stormAnchorLon))
+          .filter(ring => ring.length >= 3);
         L.polygon(latlngs, {
           color: "#f59e0b", weight: 1, fillColor: "#fbbf24", fillOpacity: 0.12,
           interactive: false
@@ -5138,19 +5242,16 @@ async function loadNhcAtlanticStorms() {
       for (const region of officialRadii.polygons || []) {
         if (![34,50,64].includes(region.windKt) || !Array.isArray(region.coordinates) || region.coordinates.length < 3) continue;
         const color = region.windKt === 64 ? '#ef4444' : region.windKt === 50 ? '#f97316' : '#facc15';
-        const area = region.coordinates.map(([lon,lat]) => {
-          const point = toRenderLatLng(lat, lon, context);
-          return [point[0], point[1] + bestCopy.shift];
-        });
+        const area = renderNhcSequence_(region.coordinates, stormAnchorLon);
+        if (area.length < 3) continue;
         L.polygon(area, {color, weight:1, opacity:.7, fillColor:color, fillOpacity:.12, interactive:false})
           .addTo(group);
       }
     }
-    const positions = points.map(item => {
-      const [lon, lat] = item.geometry.coordinates;
-      const rendered = toRenderLatLng(lat, lon, context);
-      return [rendered[0], rendered[1] + bestCopy.shift];
-    });
+    const positions = renderNhcSequence_(
+      points.map(item => item.geometry.coordinates),
+      stormAnchorLon
+    );
     if (positions.length > 1) {
       L.polyline(positions, { color: "#dc2626", weight: 3, dashArray: "8 5", interactive: false })
         .addTo(group);
@@ -5887,7 +5988,12 @@ async function fillSpcExtraDetails(target, properties) {
 
     target.replaceChildren();
 
-    const riskMeta = spcRiskMeta(properties, outlook.headline);
+    const riskMeta = SPC_RISK_TEXT[Number(properties?.DN)] || {
+      code: "",
+      label: "SPC Outlook",
+      tone: "neutral",
+      message: "SPC 대류 전망"
+    };
     const headline = document.createElement("div");
     headline.className = `spc-risk-headline ${spcRiskCssClass(riskMeta.tone)}`;
 
@@ -6417,7 +6523,258 @@ function createSpcControl() {
   return control;
 }
 
+
+/* =========================================================
+ * NOAA MAG NAM-HIRES (NAM 3 km) / GFS 일기도 overlay
+ *
+ * - 기존 공항검색에서 선택한 ICAO 좌표를 재사용
+ * - 미국 본토: NAM-HIRES
+ * - 그 외 지역: GFS
+ * - 현재시각 이후 가장 가까운 VALID를 step=0으로 요청
+ * - +/- 로 이전/다음 forecast map
+ * ========================================================= */
+function createNoaaModelControl() {
+  const control = L.control({ position: "topright" });
+
+  control.onAdd = function () {
+    const container = L.DomUtil.create(
+      "div",
+      "leaflet-control leaflet-control-noaa-model"
+    );
+
+    const toggle = L.DomUtil.create("button", "noaa-model-toggle", container);
+    toggle.type = "button";
+    toggle.textContent = "NOAA 모델 일기도 OFF";
+
+    const airportMeta = L.DomUtil.create("div", "noaa-model-meta", container);
+    airportMeta.textContent = "공항검색에서 ICAO를 먼저 선택하세요.";
+
+    const modelMeta = L.DomUtil.create("div", "noaa-model-meta", container);
+    modelMeta.textContent = "미국: NAM 3km · 그 외: GFS";
+
+    const timeRow = L.DomUtil.create("div", "noaa-model-time-row", container);
+    const prev = L.DomUtil.create("button", "", timeRow);
+    prev.type = "button";
+    prev.textContent = "−";
+    const valid = L.DomUtil.create("div", "noaa-model-valid", timeRow);
+    valid.textContent = "VALID --";
+    const next = L.DomUtil.create("button", "", timeRow);
+    next.type = "button";
+    next.textContent = "+";
+
+    const status = L.DomUtil.create("div", "noaa-model-status", container);
+    status.textContent = "NOAA/NCEP MAG 모델 그래픽";
+
+    noaaModelUi = { container, toggle, airportMeta, modelMeta, valid, status, prev, next };
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    L.DomEvent.on(toggle, "click", event => {
+      L.DomEvent.stop(event);
+      noaaModelEnabled = !noaaModelEnabled;
+      toggle.textContent = noaaModelEnabled ? "NOAA 모델 일기도 ON" : "NOAA 모델 일기도 OFF";
+      toggle.classList.toggle("model-on", noaaModelEnabled);
+
+      if (!noaaModelEnabled) {
+        ++noaaModelRequestId;
+        clearNoaaModelLayer();
+        setNoaaModelStatus("NOAA/NCEP MAG 모델 그래픽", false);
+        return;
+      }
+
+      noaaModelStep = 0;
+      if (!noaaModelAirport) {
+        setNoaaModelStatus("공항검색에서 ICAO 공항을 먼저 검색하세요.", true);
+        return;
+      }
+      loadNoaaModelOverlay();
+    });
+
+    L.DomEvent.on(prev, "click", event => {
+      L.DomEvent.stop(event);
+      if (!noaaModelEnabled || !noaaModelAirport) return;
+      noaaModelStep -= 1;
+      loadNoaaModelOverlay();
+    });
+
+    L.DomEvent.on(next, "click", event => {
+      L.DomEvent.stop(event);
+      if (!noaaModelEnabled || !noaaModelAirport) return;
+      noaaModelStep += 1;
+      loadNoaaModelOverlay();
+    });
+
+    return container;
+  };
+
+  return control;
+}
+
+function setNoaaModelAirport(airport) {
+  noaaModelAirport = airport || null;
+  noaaModelStep = 0;
+
+  if (noaaModelUi) {
+    noaaModelUi.airportMeta.textContent = airport
+      ? `${airport.icao}${airport.name ? " · " + airport.name : ""}`
+      : "공항검색에서 ICAO를 먼저 선택하세요.";
+  }
+
+  if (noaaModelEnabled && noaaModelAirport) loadNoaaModelOverlay();
+}
+
+function setNoaaModelStatus(message, isError) {
+  if (!noaaModelUi) return;
+  noaaModelUi.status.textContent = message || "";
+  noaaModelUi.status.classList.toggle("error", Boolean(isError));
+}
+
+function clearNoaaModelLayer() {
+  if (noaaModelLayer) {
+    map.removeLayer(noaaModelLayer);
+    noaaModelLayer = null;
+  }
+}
+
+function noaaModelFormatUtc(iso) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "--";
+  return `${String(d.getUTCDate()).padStart(2,"0")} ${d.toLocaleString("en-US",{month:"short",timeZone:"UTC"}).toUpperCase()} ${String(d.getUTCHours()).padStart(2,"0")}Z`;
+}
+
+function noaaModelShiftBounds(bounds, referenceLon) {
+  if (!Array.isArray(bounds) || bounds.length !== 4) return null;
+  const south = Number(bounds[0]);
+  let west = Number(bounds[1]);
+  const north = Number(bounds[2]);
+  let east = Number(bounds[3]);
+
+  if (![south,west,north,east].every(Number.isFinite)) return null;
+
+  // dateline-crossing domain
+  if (east < west) east += 360;
+
+  let center = (west + east) / 2;
+  while (center - referenceLon > 180) {
+    west -= 360; east -= 360; center -= 360;
+  }
+  while (center - referenceLon < -180) {
+    west += 360; east += 360; center += 360;
+  }
+
+  return [[south, west], [north, east]];
+}
+
+function callNoaaModelJsonp(airport, step) {
+  return new Promise((resolve, reject) => {
+    const callbackName =
+      "noaaModelCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+
+    const params = new URLSearchParams({
+      action: "modelMap",
+      lat: String(airport.lat),
+      lon: String(airport.lon),
+      icao: String(airport.icao || ""),
+      step: String(step || 0),
+      callback: callbackName,
+      _: String(Date.now())
+    });
+
+    const script = document.createElement("script");
+    // NAM/GFS 기능은 Tokyo VAAC/NHC와 같은 Apps Script 백엔드에 추가한다.
+    script.src =
+      TOKYO_VAAC_BACKEND_URL +
+      (TOKYO_VAAC_BACKEND_URL.includes("?") ? "&" : "?") +
+      params.toString();
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("NOAA 모델 요청 시간이 초과되었습니다."));
+    }, 30000);
+
+    window[callbackName] = data => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("NOAA 모델 백엔드에 연결할 수 없습니다."));
+    };
+
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[callbackName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    document.head.appendChild(script);
+  });
+}
+
+async function loadNoaaModelOverlay() {
+  if (!noaaModelEnabled || !noaaModelAirport) return;
+
+  const id = ++noaaModelRequestId;
+  setNoaaModelStatus("최신 모델 일기도 확인 중...", false);
+
+  try {
+    const data = await callNoaaModelJsonp(noaaModelAirport, noaaModelStep);
+    if (id !== noaaModelRequestId || !noaaModelEnabled) return;
+
+    if (!data || !data.ok) {
+      throw new Error((data && data.error) || "NOAA 모델 응답 오류");
+    }
+
+    if (!data.imageUrl) {
+      throw new Error("MAG 그래픽 이미지 URL을 찾지 못했습니다.");
+    }
+
+    const refLon = shiftLonNearReference(
+      Number(noaaModelAirport.lon),
+      GLOBAL_WORLD_REFERENCE_LON
+    );
+    const bounds = noaaModelShiftBounds(data.bounds, refLon);
+    if (!bounds) throw new Error("모델 지도 범위 정보가 없습니다.");
+
+    clearNoaaModelLayer();
+
+    noaaModelLayer = L.imageOverlay(data.imageUrl, bounds, {
+      opacity: 0.58,
+      interactive: false,
+      className: "noaa-model-image-overlay",
+      attribution: "NOAA/NCEP MAG"
+    });
+
+    noaaModelLayer.on("error", () => {
+      setNoaaModelStatus("NOAA 모델 이미지를 읽지 못했습니다. +/-로 다른 VALID를 선택해 보세요.", true);
+    });
+
+    noaaModelLayer.addTo(map);
+
+    if (noaaModelUi) {
+      noaaModelUi.modelMeta.textContent =
+        `${data.modelLabel || data.model || ""} · ${data.regionLabel || data.area || ""} · ${data.productLabel || data.product || ""}`;
+      noaaModelUi.valid.textContent =
+        `VALID ${noaaModelFormatUtc(data.validIso)} · F${String(data.fhr).padStart(3,"0")}`;
+    }
+
+    setNoaaModelStatus(
+      `INIT ${noaaModelFormatUtc(data.initIso)} · NOAA/NCEP MAG`,
+      false
+    );
+  } catch (err) {
+    if (id !== noaaModelRequestId) return;
+    console.error("NOAA model overlay failed:", err);
+    clearNoaaModelLayer();
+    setNoaaModelStatus(err.message || String(err), true);
+  }
+}
+
+
 createTrackingSearchStackControl().addTo(map);
+createNoaaModelControl().addTo(map);
 updateSearchedAirspaceLabelZoom();
 createNdbToggleControl().addTo(map);
 createFirToggleControl().addTo(map);
