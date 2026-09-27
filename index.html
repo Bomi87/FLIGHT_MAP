@@ -5288,6 +5288,90 @@ const spcTornadoColors = { 2: "#79ba7a", 5: "#bd998a",
   10: "#ffe481", 15: "#ff8080", 30: "#ff80ff",
   45: "#c896f7", 60: "#104e8b" };
 
+const SPC_RISK_TEXT = {
+  2: { code: "TSTM", label: "일반 뇌우", tone: "green",
+       message: "일반 뇌우 · severe thunderstorm 위험 없음" },
+  3: { code: "MRGL", label: "Marginal Risk", tone: "orange",
+       message: "Marginal Risk · 국지적인 severe thunderstorm 가능" },
+  4: { code: "SLGT", label: "Slight Risk", tone: "orange",
+       message: "Slight Risk · severe thunderstorm 위험 있음" },
+  5: { code: "ENH", label: "Enhanced Risk", tone: "red",
+       message: "Enhanced Risk · severe thunderstorm 위험 증가" },
+  6: { code: "MDT", label: "Moderate Risk", tone: "red",
+       message: "Moderate Risk · 높은 severe thunderstorm 위험" },
+  8: { code: "HIGH", label: "High Risk", tone: "red",
+       message: "High Risk · 매우 높은 severe thunderstorm 위험" }
+};
+
+function spcRiskMeta(properties, headlineText) {
+  const text = String(headlineText || "").toUpperCase();
+
+  // NO SEVERE 문구는 clicked polygon DN보다 우선한다.
+  if (/\bNO\s+SEVERE\b|NO\s+SEVERE\s+THUNDERSTORM\s+AREAS?\s+FORECAST/.test(text)) {
+    return SPC_RISK_TEXT[2];
+  }
+
+  if (/\bHIGH\s+RISK\b/.test(text)) return SPC_RISK_TEXT[8];
+  if (/\bMODERATE\s+RISK\b/.test(text)) return SPC_RISK_TEXT[6];
+  if (/\bENHANCED\s+RISK\b/.test(text)) return SPC_RISK_TEXT[5];
+  if (/\bSLIGHT\s+RISK\b/.test(text)) return SPC_RISK_TEXT[4];
+  if (/\bMARGINAL\s+RISK\b/.test(text)) return SPC_RISK_TEXT[3];
+
+  // 문구가 새 형식이어도 오류 없이 공식 DN으로 fallback.
+  return SPC_RISK_TEXT[Number(properties?.DN)] || {
+    code: "",
+    label: "SPC Outlook",
+    tone: "neutral",
+    message: "SPC 대류 전망"
+  };
+}
+
+function spcRiskCssClass(tone) {
+  return tone === "red" ? "risk-red" :
+    tone === "orange" ? "risk-orange" :
+    tone === "green" ? "risk-green" : "risk-neutral";
+}
+
+function spcNaturalizeKorean(textValue) {
+  let s = String(textValue || "");
+
+  const replacements = [
+    [/아니요\s+SEVERE\s+THUNDERSTORM\s+지역\s+예측/gi, "severe thunderstorm 위험 지역 없음"],
+    [/NO\s+SEVERE\s+THUNDERSTORM\s+AREAS?\s+FORECAST/gi, "severe thunderstorm 위험 지역 없음"],
+
+    [/Severe thunderstorms은/gi, "severe thunderstorms가"],
+    [/Severe thunderstorms는/gi, "severe thunderstorms가"],
+    [/severe thunderstorms은/gi, "severe thunderstorms가"],
+    [/severe thunderstorms는/gi, "severe thunderstorms가"],
+
+    [/thunderstorm development에 충분합니다/gi, "thunderstorm development에 필요한 조건이 갖춰질 전망입니다"],
+    [/thunderstorm development이/gi, "thunderstorm development가"],
+
+    [/thunderstorms이/gi, "thunderstorms가"],
+    [/thunderstorms은/gi, "thunderstorms가"],
+    [/storms이/gi, "storms가"],
+    [/storms은/gi, "storms가"],
+
+    [/기압골를/g, "기압골을"],
+    [/기압골가/g, "기압골이"],
+    [/기압능가/g, "기압능이"],
+    [/기압능이\s*(?:배치|자리)됩니다/g, "기압능이 형성됩니다"],
+    [/기압능이\s*(?:배치|자리)할\s*전망입니다/g, "기압능이 형성될 전망입니다"],
+
+    [/상위 레벨 저점/gi, "상층 저기압"],
+    [/이 성계 근처/g, "이 기압계 주변"],
+    [/성계 근처/g, "기압계 주변"],
+    [/일주 가열/g, "낮 동안 가열"],
+    [/중간 수준 패턴/g, "중층 기압계"],
+    [/중간 수준에서는/g, "중층에서는"]
+  ];
+
+  for (const [pattern, replacement] of replacements) {
+    s = s.replace(pattern, replacement);
+  }
+  return s;
+}
+
 // 이 지도는 태평양 중심으로 사용하므로 미국 예보는 오른쪽 world copy(+360°)에 표시한다.
 const US_RIGHT_WORLD_SHIFT = 360;
 const US_RIGHT_CONUS_BOUNDS = L.latLngBounds([[24, 235], [50, 294]]);
@@ -5750,7 +5834,7 @@ async function translateSevereText(text) {
         .replace(/기압능이\s*(?:배치|자리)됩니다/g, "기압능이 형성됩니다")
         .replace(/기압능이\s*(?:배치|자리)할\s*전망입니다/g, "기압능이 형성될 전망입니다");
 
-      return restored || source;
+      return spcNaturalizeKorean(restored || source);
     } catch (_) {
       return source;
     }
@@ -5774,30 +5858,7 @@ function addSpcSection(parent, title, text) {
 }
 
 function spcHeadlineRiskClass(properties, headlineText) {
-  const text = String(headlineText || "").toUpperCase();
-
-  // Headline wording is the best signal for the national outlook statement.
-  // Keep exact category checks ahead of the generic word "SEVERE", because
-  // even a MARGINAL headline contains "SEVERE THUNDERSTORMS".
-  if (/\bNO\s+SEVERE\b|NO\s+SEVERE\s+THUNDERSTORM\s+AREAS\s+FORECAST/.test(text)) {
-    return "risk-green";
-  }
-  if (/\b(?:ENHANCED|MODERATE|HIGH)\s+RISK\b/.test(text)) {
-    return "risk-red";
-  }
-  if (/\b(?:MARGINAL|SLIGHT)\s+RISK\b/.test(text)) {
-    return "risk-orange";
-  }
-
-  // Fallback to the official SPC categorical DN for the polygon that was clicked.
-  // DN 2 = General Thunder, 3 = Marginal, 4 = Slight, 5/6/8 = higher severe categories.
-  const dn = Number(properties?.DN);
-  if (dn === 2) return "risk-green";
-  if (dn === 3 || dn === 4) return "risk-orange";
-  if (dn === 5 || dn === 6 || dn === 8) return "risk-red";
-
-  // Unknown/new wording must never break the popup. It simply gets a neutral style.
-  return "risk-neutral";
+  return spcRiskCssClass(spcRiskMeta(properties, headlineText).tone);
 }
 
 async function fillSpcExtraDetails(target, properties) {
@@ -5807,20 +5868,18 @@ async function fillSpcExtraDetails(target, properties) {
 
   try {
     const outlook = await fetchSevereWeatherPage(dateKey);
-    const [headlineKo, summaryKo, synopsisKo] = await Promise.all([
-      translateSevereText(outlook.headline),
+    const [summaryKo, synopsisKo] = await Promise.all([
       translateSevereText(outlook.summary),
       translateSevereText(outlook.synopsis)
     ]);
 
     target.replaceChildren();
 
-    if (headlineKo) {
-      const headline = document.createElement("div");
-      headline.className = `spc-risk-headline ${spcHeadlineRiskClass(properties, outlook.headline)}`;
-      headline.textContent = headlineKo;
-      target.appendChild(headline);
-    }
+    const riskMeta = spcRiskMeta(properties, outlook.headline);
+    const headline = document.createElement("div");
+    headline.className = `spc-risk-headline ${spcRiskCssClass(riskMeta.tone)}`;
+    headline.textContent = riskMeta.message;
+    target.appendChild(headline);
 
     const riskKeys = [
       ["tornado", "TORNADO"],
