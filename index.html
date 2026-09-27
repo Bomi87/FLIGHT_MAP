@@ -2516,6 +2516,34 @@
   text-align: center !important;
 }
 
+
+
+/* ===== NOAA 팝업 폭 확대 v26 ===== */
+.leaflet-control-noaa-model.model-expanded {
+  width: 214px !important;
+  min-width: 214px !important;
+  max-width: 214px !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-panel {
+  width: 214px !important;
+}
+
+/* 팝업 폭이 넓어진 만큼 토글 버튼은 기존 오른쪽 열 위치에 고정 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-toggle {
+  width: 62px !important;
+  min-width: 62px !important;
+  max-width: 62px !important;
+  margin-left: auto !important;
+}
+
+/* 긴 오류 문구가 한 줄 더 여유 있게 들어오도록 약간만 압축 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-status {
+  font-size: 9.5px !important;
+  line-height: 1.2 !important;
+  word-break: keep-all !important;
+}
+
 </style>
 </head>
 <body>
