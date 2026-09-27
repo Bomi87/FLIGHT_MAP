@@ -5105,6 +5105,34 @@ const spcConvectiveNames = { 2: "일반 뇌우", 3: "Marginal", 4: "Slight",
 const spcTornadoColors = { 2: "#79ba7a", 5: "#bd998a",
   10: "#ffe481", 15: "#ff8080", 30: "#ff80ff",
   45: "#c896f7", 60: "#104e8b" };
+
+// 이 지도는 태평양 중심으로 사용하므로 미국 예보는 오른쪽 world copy(+360°)에 표시한다.
+const US_RIGHT_WORLD_SHIFT = 360;
+const US_RIGHT_CONUS_BOUNDS = L.latLngBounds([[24, 235], [50, 294]]);
+
+function shiftGeometryLongitude(geometry, shift = US_RIGHT_WORLD_SHIFT) {
+  if (!geometry || !Array.isArray(geometry.coordinates)) return geometry;
+
+  const shiftCoordinates = coordinates => {
+    if (!Array.isArray(coordinates)) return coordinates;
+
+    if (
+      coordinates.length >= 2 &&
+      typeof coordinates[0] === "number" &&
+      typeof coordinates[1] === "number"
+    ) {
+      return [coordinates[0] + shift, coordinates[1], ...coordinates.slice(2)];
+    }
+
+    return coordinates.map(shiftCoordinates);
+  };
+
+  return {
+    ...geometry,
+    coordinates: shiftCoordinates(geometry.coordinates)
+  };
+}
+
 function spcPopup(properties, day, type) {
   const p = properties || {};
   const node = document.createElement("div");
@@ -5174,7 +5202,13 @@ function createSpcControl() {
         const features = data.features.filter(feature =>
           feature.geometry && ["Polygon", "MultiPolygon"].includes(feature.geometry.type))
           .sort((a, b) => Number(a.properties?.DN) - Number(b.properties?.DN));
-        const geojson = L.geoJSON({ type: "FeatureCollection", features }, {
+        // SPC 원본은 -180~180 경도이므로 오른쪽 미국 world copy로 +360° 이동한다.
+        const shiftedFeatures = features.map(feature => ({
+          ...feature,
+          geometry: shiftGeometryLongitude(feature.geometry)
+        }));
+
+        const geojson = L.geoJSON({ type: "FeatureCollection", features: shiftedFeatures }, {
           style: feature => ({ color: colors[Number(feature.properties?.DN)] || "#64748b",
             weight: 1.5, opacity: .9, fillOpacity: .24 }),
           onEachFeature: (feature, layer) => layer.bindPopup(spcPopup(feature.properties, day, type))
@@ -5230,17 +5264,30 @@ function usForecastLabel(time) {
 function usWindSamples() {
   const size = map.getSize();
   const samples = [];
-  // Pixel spacing keeps the overlay legible at both national and local zooms.
+
+  // 오른쪽 world copy의 미국만 표본화한다.
+  // 화면 표시 경도 235~294°는 API 요청 시 -125~-66°로 되돌린다.
   const columns = Math.min(9, Math.max(1, Math.ceil(size.x / 115)));
   const rows = Math.min(7, Math.max(1, Math.ceil(size.y / 115)));
+
   for (let row = 0; row < rows; row++) {
     for (let column = 0; column < columns; column++) {
       const point = map.containerPointToLatLng(L.point(
-        size.x * (column + .5) / columns, size.y * (row + .5) / rows));
-      if (point.lat < 24 || point.lat > 50 || point.lng < -125 || point.lng > -66) continue;
-      samples.push({ lat: point.lat, lon: point.lng });
+        size.x * (column + .5) / columns,
+        size.y * (row + .5) / rows
+      ));
+
+      if (point.lat < 24 || point.lat > 50) continue;
+      if (point.lng < 235 || point.lng > 294) continue;
+
+      samples.push({
+        lat: point.lat,
+        lon: point.lng - US_RIGHT_WORLD_SHIFT, // API용 실제 미국 경도
+        displayLon: point.lng                  // 지도 표시용 오른쪽 world copy 경도
+      });
     }
   }
+
   return samples;
 }
 async function loadUsWind(samples) {
@@ -5311,8 +5358,15 @@ function createUsModelControl() {
           const init = new Date(initialized).toISOString().replace(/[-:T]/g, "").slice(0, 12);
           const minutes = String(hours * 60).padStart(4, "0");
           const tileUrl = `${US_HRRR_TMS}hrrr::REFD-F${minutes}-${init}/{z}/{x}/{y}.png`;
-          usReflectivityLayer = L.tileLayer(tileUrl, { tms: true, opacity: .62,
-            maxNativeZoom: 9, maxZoom: 19, attribution: "HRRR simulated reflectivity © Iowa Environmental Mesonet" });
+          usReflectivityLayer = L.tileLayer(tileUrl, {
+            tms: true,
+            opacity: .62,
+            maxNativeZoom: 9,
+            maxZoom: 19,
+            // 타일은 world-wrap을 사용하되 표시 영역은 오른쪽 미국으로 제한한다.
+            bounds: US_RIGHT_CONUS_BOUNDS,
+            attribution: "HRRR simulated reflectivity © Iowa Environmental Mesonet"
+          });
           usReflectivityLayer.on("tileerror", () => { status.textContent = "에코 타일을 읽지 못했습니다. 다른 예보시각을 선택해 주세요."; });
           usReflectivityLayer.addTo(map);
         } else echoIssue = "해당 시각의 HRRR 에코가 아직 없습니다";
@@ -5330,7 +5384,7 @@ function createUsModelControl() {
         const icon = L.divIcon({ className: "us-model-wind-icon",
           html: `<span><b style="display:inline-block;transform:rotate(${arrow}deg)">↑</b> ${Math.round(speed)}kt</span>`,
           iconSize: [56, 18], iconAnchor: [28, 9] });
-        L.marker([position.lat, position.lon], { icon, keyboard: false })
+        L.marker([position.lat, position.displayLon ?? (position.lon + US_RIGHT_WORLD_SHIFT)], { icon, keyboard: false })
           .bindPopup(`HRRR 10m 지상풍<br>${usForecastLabel(valid)}<br>${speed.toFixed(1)} kt / ${Math.round(direction)}° (from)`)
           .addTo(usWindLayer);
         count++;
@@ -5343,7 +5397,7 @@ function createUsModelControl() {
       usWindLayer.clearLayers();
       if (!enabled || !windCheck.checked) { render(); return; }
       const samples = usWindSamples();
-      if (!samples.length) { status.textContent = "미국 본토로 지도를 이동하면 지상풍이 표시됩니다."; return; }
+      if (!samples.length) { status.textContent = "오른쪽 미국 본토가 화면에 보이도록 지도를 이동하면 지상풍이 표시됩니다."; return; }
       status.textContent = `HRRR 지상풍 ${samples.length}개 지점 읽는 중...`;
       try {
         const values = await loadUsWind(samples);
