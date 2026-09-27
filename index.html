@@ -12,6 +12,7 @@
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
 
   <style>
     html, body {
@@ -333,7 +334,7 @@
   background: #991b1b;
 }
     
-.leaflet-control-refresh {
+.leaflet-control-typhoon {
   background: #2563eb;
   border-radius: 4px;
   box-shadow: 0 1px 5px rgba(0,0,0,0.4);
@@ -341,10 +342,10 @@
   margin-top: 0px;
 }
 
-.leaflet-control-refresh button {
+.leaflet-control-typhoon button {
   display: block;
   width: 100%;
-  min-width: 54px;
+  min-width: 84px;
   height: 24px;
   border: none;
   background: #2563eb;
@@ -356,13 +357,18 @@
   text-align: center;
 }
 
-.leaflet-control-refresh button:hover {
+.leaflet-control-typhoon button:hover {
   background: #1d4ed8;
 }
 
-.leaflet-control-refresh button:disabled {
+.leaflet-control-typhoon button:disabled {
   background: #93c5fd;
   cursor: default;
+}
+
+.leaflet-control-typhoon button.typhoon-on,
+.leaflet-control-typhoon button.typhoon-on:hover {
+  background: #b45309;
 }
 
 .leaflet-control-ndb-toggle button {
@@ -4596,44 +4602,130 @@ function createArtccToggleControl() {
   return control;
 }
     
-function createRefreshControl() {
+const JTWC_RSS_URL = "https://www.metoc.navy.mil/jtwc/rss/jtwc.rss";
+const typhoonLayer = L.featureGroup();
+let typhoonVisible = false;
+
+function getJtwcKmzLinks(rssText) {
+  const doc = parseXml(rssText);
+  if (doc.querySelector("parsererror")) throw new Error("JTWC RSS XML 오류");
+  const urls = new Set();
+  for (const item of doc.getElementsByTagName("item")) {
+    const desc = textOfFirst(item, "description");
+    const matches = desc.matchAll(/https:\/\/www\.metoc\.navy\.mil\/jtwc\/products\/[a-z0-9]+\.kmz/gi);
+    for (const match of matches) urls.add(match[0]);
+  }
+  return [...urls];
+}
+
+async function loadJtwcStorm(url) {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  if (!window.JSZip) throw new Error("KMZ 압축 해제 라이브러리를 불러오지 못했습니다");
+  const archive = await JSZip.loadAsync(await response.arrayBuffer());
+  const kmlFile = archive.file("doc.kml") || Object.values(archive.files).find(f => /\.kml$/i.test(f.name));
+  if (!kmlFile) throw new Error(`${url}: KML 파일이 없습니다`);
+  const doc = parseXml(await kmlFile.async("string"));
+  if (doc.querySelector("parsererror")) throw new Error(`${url}: KML XML 오류`);
+  const stormId = new URL(url).pathname.split("/").pop().replace(/\.kmz$/i, "").toUpperCase();
+  const result = L.featureGroup();
+  const placemarks = [...doc.getElementsByTagName("Placemark")];
+  const context = { referenceLon: GLOBAL_WORLD_REFERENCE_LON };
+  const popup = name => `<b>${escapeHtml(name || stormId)}</b><br><small>JTWC ${escapeHtml(stormId)}</small><br><a href="${url}" target="_blank" rel="noopener noreferrer">원본 KMZ</a>`;
+
+  // 풍속 반경을 먼저 그려 경로와 위치 점이 위에 보이도록 한다.
+  for (const pm of placemarks) {
+    const name = textOfFirst(pm, "name");
+    for (const node of pm.getElementsByTagName("Polygon")) {
+      const outer = node.getElementsByTagName("outerBoundaryIs")[0];
+      const coords = parseCoordinates(textOfFirst(outer || node, "coordinates"));
+      if (coords.length < 3) continue;
+      const color = /64\s*KT/i.test(name) ? "#ef4444" : /50\s*KT/i.test(name) ? "#f97316" : "#facc15";
+      L.polygon(toRenderLatLngsFromCoords(coords, context), {
+        color, weight: 1, opacity: 0.7, fillColor: color, fillOpacity: 0.12
+      }).bindPopup(popup(name)).addTo(result);
+    }
+  }
+  for (const pm of placemarks) {
+    const name = textOfFirst(pm, "name");
+    for (const node of pm.getElementsByTagName("LineString")) {
+      const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+      if (coords.length < 2) continue;
+      L.polyline(toRenderLatLngsFromCoords(coords, context), {
+        color: /best|past/i.test(name) ? "#64748b" : "#dc2626", weight: 3,
+        dashArray: /best|past/i.test(name) ? null : "8 5"
+      }).bindPopup(popup(name)).addTo(result);
+    }
+    for (const node of pm.getElementsByTagName("Point")) {
+      const coords = parseCoordinates(textOfFirst(node, "coordinates"));
+      if (!coords.length) continue;
+      L.circleMarker(toRenderLatLng(coords[0].lat, coords[0].lon, context), {
+        radius: 5, color: "#991b1b", fillColor: "#ffffff", fillOpacity: 1, weight: 2
+      }).bindPopup(popup(name)).addTo(result);
+    }
+  }
+  if (!result.getLayers().length) throw new Error(`${stormId}: 표시할 경로가 없습니다`);
+  return result;
+}
+
+function createTyphoonControl() {
   const control = L.control({ position: "topright" });
-
   control.onAdd = function () {
-    const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-refresh");
+    const container = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-typhoon");
     const button = L.DomUtil.create("button", "", container);
-
     button.type = "button";
-    button.textContent = "Refresh";
-
+    const update = () => {
+      button.textContent = typhoonVisible ? "Typhoon On" : "Typhoon Off";
+      button.classList.toggle("typhoon-on", typhoonVisible);
+      button.title = typhoonVisible ? "JTWC 태풍 표시 끄기" : "JTWC 태풍 표시 켜기";
+    };
+    update();
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
-
-  L.DomEvent.on(button, "click", async function (e) {
-  L.DomEvent.stop(e);
-
-  if (isPositioningLoading || isRouteRefreshing) {
-    console.log("Positioning 또는 Route 작업 중이라 Refresh 생략");
-    return;
-  }
-
-  button.disabled = true;
-  button.textContent = "Updating...";
-
-  try {
-    isRouteRefreshing = true;
-    await refreshRouteOnly();
-  } catch (err) {
-    console.error(err);
-  } finally {
-    isRouteRefreshing = false;
-    button.disabled = false;
-    button.textContent = "Refresh";
-  }
-});
+    L.DomEvent.on(button, "click", async e => {
+      L.DomEvent.stop(e);
+      if (typhoonVisible) {
+        map.removeLayer(typhoonLayer);
+        typhoonVisible = false;
+        update();
+        return;
+      }
+      button.disabled = true;
+      button.textContent = "Loading";
+      try {
+        const response = await fetch(JTWC_RSS_URL, { cache: "no-store" });
+        if (!response.ok) throw new Error(`RSS HTTP ${response.status}`);
+        const links = getJtwcKmzLinks(await response.text());
+        if (!links.length) {
+          alert("JTWC RSS에 현재 표시할 태풍 KMZ가 없습니다.");
+          return;
+        }
+        const loaded = await Promise.allSettled(links.map(loadJtwcStorm));
+        typhoonLayer.clearLayers();
+        let success = 0;
+        loaded.forEach((entry, i) => {
+          if (entry.status === "fulfilled") {
+            typhoonLayer.addLayer(entry.value);
+            success++;
+          } else {
+            console.error("JTWC storm load failed:", links[i], entry.reason);
+          }
+        });
+        if (!success) throw new Error("태풍 KMZ를 읽지 못했습니다. 콘솔 오류를 확인하세요.");
+        typhoonLayer.addTo(map);
+        typhoonVisible = true;
+        button.title = `JTWC 태풍 ${success}개 표시 중`;
+        if (success < links.length) alert(`JTWC 태풍 ${success}/${links.length}개만 표시되었습니다.`);
+      } catch (err) {
+        console.error("JTWC load failed:", err);
+        alert("JTWC 태풍 표시 실패: " + (err.message || err));
+      } finally {
+        button.disabled = false;
+        update();
+      }
+    });
     return container;
   };
-
   return control;
 }
 createTrackingSearchStackControl().addTo(map);
@@ -4641,7 +4733,7 @@ updateSearchedAirspaceLabelZoom();
 createNdbToggleControl().addTo(map);
 createFirToggleControl().addTo(map);
 createArtccToggleControl().addTo(map);
-createRefreshControl().addTo(map);
+createTyphoonControl().addTo(map);
 
 
 
