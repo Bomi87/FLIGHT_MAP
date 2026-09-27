@@ -2454,6 +2454,34 @@
   height: 25px !important;
 }
 
+
+
+/* ===== NOAA 공항 안내 문구 제거 + 내부 간격 재정렬 v24 ===== */
+.leaflet-control-noaa-model .noaa-model-airport-meta {
+  display: none !important;
+}
+
+/* 안내 한 줄이 사라진 만큼 아래 요소들을 자연스럽게 위로 당김 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-panel {
+  padding-top: 7px !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-product {
+  margin-bottom: 4px !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-meta {
+  margin: 2px 0 !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-time-row {
+  margin-top: 5px !important;
+}
+
+.leaflet-control-noaa-model.model-expanded .noaa-model-status {
+  margin-top: 4px !important;
+}
+
 </style>
 </head>
 <body>
@@ -7522,7 +7550,7 @@ function createNoaaModelControl() {
       '<option value="precip">강수</option>' +
       '<option value="maxwind">Max Wind</option>';
 
-    const airportMeta = L.DomUtil.create("div", "noaa-model-meta", panel);
+    const airportMeta = L.DomUtil.create("div", "noaa-model-meta noaa-model-airport-meta", panel);
     airportMeta.textContent = "공항검색에서 ICAO를 먼저 선택하세요.";
 
     const modelMeta = L.DomUtil.create("div", "noaa-model-meta", panel);
