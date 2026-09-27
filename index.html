@@ -2279,6 +2279,68 @@
   height: 25px !important;
 }
 
+
+
+/* ===== 펼침 패널 정렬 + NOAA 글자/테두리 미세조정 v22 ===== */
+
+/* 펼침 상태에서도 왼쪽 선은 '62px 버튼' 바로 왼쪽에 고정.
+   190px 팝업의 왼쪽 가장자리를 따라가지 않음. */
+.leaflet-control-spc.spc-expanded.control-group-weather::before,
+.leaflet-control-noaa-model.model-expanded.control-group-weather::before,
+.leaflet-control-spc.spc-expanded.control-group-weather:not(.control-group-start):not(.control-group-end)::before,
+.leaflet-control-noaa-model.model-expanded.control-group-weather:not(.control-group-start):not(.control-group-end)::before,
+.leaflet-control-spc.spc-expanded.control-group-weather.control-group-end::before,
+.leaflet-control-noaa-model.model-expanded.control-group-weather.control-group-end::before {
+  left: auto !important;
+  right: 66px !important;
+  top: 0 !important;
+  bottom: auto !important;
+  height: 25px !important;
+}
+
+/* NOAA 펼침 카드: 얇고 은은한 테두리 */
+.leaflet-control-noaa-model.model-expanded::after {
+  border: 1px solid rgba(100,116,139,.32) !important;
+  border-radius: 7px !important;
+  background: rgba(255,255,255,.97) !important;
+  box-shadow: 0 3px 10px rgba(15,23,42,.13) !important;
+}
+
+/* NOAA 안내 문구 글자 크기 축소 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-meta {
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+}
+
+/* VALID 문구: 한 줄 고정 + 크기 축소 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-valid {
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  letter-spacing: 0 !important;
+}
+
+/* 에러/안내 상태문구도 살짝 작게 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-status {
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+}
+
+/* select도 패널에 맞게 조금 더 컴팩트 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-product {
+  font-size: 10px !important;
+  height: 28px !important;
+}
+
+/* 시간 이동 +/- 버튼도 과하게 커 보이지 않게 */
+.leaflet-control-noaa-model.model-expanded .noaa-model-time-row button {
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 28px !important;
+  font-size: 13px !important;
+  line-height: 26px !important;
+}
+
 </style>
 </head>
 <body>
