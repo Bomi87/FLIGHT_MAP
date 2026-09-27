@@ -5475,9 +5475,39 @@ async function fetchSevereWeatherPage(dateKey) {
 }
 
 
-// 기상 전문용어 중 한국어 번역 시 의미가 애매해질 수 있는 표현은 영어 원문을 유지한다.
-// 긴 표현부터 보호하여 짧은 단어가 먼저 치환되는 것을 방지한다.
+// SPC/NWS 원문에서 번역하면 의미가 흐려질 수 있는 전문용어와 지리/기상 권역명은
+// 번역 전에 임시 토큰으로 보호한다. 특정 몇 개 지역명만 하드코딩하는 방식이 아니라,
+// 1) 자주 쓰이는 전문용어 사전 + 2) 미국 지리권역명 패턴 + 3) 대문자 약어를 함께 보호한다.
 const SPC_KEEP_ENGLISH_TERMS = [
+  // 대표적인 미국 지리/기상 권역명. 아래 자동 패턴과 함께 사용한다.
+  "Intermountain West",
+  "Desert Southwest",
+  "Southern Plains",
+  "Northern Plains",
+  "Central Plains",
+  "High Plains",
+  "Great Plains",
+  "Black Hills",
+  "Mississippi Valley",
+  "MS Valley",
+  "Ohio Valley",
+  "Tennessee Valley",
+  "Lower Mississippi Valley",
+  "Upper Mississippi Valley",
+  "Mid-Mississippi Valley",
+  "Mid-Atlantic",
+  "Pacific Northwest",
+  "Pacific Coast",
+  "Gulf Coast",
+  "Upper Midwest",
+  "Four Corners",
+  "Front Range",
+  "Rockies",
+  "Rocky Mountains",
+  "Appalachians",
+  "CONUS",
+
+  // SPC/NWS에서 자주 쓰이는 기상 전문용어.
   "surface-based inhibition",
   "cloud-layer vertical shear",
   "low-level lapse rates",
@@ -5521,19 +5551,58 @@ const SPC_KEEP_ENGLISH_TERMS = [
   "shear"
 ];
 
+// 'High Plains'처럼 고유 지역명에 자주 붙는 끝 단어들.
+// 새 지역명이 SPC 본문에 등장해도 이 패턴에 맞으면 별도 하드코딩 없이 원문을 유지한다.
+const SPC_GEOGRAPHIC_SUFFIXES = [
+  "Plains", "Valley", "Valleys", "Hills", "Mountains", "Mountain",
+  "Plateau", "Plateaus", "Basin", "Basins", "Coast", "Coastal Plain",
+  "Peninsula", "Panhandle", "Piedmont", "Foothills", "Range",
+  "Northwest", "Southwest", "Northeast", "Southeast", "Midwest",
+  "Appalachians", "Rockies", "Cascades", "Sierras"
+];
+
 function protectSpcEnglishTerms(text) {
   let protectedText = String(text || "");
   const replacements = [];
 
+  function stash(value) {
+    const token = `[[SPCTERM${replacements.length}]]`;
+    replacements.push({ token, value });
+    return token;
+  }
+
+  // 1) 명시적 전문용어/대표 권역명: 긴 표현부터 보호한다.
   const terms = [...SPC_KEEP_ENGLISH_TERMS].sort((a, b) => b.length - a.length);
   terms.forEach(term => {
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const rx = new RegExp(`\\b${escaped}\\b`, "gi");
-    protectedText = protectedText.replace(rx, match => {
-      const token = `[[SPCTERM${replacements.length}]]`;
-      replacements.push({ token, value: match });
-      return token;
-    });
+    protectedText = protectedText.replace(rx, match => stash(match));
+  });
+
+  // 2) 자동 지리권역명 보호.
+  // 예: Central Appalachians, Edwards Plateau, Snake River Plain 같은 새로운 명칭도 보호한다.
+  // 이미 토큰화된 부분은 SPCTERM 토큰 때문에 이 패턴에 걸리지 않는다.
+  const suffixAlt = SPC_GEOGRAPHIC_SUFFIXES
+    .map(x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .sort((a, b) => b.length - a.length)
+    .join("|");
+
+  const geoRx = new RegExp(
+    `\\b(?:[A-Z][A-Za-z.'-]*\\s+){0,4}(?:${suffixAlt})\\b`,
+    "g"
+  );
+  protectedText = protectedText.replace(geoRx, match => {
+    const trimmed = match.trim();
+    // 일반 문장 첫 단어가 우연히 suffix 하나와 일치하는 경우를 피한다.
+    if (!trimmed || /^SPCTERM/i.test(trimmed)) return match;
+    return stash(trimmed);
+  });
+
+  // 3) CONUS, SBCAPE, MLCAPE, LLJ, MCS, WRF 같은 대문자 약어는 자동 보호한다.
+  // 숫자가 섞인 약어(예: 0-6-km)는 별도 전문용어 사전으로 처리한다.
+  protectedText = protectedText.replace(/\\b[A-Z][A-Z0-9]{1,9}\\b/g, match => {
+    if (/^SPCTERM\\d+$/i.test(match)) return match;
+    return stash(match);
   });
 
   return { protectedText, replacements };
@@ -5739,21 +5808,40 @@ function createSpcControl() {
       return "";
     }
 
-    function fallbackPeriodLabel(day) {
+    // 현재 UTC 시각에 실제로 유효한 12Z~12Z 기간을 Day 1로 잡는다.
+    // 예: 28SEP 11:59Z -> 27SEP 12Z ~ 28SEP 12Z
+    //     28SEP 12:00Z 이후 -> 28SEP 12Z ~ 29SEP 12Z
+    function currentSpcPeriodStartUtc() {
       const now = new Date();
-      const start = new Date(Date.UTC(
-        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + (day - 1), 12, 0, 0
+      let start = new Date(Date.UTC(
+        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0
       ));
+      if (now.getTime() < start.getTime()) {
+        start = new Date(start.getTime() - 24 * 3600000);
+      }
+      return start;
+    }
+
+    function fallbackPeriodLabel(day) {
+      const anchor = currentSpcPeriodStartUtc();
+      const start = new Date(anchor.getTime() + (day - 1) * 24 * 3600000);
       const end = new Date(start.getTime() + 24 * 3600000);
       return `${compactUtcLabel(start)} ~ ${compactUtcLabel(end)}`;
     }
 
-    [1, 2, 3].forEach(day => {
-      const option = document.createElement("option");
-      option.value = String(day);
-      option.textContent = fallbackPeriodLabel(day);
-      daySelect.appendChild(option);
-    });
+    function rebuildPeriodOptions() {
+      const selected = daySelect.value || "1";
+      daySelect.replaceChildren();
+      [1, 2, 3].forEach(day => {
+        const option = document.createElement("option");
+        option.value = String(day);
+        option.textContent = fallbackPeriodLabel(day);
+        daySelect.appendChild(option);
+      });
+      daySelect.value = ["1", "2", "3"].includes(selected) ? selected : "1";
+    }
+
+    rebuildPeriodOptions();
 
     // 화면에는 별도 상태 설명을 표시하지 않지만 내부 상태 갱신은 유지한다.
     const status = document.createElement("div");
@@ -5830,10 +5918,9 @@ function createSpcControl() {
     }
 
     function updateSelectedPeriodFromIssued(day, issued) {
-      if (!issued) return;
-      const label = periodLabel(issued.VALID_ISO, issued.EXPIRE_ISO);
-      const option = [...daySelect.options].find(opt => opt.value === String(day));
-      if (option && label) option.textContent = label;
+      // 드롭다운은 사용자가 요청한 12Z~12Z 고정 기간 형식을 유지한다.
+      // SPC의 중간 갱신 VALID_ISO가 13Z/16Z 등이어도 옵션 문구는 바꾸지 않는다.
+      return;
     }
 
     const refresh = async () => {
@@ -5908,7 +5995,9 @@ function createSpcControl() {
       container.classList.toggle("spc-expanded", enabled);
 
       if (enabled) {
-        // ON할 때는 항상 Day 1을 기본으로 보여준다.
+        // ON할 때 현재 UTC 기준으로 Day 1~3 기간 문구를 다시 계산한다.
+        // 이미 종료된 12Z~12Z 기간은 Day 1 첫 항목으로 남지 않는다.
+        rebuildPeriodOptions();
         daySelect.value = "1";
         spcLayer.addTo(map);
         refresh();
