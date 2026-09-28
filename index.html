@@ -8386,6 +8386,10 @@ const dateKeys = periods.map(period =>
       container.classList.toggle("spc-expanded", enabled);
 
       if (enabled) {
+        // 대류예보가 ON이면 선택한 Day와 무관하게 현재 활성 미국 실시간 경보도 함께 표시한다.
+        // 실시간 경보는 SPC Day 1/2/3 선택과 독립적으로 3분마다 갱신된다.
+        thqStartWarningsWithSpc_();
+
         // 사용자가 ON 할 때마다 SevereWeatherOutlook 메인 페이지를 no-store로 확인한다.
         // 사이트가 새 Day 1/2/3 세트로 넘어갔다면 즉시 그 세트를 첫 번째부터 표시한다.
         const option = document.createElement("option");
@@ -8405,6 +8409,7 @@ const dateKeys = periods.map(period =>
         daySelect.disabled = false;
         spcLayer.clearLayers();
         map.removeLayer(spcLayer);
+        thqStopWarningsWithSpc_();
         status.textContent = "SPC 대류위험 + 토네이도 확률";
       }
     });
@@ -8623,6 +8628,47 @@ function thqRenderWarnings_(warnings) {
       tornadoHqWarningLayer.addLayer(marker);
     }
   });
+}
+
+let tornadoHqWarningsSpcEnabled = false;
+
+async function thqRefreshWarningsWithSpc_() {
+  if (!tornadoHqWarningsSpcEnabled) return;
+
+  const requestId = ++tornadoHqWarningRequestId;
+  try {
+    const warnings = await thqFetchWarnings_();
+    if (!tornadoHqWarningsSpcEnabled || requestId !== tornadoHqWarningRequestId) return;
+
+    thqRenderWarnings_(warnings);
+    if (!map.hasLayer(tornadoHqWarningLayer)) tornadoHqWarningLayer.addTo(map);
+
+    console.log(`TornadoHQ active warnings: ${warnings.length}`);
+  } catch (error) {
+    // SPC outlook 자체는 정상 유지하고, 실시간 경보만 다음 자동 갱신 때 다시 시도한다.
+    console.error("TornadoHQ warning load failed:", error);
+  }
+}
+
+function thqStartWarningsWithSpc_() {
+  tornadoHqWarningsSpcEnabled = true;
+
+  if (!map.hasLayer(tornadoHqWarningLayer)) tornadoHqWarningLayer.addTo(map);
+  thqRefreshWarningsWithSpc_();
+
+  if (tornadoHqWarningTimer) clearInterval(tornadoHqWarningTimer);
+  tornadoHqWarningTimer = setInterval(thqRefreshWarningsWithSpc_, 180000);
+}
+
+function thqStopWarningsWithSpc_() {
+  tornadoHqWarningsSpcEnabled = false;
+  ++tornadoHqWarningRequestId;
+
+  if (tornadoHqWarningTimer) clearInterval(tornadoHqWarningTimer);
+  tornadoHqWarningTimer = null;
+
+  tornadoHqWarningLayer.clearLayers();
+  if (map.hasLayer(tornadoHqWarningLayer)) map.removeLayer(tornadoHqWarningLayer);
 }
 
 function createTornadoHqWarningControl() {
@@ -9238,7 +9284,6 @@ function createTokyoVaacControl() {
 createTyphoonControl().addTo(map);
 createTokyoVaacControl().addTo(map);
 createSpcControl().addTo(map);
-createTornadoHqWarningControl().addTo(map);
 createNoaaModelControl().addTo(map);
 
 
