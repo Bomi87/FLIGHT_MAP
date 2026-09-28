@@ -2653,6 +2653,39 @@
   font:10px/1.4 Consolas,monospace;
   white-space:pre-wrap;
 }
+
+.thq-motion-marker {
+  background: transparent !important;
+  border: none !important;
+}
+.thq-motion-marker-wrap {
+  display:flex;
+  align-items:center;
+  gap:5px;
+  white-space:nowrap;
+  pointer-events:none;
+}
+.thq-motion-dot {
+  flex:0 0 auto;
+  width:9px;
+  height:9px;
+  box-sizing:border-box;
+  border:1.5px solid #ffffff;
+  border-radius:50%;
+  background:#b45309;
+  box-shadow:0 1px 3px rgba(0,0,0,.55);
+}
+.thq-motion-label {
+  display:inline-block;
+  padding:2px 5px;
+  border-radius:4px;
+  background:rgba(15,23,42,.82);
+  color:#ffffff;
+  box-shadow:0 1px 3px rgba(0,0,0,.35);
+  font:700 9px/1.2 Arial,sans-serif;
+  text-shadow:0 1px 2px rgba(0,0,0,.65);
+}
+
 /* ===== TornadoHQ 실시간 미국 경보 끝 ===== */
 </style>
 </head>
@@ -8603,11 +8636,36 @@ async function thqFetchWarnings_() {
   return thqParseLiveHtml_(await response.text());
 }
 
+// Leaflet 세계지도는 경도 360° 간격으로 반복 표시될 수 있다.
+// TornadoHQ의 미국 경보(-180~180)를 현재 보고 있는 지도 복사본에 맞춰 이동한다.
+function thqLonForCurrentWorld_(lon) {
+  const value = Number(lon);
+  if (!Number.isFinite(value)) return value;
+
+  const centerLng = Number(map?.getCenter?.().lng);
+  if (!Number.isFinite(centerLng)) return value;
+
+  return value + 360 * Math.round((centerLng - value) / 360);
+}
+
+function thqPointsForCurrentWorld_(points) {
+  return (Array.isArray(points) ? points : []).map(point => [
+    Number(point[0]),
+    thqLonForCurrentWorld_(point[1])
+  ]);
+}
+
+let tornadoHqLastWarnings_ = [];
+
 function thqRenderWarnings_(warnings) {
+  tornadoHqLastWarnings_ = Array.isArray(warnings) ? warnings : [];
   tornadoHqWarningLayer.clearLayers();
-  warnings.forEach(warning => {
+
+  tornadoHqLastWarnings_.forEach(warning => {
     const isTornado = warning.type.includes("tornado");
-    const polygon = L.polygon(warning.points, {
+    const displayPoints = thqPointsForCurrentWorld_(warning.points);
+
+    const polygon = L.polygon(displayPoints, {
       color: isTornado ? "#dc2626" : "#f59e0b",
       weight: isTornado ? 3 : 2.5,
       opacity: 1,
@@ -8617,18 +8675,34 @@ function thqRenderWarnings_(warnings) {
     polygon.bindPopup(thqWarningPopup_(warning), { maxWidth: 440, minWidth: 280 });
     tornadoHqWarningLayer.addLayer(polygon);
 
+    // TIME...MOT...LOC은 "현재 위치"가 아니라 해당 경보 원문 시각의 폭풍 위치다.
+    // 위치 의미가 혼동되지 않도록 시각 + 이동방향/속도를 점 옆에 항상 같이 표시한다.
     if (warning.motion && Number.isFinite(warning.motion.lat) && Number.isFinite(warning.motion.lon)) {
-      const marker = L.circleMarker([warning.motion.lat, warning.motion.lon], {
-        radius: 4,
-        color: isTornado ? "#991b1b" : "#b45309",
-        weight: 2,
-        fillOpacity: 1
+      const motionLat = Number(warning.motion.lat);
+      const motionLon = thqLonForCurrentWorld_(warning.motion.lon);
+      const motionText = `${warning.motion.time} · ${String(warning.motion.degrees).padStart(3,"0")}DEG ${warning.motion.speedKt}KT Moving`;
+      const marker = L.marker([motionLat, motionLon], {
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: "thq-motion-marker",
+          html: `<div class="thq-motion-marker-wrap"><span class="thq-motion-dot"></span><span class="thq-motion-label">${thqEscapeHtml_(motionText)}</span></div>`,
+          iconSize: null,
+          iconAnchor: [4, 4]
+        })
       });
-      marker.bindPopup(thqWarningPopup_(warning), { maxWidth: 440, minWidth: 280 });
       tornadoHqWarningLayer.addLayer(marker);
     }
+
   });
 }
+
+// 지도를 다른 world copy로 이동했을 때도 경보가 현재 화면의 미국 위치에 붙도록 재배치한다.
+map.on("moveend", () => {
+  if (tornadoHqWarningsSpcEnabled && tornadoHqLastWarnings_.length) {
+    thqRenderWarnings_(tornadoHqLastWarnings_);
+  }
+});
 
 let tornadoHqWarningsSpcEnabled = false;
 
@@ -8663,6 +8737,7 @@ function thqStartWarningsWithSpc_() {
 function thqStopWarningsWithSpc_() {
   tornadoHqWarningsSpcEnabled = false;
   ++tornadoHqWarningRequestId;
+  tornadoHqLastWarnings_ = [];
 
   if (tornadoHqWarningTimer) clearInterval(tornadoHqWarningTimer);
   tornadoHqWarningTimer = null;
