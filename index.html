@@ -2574,6 +2574,86 @@
   word-break: keep-all !important;
 }
 
+
+
+/* ===== TornadoHQ 실시간 미국 경보 ===== */
+.leaflet-control-thq-warning {
+  width:58px !important;
+  min-width:58px !important;
+  box-sizing:border-box !important;
+  overflow:visible !important;
+}
+.leaflet-control-thq-warning button {
+  width:58px !important;
+  min-width:58px !important;
+  height:25px !important;
+  box-sizing:border-box !important;
+  margin:0 !important;
+  padding:0 3px !important;
+  border:0 !important;
+  border-radius:4px !important;
+  background:#1e3a5f !important;
+  color:#f8fafc !important;
+  font:700 9px/25px Arial,sans-serif !important;
+  text-align:center !important;
+  white-space:nowrap !important;
+  box-shadow:0 1px 4px rgba(15,23,42,.22) !important;
+  cursor:pointer;
+}
+.leaflet-control-thq-warning button:hover { background:#27496d !important; }
+.leaflet-control-thq-warning button.warning-on,
+.leaflet-control-thq-warning button.warning-on:hover { background:#0f766e !important; }
+.leaflet-control-thq-warning button:disabled { background:#94a3b8 !important; cursor:default; }
+
+.thq-warning-popup {
+  width:min(400px,72vw);
+  font:12px/1.45 Arial,sans-serif;
+  color:#1f2937;
+}
+.thq-warning-title {
+  margin-bottom:5px;
+  font-size:14px;
+  font-weight:900;
+  color:#111827;
+}
+.thq-warning-title.tornado { color:#b91c1c; }
+.thq-warning-title.severe { color:#b45309; }
+.thq-warning-meta {
+  margin-bottom:7px;
+  color:#475569;
+  font-size:11px;
+}
+.thq-warning-grid {
+  display:grid;
+  grid-template-columns:78px minmax(0,1fr);
+  gap:3px 7px;
+  margin-top:6px;
+}
+.thq-warning-grid b { color:#111827; }
+.thq-warning-summary,
+.thq-warning-impact {
+  margin-top:7px;
+  padding-top:6px;
+  border-top:1px solid #e5e7eb;
+  white-space:pre-wrap;
+}
+.thq-warning-popup details { margin-top:8px; }
+.thq-warning-popup summary {
+  cursor:pointer;
+  color:#2563eb;
+  font-weight:700;
+}
+.thq-warning-raw {
+  max-height:260px;
+  overflow:auto;
+  margin-top:6px;
+  padding:7px;
+  border-radius:5px;
+  background:#f8fafc;
+  font:10px/1.4 Consolas,monospace;
+  white-space:pre-wrap;
+}
+/* ===== TornadoHQ 실시간 미국 경보 끝 ===== */
 </style>
 </head>
 <body>
@@ -8337,6 +8417,272 @@ const dateKeys = periods.map(period =>
 }
 
 
+
+
+/* =========================================================
+ * TornadoHQ 실시간 미국 Severe/Tornado Warning
+ * - https://www.tornadohq.com/live/ HTML을 직접 읽는다.
+ * - 현재 ACTIVE Tornado Warning / Severe Thunderstorm Warning만 표시한다.
+ * - 경보 원문의 LAT...LON을 Leaflet polygon으로 변환한다.
+ * ========================================================= */
+const tornadoHqWarningLayer = L.layerGroup();
+let tornadoHqWarningTimer = null;
+let tornadoHqWarningRequestId = 0;
+
+function thqEscapeHtml_(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function thqNormalizeWarningType_(text) {
+  const t = String(text || "").trim().toLowerCase();
+  if (t.includes("tornado")) return "tornado warning";
+  if (t.includes("severe thunderstorm")) return "severe thunderstorm warning";
+  return t;
+}
+
+function thqParseLatLon_(raw) {
+  const text = String(raw || "").replace(/\r/g, "");
+  const match = text.match(/LAT\.\.\.LON\s+([\s\S]*?)(?=\n\s*(?:TIME\.\.\.MOT\.\.\.LOC|HAIL THREAT|WIND THREAT|TORNADO|$$)|$)/i);
+  if (!match) return [];
+
+  const numbers = (match[1].match(/\b\d{4,5}\b/g) || []).map(Number);
+  const points = [];
+  for (let i = 0; i + 1 < numbers.length; i += 2) {
+    const lat = numbers[i] / 100;
+    const lon = -(numbers[i + 1] / 100);
+    if (lat >= 20 && lat <= 55 && lon >= -135 && lon <= -55) {
+      points.push([lat, lon]);
+    }
+  }
+  return points;
+}
+
+function thqExtractField_(raw, label, nextLabels) {
+  const text = String(raw || "").replace(/\r/g, "");
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const next = (nextLabels || []).map(x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const end = next ? `(?=\\n\\s*(?:${next})\\.\\.\\.|$)` : `(?=\\n\\s*[A-Z][A-Z /]+\\.\\.\\.|$)`;
+  const rx = new RegExp(`${escaped}\\.\\.\\.([\\s\\S]*?)${end}`, "i");
+  const m = text.match(rx);
+  return m ? m[1].replace(/\s*\n\s*/g, " ").trim() : "";
+}
+
+function thqExtractMax_(raw, label) {
+  const m = String(raw || "").match(new RegExp(`${label}\\.\\.\\.([^\\n]+)`, "i"));
+  return m ? m[1].trim() : "";
+}
+
+function thqParseMotion_(raw) {
+  const m = String(raw || "").match(/TIME\.\.\.MOT\.\.\.LOC\s+(\d{4}Z)\s+(\d{3})DEG\s+(\d+)KT\s+(\d{4})\s+(\d{4,5})/i);
+  if (!m) return null;
+  return {
+    time: m[1],
+    degrees: Number(m[2]),
+    speedKt: Number(m[3]),
+    lat: Number(m[4]) / 100,
+    lon: -(Number(m[5]) / 100)
+  };
+}
+
+function thqFindSummary_(raw) {
+  const text = String(raw || "").replace(/\r/g, "");
+  const m = text.match(/\*\s*At\s+([\s\S]*?)(?=\n\s*HAZARD\.\.\.)/i);
+  return m ? m[1].replace(/\s*\n\s*/g, " ").trim() : "";
+}
+
+function thqWarningPopup_(warning) {
+  const typeClass = warning.type.includes("tornado") ? "tornado" : "severe";
+  const title = warning.type.includes("tornado") ? "TORNADO WARNING" : "SEVERE THUNDERSTORM WARNING";
+  const rows = [];
+  if (warning.startIso || warning.endIso) rows.push(["유효", `${warning.startIso ? warning.startIso.replace('T',' ').slice(0,16)+'Z' : '?'} ~ ${warning.endIso ? warning.endIso.replace('T',' ').slice(0,16)+'Z' : '?'}`]);
+  if (warning.counties) rows.push(["지역", `${warning.counties}${warning.states ? `, ${warning.states}` : ""}`]);
+  if (warning.motion) rows.push(["이동", `${String(warning.motion.degrees).padStart(3,"0")}° · ${warning.motion.speedKt} kt`]);
+  if (warning.hazard) rows.push(["HAZARD", warning.hazard]);
+  if (warning.source) rows.push(["SOURCE", warning.source]);
+  if (warning.maxHail) rows.push(["MAX HAIL", warning.maxHail]);
+  if (warning.maxWind) rows.push(["MAX WIND", warning.maxWind]);
+
+  const grid = rows.map(([k,v]) => `<b>${thqEscapeHtml_(k)}</b><span>${thqEscapeHtml_(v)}</span>`).join("");
+  const summary = warning.summary ? `<div class="thq-warning-summary"><b>SUMMARY</b><br>${thqEscapeHtml_(warning.summary)}</div>` : "";
+  const impact = warning.impact ? `<div class="thq-warning-impact"><b>IMPACT</b><br>${thqEscapeHtml_(warning.impact)}</div>` : "";
+  const raw = warning.raw ? `<details><summary>상세 원문 보기</summary><div class="thq-warning-raw">${thqEscapeHtml_(warning.raw)}</div></details>` : "";
+
+  return `<div class="thq-warning-popup">
+    <div class="thq-warning-title ${typeClass}">${title}</div>
+    <div class="thq-warning-meta">TornadoHQ / NWS warning</div>
+    <div class="thq-warning-grid">${grid}</div>
+    ${summary}${impact}${raw}
+  </div>`;
+}
+
+function thqParseLiveHtml_(html) {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  const now = Date.now();
+  const warnings = [];
+
+  doc.querySelectorAll("#warning-table tbody tr").forEach(row => {
+    const warningLink = row.querySelector('a[data-target^="#"], a[href^="#"][data-toggle="modal"]');
+    const modalId = warningLink?.getAttribute("data-target") || warningLink?.getAttribute("href") || "";
+    if (!modalId || modalId === "#map") return;
+
+    const modal = doc.querySelector(modalId);
+    const raw = modal?.querySelector("pre")?.textContent?.trim() || "";
+    if (!raw) return;
+
+    const modalTitle = modal?.querySelector("h3")?.textContent || row.querySelector("td:nth-child(4)")?.textContent || "";
+    const type = thqNormalizeWarningType_(modalTitle);
+    if (type !== "tornado warning" && type !== "severe thunderstorm warning") return;
+
+    const abbrs = [...row.querySelectorAll("abbr[title]")];
+    const startIso = abbrs[0]?.getAttribute("title") || "";
+    const endIso = abbrs[1]?.getAttribute("title") || "";
+    const endMs = Date.parse(endIso);
+    if (Number.isFinite(endMs) && endMs <= now) return;
+    if (/\bEXPIRED\b/i.test(row.textContent || "")) return;
+
+    const cells = [...row.querySelectorAll("td")];
+    const visibleTexts = cells.map(td => (td.textContent || "").replace(/\s+/g," ").trim()).filter(Boolean);
+
+    let counties = "";
+    let states = "";
+    // TornadoHQ desktop table structure: summary cell 다음이 counties, 그 다음 state.
+    const summaryAnchorCell = warningLink.closest("td");
+    if (summaryAnchorCell) {
+      const countyCell = summaryAnchorCell.nextElementSibling;
+      counties = (countyCell?.textContent || "").replace(/\s+/g," ").trim();
+      let stateCell = countyCell?.nextElementSibling;
+      while (stateCell && stateCell.classList.contains("visible-xs")) stateCell = stateCell.nextElementSibling;
+      states = (row.querySelector("td.hidden-xs.hidden-sm:nth-last-child(2)")?.textContent || "").replace(/\s+/g," ").trim();
+    }
+    if (!states) {
+      const m = raw.match(/\b([A-Z]{2})C\d{3}/);
+      states = m ? m[1] : "";
+    }
+
+    const points = thqParseLatLon_(raw);
+    if (points.length < 3) return;
+
+    warnings.push({
+      id: modalId.replace(/^#/, ""),
+      type,
+      startIso,
+      endIso,
+      counties,
+      states,
+      summary: thqFindSummary_(raw),
+      hazard: thqExtractField_(raw, "HAZARD", ["SOURCE","IMPACT"]),
+      source: thqExtractField_(raw, "SOURCE", ["IMPACT"]),
+      impact: thqExtractField_(raw, "IMPACT", ["PRECAUTIONARY/PREPAREDNESS ACTIONS","LAT"]),
+      maxHail: thqExtractMax_(raw, "MAX HAIL SIZE"),
+      maxWind: thqExtractMax_(raw, "MAX WIND GUST"),
+      motion: thqParseMotion_(raw),
+      points,
+      raw
+    });
+  });
+
+  return warnings;
+}
+
+async function thqFetchWarnings_() {
+  const response = await fetch(`https://www.tornadohq.com/live/?_=${Date.now()}`, {
+    cache: "no-store",
+    mode: "cors"
+  });
+  if (!response.ok) throw new Error(`TornadoHQ HTTP ${response.status}`);
+  return thqParseLiveHtml_(await response.text());
+}
+
+function thqRenderWarnings_(warnings) {
+  tornadoHqWarningLayer.clearLayers();
+  warnings.forEach(warning => {
+    const isTornado = warning.type.includes("tornado");
+    const polygon = L.polygon(warning.points, {
+      color: isTornado ? "#dc2626" : "#f59e0b",
+      weight: isTornado ? 3 : 2.5,
+      opacity: 1,
+      fillColor: isTornado ? "#ef4444" : "#f59e0b",
+      fillOpacity: isTornado ? 0.18 : 0.14
+    });
+    polygon.bindPopup(thqWarningPopup_(warning), { maxWidth: 440, minWidth: 280 });
+    tornadoHqWarningLayer.addLayer(polygon);
+
+    if (warning.motion && Number.isFinite(warning.motion.lat) && Number.isFinite(warning.motion.lon)) {
+      const marker = L.circleMarker([warning.motion.lat, warning.motion.lon], {
+        radius: 4,
+        color: isTornado ? "#991b1b" : "#b45309",
+        weight: 2,
+        fillOpacity: 1
+      });
+      marker.bindPopup(thqWarningPopup_(warning), { maxWidth: 440, minWidth: 280 });
+      tornadoHqWarningLayer.addLayer(marker);
+    }
+  });
+}
+
+function createTornadoHqWarningControl() {
+  const control = L.control({ position: "topright" });
+  control.onAdd = function() {
+    const box = L.DomUtil.create("div", "leaflet-control leaflet-control-thq-warning control-group-weather");
+    const button = L.DomUtil.create("button", "", box);
+    button.type = "button";
+    button.textContent = "경보 OFF";
+    button.title = "미국 실시간 Tornado / Severe Thunderstorm Warning";
+
+    let enabled = false;
+
+    async function refresh() {
+      if (!enabled) return;
+      const requestId = ++tornadoHqWarningRequestId;
+      button.disabled = true;
+      button.textContent = "경보 ...";
+      try {
+        const warnings = await thqFetchWarnings_();
+        if (!enabled || requestId !== tornadoHqWarningRequestId) return;
+        thqRenderWarnings_(warnings);
+        if (!map.hasLayer(tornadoHqWarningLayer)) tornadoHqWarningLayer.addTo(map);
+        button.textContent = warnings.length ? `경보 ${warnings.length}` : "경보 0";
+      } catch (error) {
+        console.error("TornadoHQ warning load failed:", error);
+        if (enabled && requestId === tornadoHqWarningRequestId) {
+          button.textContent = "경보 오류";
+        }
+      } finally {
+        if (requestId === tornadoHqWarningRequestId) button.disabled = false;
+      }
+    }
+
+    L.DomEvent.disableClickPropagation(box);
+    L.DomEvent.disableScrollPropagation(box);
+    L.DomEvent.on(button, "click", async event => {
+      L.DomEvent.stop(event);
+      enabled = !enabled;
+      button.classList.toggle("warning-on", enabled);
+      if (enabled) {
+        await refresh();
+        if (tornadoHqWarningTimer) clearInterval(tornadoHqWarningTimer);
+        tornadoHqWarningTimer = setInterval(refresh, 180000);
+      } else {
+        ++tornadoHqWarningRequestId;
+        if (tornadoHqWarningTimer) clearInterval(tornadoHqWarningTimer);
+        tornadoHqWarningTimer = null;
+        tornadoHqWarningLayer.clearLayers();
+        if (map.hasLayer(tornadoHqWarningLayer)) map.removeLayer(tornadoHqWarningLayer);
+        button.textContent = "경보 OFF";
+        button.disabled = false;
+      }
+    });
+
+    return box;
+  };
+  return control;
+}
+
 /* =========================================================
  * NOAA MAG NAM-HIRES (NAM 3 km) / GFS 일기도 overlay
  *
@@ -8892,6 +9238,7 @@ function createTokyoVaacControl() {
 createTyphoonControl().addTo(map);
 createTokyoVaacControl().addTo(map);
 createSpcControl().addTo(map);
+createTornadoHqWarningControl().addTo(map);
 createNoaaModelControl().addTo(map);
 
 
