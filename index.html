@@ -8493,15 +8493,45 @@ function thqParseLatLon_(raw) {
   );
   if (!match) return [];
 
-  const numbers = (match[1].match(/\b\d{4,5}\b/g) || []).map(Number);
+  const tokens = match[1].match(/\b\d{4,5}\b/g) || [];
+
+  // 좌표는 반드시 위도/경도 한 쌍이어야 한다. 홀수 개면 해당 경보만 안전하게 폐기한다.
+  if (tokens.length < 6 || tokens.length % 2 !== 0) return [];
+
   const points = [];
-  for (let i = 0; i + 1 < numbers.length; i += 2) {
-    const lat = numbers[i] / 100;
-    const lon = -(numbers[i + 1] / 100);
-    if (lat >= 20 && lat <= 55 && lon >= -135 && lon <= -55) {
-      points.push([lat, lon]);
-    }
+  for (let i = 0; i < tokens.length; i += 2) {
+    const lat = Number(tokens[i]) / 100;
+    const lon = -(Number(tokens[i + 1]) / 100);
+
+    // TornadoHQ의 미국 severe/tornado warning용 안전 범위.
+    // 하나라도 범위를 벗어나면 일부 좌표만 억지로 이어 그리지 않고 경보 전체를 생략한다.
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+    if (lat < 20 || lat > 55 || lon < -135 || lon > -55) return [];
+
+    points.push([lat, lon]);
   }
+
+  // 동일 좌표 반복만으로 polygon이 만들어지는 경우 방지.
+  const unique = new Set(points.map(([lat, lon]) => `${lat.toFixed(4)},${lon.toFixed(4)}`));
+  if (unique.size < 3) return [];
+
+  // NWS warning polygon이 비정상적으로 미국 대륙 규모로 퍼지는 파싱 오류 방지.
+  const lats = points.map(p => p[0]);
+  const lons = points.map(p => p[1]);
+  const latSpan = Math.max(...lats) - Math.min(...lats);
+  const lonSpan = Math.max(...lons) - Math.min(...lons);
+  if (latSpan > 8 || lonSpan > 12) return [];
+
+  // Shoelace 면적(위경도 degree²)으로 또 한 번 비정상적인 거대 polygon을 차단한다.
+  let area2 = 0;
+  for (let i = 0; i < points.length; i++) {
+    const [lat1, lon1] = points[i];
+    const [lat2, lon2] = points[(i + 1) % points.length];
+    area2 += lon1 * lat2 - lon2 * lat1;
+  }
+  const approxAreaDeg2 = Math.abs(area2) / 2;
+  if (!Number.isFinite(approxAreaDeg2) || approxAreaDeg2 <= 0 || approxAreaDeg2 > 40) return [];
+
   return points;
 }
 
@@ -8696,8 +8726,13 @@ function thqRenderWarnings_(warnings) {
   tornadoHqWarningLayer.clearLayers();
 
   tornadoHqLastWarnings_.forEach(warning => {
+    // 파싱 이후 데이터가 변형되거나 예상치 못한 값이 들어와도 Leaflet 전체 레이어가 깨지지 않게 방어한다.
+    if (!Array.isArray(warning?.points) || warning.points.length < 3) return;
+
     const isTornado = warning.type.includes("tornado");
-    const displayPoints = thqPointsForCurrentWorld_(warning.points);
+    const displayPoints = thqPointsForCurrentWorld_(warning.points)
+      .filter(point => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]));
+    if (displayPoints.length < 3) return;
 
     const polygon = L.polygon(displayPoints, {
       color: isTornado ? "#dc2626" : "#f59e0b",
