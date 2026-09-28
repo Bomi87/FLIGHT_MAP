@@ -8485,7 +8485,12 @@ function thqNormalizeWarningType_(text) {
 
 function thqParseLatLon_(raw) {
   const text = String(raw || "").replace(/\r/g, "");
-  const match = text.match(/LAT\.\.\.LON\s+([\s\S]*?)(?=\n\s*(?:TIME\.\.\.MOT\.\.\.LOC|HAIL THREAT|WIND THREAT|TORNADO|$$)|$)/i);
+
+  // LAT...LON 블록 뒤의 TIME 계열/위협 계열 헤더는 NWS 제품에 따라 조금 달라질 수 있다.
+  // 정확히 TIME...MOT...LOC만 가정하지 않고 다음 "헤더처럼 보이는 줄"에서 좌표 블록을 끊는다.
+  const match = text.match(
+    /LAT\.\.\.LON\s+([\s\S]*?)(?=\n\s*(?:TIME\.\.\.[A-Z. ]+|HAIL THREAT|WIND THREAT|TORNADO(?: THREAT)?|MAX HAIL SIZE|MAX WIND GUST|FLASH FLOOD|\$\$)|$)/i
+  );
   if (!match) return [];
 
   const numbers = (match[1].match(/\b\d{4,5}\b/g) || []).map(Number);
@@ -8516,14 +8521,43 @@ function thqExtractMax_(raw, label) {
 }
 
 function thqParseMotion_(raw) {
-  const m = String(raw || "").match(/TIME\.\.\.MOT\.\.\.LOC\s+(\d{4}Z)\s+(\d{3})DEG\s+(\d+)KT\s+(\d{4})\s+(\d{4,5})/i);
+  const text = String(raw || "").replace(/\r/g, "");
+  if (!text) return null;
+
+  // NWS에서 흔한 형식:
+  // TIME...MOT...LOC 0258Z 293DEG 13KT 3380 9660
+  // 다만 제품/업데이트에 따라 공백, DEG/KT 표기, 헤더 문구가 달라질 수 있으므로
+  // "있을 때만" 보조정보로 읽고, 파싱 실패는 정상 상황으로 취급한다.
+  const patterns = [
+    /TIME\.\.\.MOT\.\.\.LOC\s+(\d{3,4}Z)\s+(\d{1,3})(?:DEG|°)?\s+(\d+(?:\.\d+)?)(?:KT|KTS|KNOTS?)\s+(\d{4})\s+(\d{4,5})/i,
+    /TIME\s*\.\.\.\s*MOT\s*\.\.\.\s*LOC\s+(\d{3,4}Z)\s+(\d{1,3})(?:DEG|°)?\s+(\d+(?:\.\d+)?)(?:KT|KTS|KNOTS?)\s+(\d{4})\s+(\d{4,5})/i,
+    /TIME[^\n]*?MOT[^\n]*?LOC\s+(\d{3,4}Z)\s+(\d{1,3})(?:DEG|°)?\s+(\d+(?:\.\d+)?)(?:KT|KTS|KNOTS?)\s+(\d{4})\s+(\d{4,5})/i
+  ];
+
+  let m = null;
+  for (const rx of patterns) {
+    m = text.match(rx);
+    if (m) break;
+  }
   if (!m) return null;
+
+  const degrees = Number(m[2]);
+  const speedKt = Number(m[3]);
+  const lat = Number(m[4]) / 100;
+  const lon = -(Number(m[5]) / 100);
+
+  // 값이 이상하면 경보 polygon 자체에는 영향을 주지 않고 motion만 생략한다.
+  if (!Number.isFinite(degrees) || degrees < 0 || degrees > 360) return null;
+  if (!Number.isFinite(speedKt) || speedKt < 0 || speedKt > 250) return null;
+  if (!Number.isFinite(lat) || lat < 20 || lat > 55) return null;
+  if (!Number.isFinite(lon) || lon < -135 || lon > -55) return null;
+
   return {
     time: m[1],
-    degrees: Number(m[2]),
-    speedKt: Number(m[3]),
-    lat: Number(m[4]) / 100,
-    lon: -(Number(m[5]) / 100)
+    degrees,
+    speedKt,
+    lat,
+    lon
   };
 }
 
