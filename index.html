@@ -7703,8 +7703,9 @@ async function fillSpcExtraDetails(target, properties, day) {
       }
     }
 
+    // SPC 요약도 번역하지 않고 영어 원문을 그대로 표시한다.
     outlook.summary = trimSpcOutlookTail(outlook.summary);
-    const summaryKo = await translateSevereText(outlook.summary);
+    const summaryKo = outlook.summary;
 
     const fallbackSynopsis = trimSpcOutlookTail(
       String(outlook.synopsis || "").replace(/\r/g, "")
