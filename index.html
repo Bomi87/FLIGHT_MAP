@@ -8235,14 +8235,26 @@ function createSpcControl() {
           spcFiles["2-convective"],
           spcFiles["3-convective"]
         ];
-        const results = await Promise.all(files.map(fetchSpcGeoJson));
-        if (!enabled) return;
+     const results = await Promise.all(files.map(fetchSpcGeoJson));
+if (!enabled) return;
 
-        const dateKeys = results.map(data => {
-          const period = spcValidPeriod(data);
-          if (!period) throw new Error("SPC VALID_ISO를 확인할 수 없습니다.");
-          return new Date(period.valid).toISOString().slice(0, 10);
-        });
+console.log("===== SPC VALID DEBUG =====");
+
+results.forEach((data, index) => {
+  const period = spcValidPeriod(data);
+
+  console.log(`DAY ${index + 1}`, {
+    validIso: period?.validIso,
+    expireIso: period?.expireIso,
+    firstFeatureProps: data?.features?.[0]?.properties
+  });
+});
+
+const dateKeys = results.map(data => {
+  const period = spcValidPeriod(data);
+  if (!period) throw new Error("SPC VALID_ISO를 확인할 수 없습니다.");
+  return new Date(period.valid).toISOString().slice(0, 10);
+});
 
         setPeriodOptions(dateKeys, resetToDay1 ? "1" : previous);
       } catch (error) {
