@@ -8253,7 +8253,9 @@ results.forEach((data, index) => {
 const dateKeys = results.map(data => {
   const period = spcValidPeriod(data);
   if (!period) throw new Error("SPC VALID_ISO를 확인할 수 없습니다.");
-  return new Date(period.valid).toISOString().slice(0, 10);
+
+  const outlookDayStart = new Date(period.expire - 24 * 3600000);
+  return outlookDayStart.toISOString().slice(0, 10);
 });
 
         setPeriodOptions(dateKeys, resetToDay1 ? "1" : previous);
