@@ -7797,7 +7797,7 @@ async function fillSpcExtraDetails(target, properties, day) {
       if (hasStructuredSections) {
         renderedStructured = addSpcStructuredDetailSections_(
           details,
-          "상세 전망 (영문 원문)",
+          "상세 전망",
           backendDetail.sections
         );
       }
@@ -7805,7 +7805,7 @@ async function fillSpcExtraDetails(target, properties, day) {
       if (!renderedStructured && fallbackSynopsis) {
         addSpcEnglishDetailSection(
           details,
-          "상세 전망 (영문 원문)",
+          "상세 전망",
           fallbackSynopsis
         );
       }
