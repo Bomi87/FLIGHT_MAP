@@ -8252,27 +8252,24 @@ function createSpcControl() {
       spcLayer.addLayer(layer);
     }
 
-    function addTornadoLayer(features, day, siteDateKey) {
-      const layer = L.geoJSON(
-        { type: "FeatureCollection", features: shiftedFeatures(features, siteDateKey) },
-        {
-          style: feature => ({
-            color: spcTornadoColors[Number(feature.properties?.DN)] || "#7c3aed",
-            weight: 2.5,
-            opacity: 1,
-            fillOpacity: 0.05,
-            dashArray: "6,4"
-          }),
-          onEachFeature: (feature, layer) => {
-            layer.bindPopup(
-              spcPopup(feature.properties, day, "tornado"),
-              { maxWidth: 440, minWidth: 280 }
-            );
-          }
-        }
-      );
-      spcLayer.addLayer(layer);
+   function addTornadoLayer(features, day, siteDateKey) {
+  const layer = L.geoJSON(
+    { type: "FeatureCollection", features: shiftedFeatures(features, siteDateKey) },
+    {
+      interactive: false,
+
+      style: feature => ({
+        color: spcTornadoColors[Number(feature.properties?.DN)] || "#7c3aed",
+        weight: 2.5,
+        opacity: 1,
+        fillOpacity: 0.05,
+        dashArray: "6,4"
+      })
     }
+  );
+
+  spcLayer.addLayer(layer);
+}
 
     const refresh = async () => {
       const id = ++requestId;
