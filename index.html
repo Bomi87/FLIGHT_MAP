@@ -8717,9 +8717,13 @@ function thqPointsForCurrentWorld_(points) {
 }
 
 let tornadoHqLastWarnings_ = [];
+    let tornadoHqLastWorldIndex_ = null;
 
 function thqRenderWarnings_(warnings) {
   tornadoHqLastWarnings_ = Array.isArray(warnings) ? warnings : [];
+
+  tornadoHqLastWorldIndex_ = Math.round(map.getCenter().lng / 360);
+
   tornadoHqWarningLayer.clearLayers();
 
   tornadoHqLastWarnings_.forEach(warning => {
@@ -8763,9 +8767,20 @@ function thqRenderWarnings_(warnings) {
   });
 }
 
-// 지도를 다른 world copy로 이동했을 때도 경보가 현재 화면의 미국 위치에 붙도록 재배치한다.
+// 실제로 다른 world copy로 이동한 경우에만 경보를 다시 그린다.
+// 팝업 autoPan으로 발생하는 일반 moveend에서는 재렌더링하지 않는다.
 map.on("moveend", () => {
-  if (tornadoHqWarningsSpcEnabled && tornadoHqLastWarnings_.length) {
+  if (!tornadoHqWarningsSpcEnabled || !tornadoHqLastWarnings_.length) return;
+
+  const worldIndex = Math.round(map.getCenter().lng / 360);
+
+  if (tornadoHqLastWorldIndex_ === null) {
+    tornadoHqLastWorldIndex_ = worldIndex;
+    return;
+  }
+
+  if (worldIndex !== tornadoHqLastWorldIndex_) {
+    tornadoHqLastWorldIndex_ = worldIndex;
     thqRenderWarnings_(tornadoHqLastWarnings_);
   }
 });
