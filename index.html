@@ -2716,6 +2716,7 @@
 .leaflet-control-global-weather .wx-switch{display:flex;gap:7px;align-items:center;margin:7px 0;font-size:11px;font-weight:700;}
 .leaflet-control-global-weather input[type=checkbox]{accent-color:#60a5fa;}
 .leaflet-control-global-weather .wx-time-window{font:10px/1.5 Arial;color:#93c5fd;overflow-wrap:anywhere;margin-top:5px;}
+.leaflet-control-global-weather .wx-report-range{white-space:pre-line;}
 .leaflet-control-global-weather .wx-age{width:100%;} 
 .leaflet-control-global-weather .wx-note{font:10px/1.4 Arial;color:#fbbf24;margin-top:7px;}
 @media(max-width:767px){.leaflet-control-global-weather .wx-panel{max-height:70vh;overflow:auto;}}
@@ -10114,7 +10115,7 @@ createNoaaModelControl().addTo(map);
        if(point.time)parts.push((i===0?'Observation Time':'Estimated Time')+': '+point.time.slice(0,2)+':'+point.time.slice(2)+' UTC');
      });
      if(arp.flToken)parts.push('FL (Flight Level): '+(arpAlt||arp.flToken));
-     if(arp.temp)parts.push('Static Air Temperature: '+wxArpTemperature(arp.temp));
+     if(arp.temp)parts.push('OAT: '+wxArpTemperature(arp.temp));
      if(arp.wind)parts.push('Wind: '+wxArpWindDisplay(arp.wind));
      if(arp.tb)parts.push('TB (Turbulence): '+turbulence);
      if(arp.ic)parts.push('IC (Icing): '+icing);
@@ -10129,7 +10130,7 @@ createNoaaModelControl().addTo(map);
      +row('OV (Position)',location,false)
      +row('운량 및 운고',f.SK,false)
      +row('LLWS (Wind Shear)',llws,llws?'urgent':false)
-     +(arp?row('Flight Identification',arp.flight,false)+row('Static Air Temperature',wxArpTemperature(arp.temp),false)+row('Wind',wxArpWindDisplay(arp.wind),false)+row('Aircraft Registration',arp.registration,false):'')
+     +(arp?row('Flight Identification',arp.flight,false)+row('OAT',wxArpTemperature(arp.temp),false)+row('Wind',wxArpWindDisplay(arp.wind),false)+row('Aircraft Registration',arp.registration,false):'')
      +row('TB (Turbulence)',turbulence,!!(f.TB||arp?.tb))
      +row('IC (Icing)',icing,(f.IC||arp?.ic)?'icing':false)
      +row('비고',f.RM,false)
@@ -10156,7 +10157,7 @@ createNoaaModelControl().addTo(map);
   <div class="wx-status" aria-live="polite">조회할 자료를 선택하세요.</div><div class="wx-undrawn" style="display:none;max-height:135px;overflow:auto;color:#fde68a;font:10px/1.45 Arial;margin-top:5px;white-space:pre-wrap"></div>
   <div class="wx-note">· SIGMET: 전 세계 발행자료<br>· PIREP/AIREP: 주로 미국/북대서양</div></section>`;
   const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),status=$('.wx-status');
-  function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-3600000)+' ~ '+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
+  function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-3600000)+' ~\n'+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
   stamps();setInterval(stamps,60000);
   $('.wx-toggle').onclick=()=>{
    stamps();const enabled=panel.hidden;
