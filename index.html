@@ -9990,17 +9990,26 @@ createNoaaModelControl().addTo(map);
    const t=String(raw||'').trim().toUpperCase();
    if(!t)return '';
    if(/\b(?:NEG|NEGATIVE|NIL)\b/.test(t))return phenomenon==='착빙'?'ICING NEGATIVE (착빙 없음)':'NEGATIVE (난기류 없음)';
-   const strength={LGT:'약한',MOD:'중강도',SEV:'강한',EXTRM:'극심한'};
+   // Preserve compound intensity/frequency reports literally. A mixture of
+   // LGT/MOD/SEV codes, hyphenated ranges, or frequency qualifiers may not
+   // safely reduce to a single Korean severity description.
+   const intensityTokens=[...t.matchAll(/\b(?:LT|LGT|MOD|SEV|EXTRM)\b/g)];
+   const hasFrequency=/\b(?:CONS|CONT|OCNL|INTMT|ISOL|FQT|FRQ)\b/.test(t);
+   if(hasFrequency || intensityTokens.length>1)return t;
+
+   // LT and LGT both mean Light; preserve the exact code in the suffix.
+   const strength={LT:'약한',LGT:'약한',MOD:'중강도',SEV:'강한',EXTRM:'극심한'};
    let severity='';
-   const range=t.match(/\b(LGT|MOD|SEV|EXTRM)\s*[-–~]\s*(LGT|MOD|SEV|EXTRM)\b/);
+   const range=t.match(/\b(LT|LGT|MOD|SEV|EXTRM)\s*[-–~]\s*(LT|LGT|MOD|SEV|EXTRM)\b/);
    if(range)severity=strength[range[1]]+'~'+strength[range[2]];
    else{
-     const matches=[...t.matchAll(/\b(LGT|MOD|SEV|EXTRM)\b/g)].map(m=>m[1]);
+     const matches=[...t.matchAll(/\b(LT|LGT|MOD|SEV|EXTRM)\b/g)].map(m=>m[1]);
      if(matches.length===1)severity=strength[matches[0]];
      else if(matches.length>1)severity=matches.map(code=>strength[code]).join('~');
    }
    const frequency=/\bINTMT\b/.test(t)?'간헐적 ': /\bOCNL\b/.test(t)?'때때로 ': /\bCONT\b/.test(t)?'지속적 ':'';
-   const desc=severity ? frequency+severity+' '+phenomenon : frequency+phenomenon+' 보고';
+   const kind=phenomenon==='난기류'&&/\bCHOP\b/.test(t)?'CHOP 난기류':phenomenon;
+   const desc=severity ? frequency+severity+' '+kind : frequency+kind+' 보고';
    return desc+' ('+t+')';
  }
  function wxPirepTurbulence(value){return wxPirepSeverityKorean(value,'난기류')}
