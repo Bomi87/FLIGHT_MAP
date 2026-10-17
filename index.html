@@ -2757,6 +2757,8 @@
 .wx-pirep-popup .wx-pr-key{font-size:10px;min-width:96px;flex-shrink:0;color:#64748b;font-weight:700;}
 .wx-pirep-popup .wx-pr-value{font-size:12px;font-weight:600;}
 .wx-pirep-popup .wx-pr-alert{color:#b45309;font-weight:800;}
+.wx-pirep-popup .wx-pr-icing{color:#0284c7;font-weight:800;}
+.wx-pirep-popup .wx-pr-interpret-icing{color:#0284c7;font-weight:700;}
 .wx-pirep-popup .wx-pr-section{font-size:10px;letter-spacing:.35px;font-weight:800;color:#475569;margin:11px 0 4px;}
 .wx-pirep-popup .wx-pr-explain{padding:8px 10px;background:#f1f5f9;border-radius:5px;border-left:3px solid #94a3b8;line-height:1.6;}
 .wx-pirep-popup .wx-pr-raw{font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #e2e8f0;background:#fff;border-radius:4px;padding:7px;margin:0;}
@@ -10000,32 +10002,49 @@ createNoaaModelControl().addTo(map);
  // ARP is a non-/field AIREP format. Extract clear tokens conservatively,
  // without applying the UA/UUA slash-field parser to unrelated ARP tokens.
  function wxAirepArpFields(raw){
-   const text=String(raw||'').trim().replace(/\s+/g,' ');
-   if(!/^ARP\s/i.test(text))return null;
-   const parts=text.split(/\s+/);
+   const text=String(raw||'').trim().toUpperCase().replace(/\s+/g,' ');
+   if(!/^ARP\s/.test(text))return null;
+   const tokens=text.split(' ');
    const coordinate=/^(\d{2})(\d{2})([NS])(\d{3})(\d{2})([EW])$/;
    const points=[];
-   parts.forEach((token,index)=>{
-     if(coordinate.test(token)){
-       const next=parts[index+1];
-       points.push({point:token,time:/^\d{4}$/.test(next||'')?next:''});
-     }
+   tokens.forEach((token,i)=>{
+     const match=token.match(coordinate);
+     if(!match)return;
+     const lat=Number(match[1])+Number(match[2])/60;
+     const lon=Number(match[4])+Number(match[5])/60;
+     if(lat>90||lon>180)return;
+     const next=tokens[i+1]||'';
+     points.push({point:token,lat:(match[3]==='S'?-lat:lat),lon:(match[6]==='W'?-lon:lon),time:/^(?:[01]\d|2[0-3])[0-5]\d$/.test(next)?next:''});
    });
-   const flToken=parts.find(t=>/^F\d{3}$/.test(t))||'';
-   const windToken=parts.find(t=>/^\d{3}\/\d{2,3}$/.test(t))||'';
-   const windIdx=parts.indexOf(windToken);
-   return {
-     flight:parts[1]||'',points,flToken,
-     wind:windToken&&(parts[windIdx+1]||'').toUpperCase()==='KT'?windToken+' KT':'',
-     // No inference about the remaining coded groups (MS43, QXT, etc.).
-     unparsed:parts.filter(t=>/^(?:MS\d+|\d{5}[A-Z]|[A-Z]{3}|\d{6}|F\d{2}[A-Z])$/.test(t))
-   };
+   const flToken=tokens.find(t=>/^F\d{3}$/.test(t))||'';
+   const windIndex=tokens.findIndex(t=>/^\d{3}\/\d{2,3}$/.test(t));
+   const windToken=windIndex>=0?tokens[windIndex]:'';
+   const wind=windToken&&(tokens[windIndex+1]||'')==='KT'?windToken+' KT':'';
+   const temp=tokens.find(t=>/^(?:MS|PS)\d{2}$/.test(t))||'';
+   const registration=tokens.find(t=>/^N[0-9]{1,5}[A-Z]{0,2}$/.test(t))||'';
+   return {flight:tokens[1]||'',points,flToken,wind,temp,registration};
+ }
+ function wxArpWindDisplay(wind){
+   const m=String(wind||'').match(/^(\d{3})\/(\d{2,3}) KT$/);
+   return m?Number(m[1])+'° / '+Number(m[2])+' KT':String(wind||'');
+ }
+ function wxArpTemperature(temp){
+   const m=String(temp||'').match(/^(MS|PS)(\d{2})$/);
+   return m?(m[1]==='MS'?'−':'+')+Number(m[2])+'°C':'';
+ }
+ function wxArpPointLabel(index){
+   return index===0?'Reported Position':index===1?'Next Position':'Next Significant Point';
+ }
+ function wxArpPointText(p){
+   const lat=Math.floor(Math.abs(p.lat)),latMin=Math.round((Math.abs(p.lat)-lat)*60);
+   const lon=Math.floor(Math.abs(p.lon)),lonMin=Math.round((Math.abs(p.lon)-lon)*60);
+   return p.point+' ('+String(lat).padStart(2,'0')+'°'+String(latMin).padStart(2,'0')+'′'+(p.lat<0?'S':'N')+', '+String(lon).padStart(3,'0')+'°'+String(lonMin).padStart(2,'0')+'′'+(p.lon<0?'W':'E')+')';
  }
  function wxPirepPopup(r){
    const raw=String(r.raw||'');
    const f=wxPirepRawFields(raw);
    const arp=wxAirepArpFields(raw);
-   const row=(label,value,emphasize)=>value?'<div class="wx-pr-line"><span class="wx-pr-key">'+esc(label)+'</span><span class="wx-pr-value'+(emphasize?' wx-pr-alert':'')+'">'+esc(value)+'</span></div>':'';
+   const row=(label,value,emphasize)=>value?'<div class="wx-pr-line"><span class="wx-pr-key">'+esc(label)+'</span><span class="wx-pr-value'+(emphasize==='icing'?' wx-pr-icing':emphasize?' wx-pr-alert':'')+'">'+esc(value)+'</span></div>':'';
    const title=String(r.type||'PIREP/AIREP');
    const reportHeader=raw.toUpperCase().match(/^\s*([A-Z]{4})\s+(UUA|UA)\b/);
    const reportingStation=reportHeader?reportHeader[1]:'';
@@ -10046,11 +10065,15 @@ createNoaaModelControl().addTo(map);
    if(f.FL)parts.push('FL (Flight Level): '+alt);
    if(f.RM)parts.push('RM (Remarks): '+f.RM);
    if(arp){
-     if(arp.flight)parts.push('Flight Identification: '+arp.flight);
-     arp.points.forEach((point,i)=>parts.push('Position '+(i+1)+': '+point.point+(point.time?' · '+point.time.slice(0,2)+':'+point.time.slice(2)+' UTC':'')));
-     if(arp.flToken)parts.push(arpAlt ? 'FL (Flight Level): '+arpAlt : 'Altitude code: '+arp.flToken+' (해석 불가)');
-     if(arp.wind)parts.push('Wind group: '+arp.wind+' (풍향/풍속 표기 · 의미 확인 필요)');
-     parts.push('기타 ARP 코드: 원문 확인 (임의 해석하지 않음)');
+     if(arp.flight)parts.push('Aircraft Identification: '+arp.flight);
+     arp.points.forEach((point,i)=>{
+       parts.push(wxArpPointLabel(i)+': '+wxArpPointText(point));
+       if(point.time)parts.push((i===0?'Observation Time':'Estimated Time')+': '+point.time.slice(0,2)+':'+point.time.slice(2)+' UTC');
+     });
+     if(arp.flToken)parts.push('FL (Flight Level): '+(arpAlt||arp.flToken));
+     if(arp.temp)parts.push('Static Air Temperature: '+wxArpTemperature(arp.temp));
+     if(arp.wind)parts.push('Wind Direction / Speed: '+wxArpWindDisplay(arp.wind));
+     if(arp.registration)parts.push('Aircraft Registration: '+arp.registration);
    }
    if(!parts.length)parts.push('정형 필드 없음 — 원문 확인');
    return '<div class="wx-pirep-popup">'
@@ -10059,10 +10082,11 @@ createNoaaModelControl().addTo(map);
      +row('Reporting Station',reportingStation,false)+row('Report Type',reportType,false)
      +row('고도',alt,false)+row('항공기',wxPirepAircraft(f.TP),false)
      +row('OV (Position)',location,false)
+     +(arp?row('Flight Identification',arp.flight,false)+row('Static Air Temperature',wxArpTemperature(arp.temp),false)+row('Wind Direction / Speed',wxArpWindDisplay(arp.wind),false)+row('Aircraft Registration',arp.registration,false):'')
      +row('TB (Turbulence)',turbulence,!!f.TB)
-     +row('IC (Icing)',icing,!!f.IC)
+     +row('IC (Icing)',icing,f.IC?'icing':false)
      +'<div class="wx-pr-section">REPORT INTERPRETATION · 원문 해석</div>'
-     +'<div class="wx-pr-explain">'+parts.map(esc).join('<br>')+'</div>'
+     +'<div class="wx-pr-explain">'+parts.map(line=>/^IC \(Icing\):/.test(line)?'<span class="wx-pr-interpret-icing">'+esc(line)+'</span>':esc(line)).join('<br>')+'</div>'
      +'<div class="wx-pr-section">RAW PIREP/AIREP</div>'
      +'<div class="wx-pr-raw">'+esc(raw)+'</div>'
      +'</div>';
