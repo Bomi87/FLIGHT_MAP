@@ -10015,7 +10015,9 @@ createNoaaModelControl().addTo(map);
  function wxAirepArpFields(raw){
    const text=String(raw||'').trim().toUpperCase().replace(/\s+/g,' ');
    if(!/^ARP\s/.test(text))return null;
-   const tokens=text.split(' ');
+   // ICAO AIREP positions may be combined (3731N09132W) or split (3731N 09132W).
+   const compactText=text.replace(/\b([0-8]\d[0-5]\d[NS])\s+((?:0\d\d|1[0-7]\d|180)[0-5]\d[EW])\b/g,'$1$2');
+   const tokens=compactText.split(' ');
    const coordinate=/^(\d{2})(\d{2})([NS])(\d{3})(\d{2})([EW])$/;
    const points=[];
    tokens.forEach((token,i)=>{
@@ -10028,12 +10030,18 @@ createNoaaModelControl().addTo(map);
      points.push({point:token,lat:(match[3]==='S'?-lat:lat),lon:(match[6]==='W'?-lon:lon),time:/^(?:[01]\d|2[0-3])[0-5]\d$/.test(next)?next:''});
    });
    const flToken=tokens.find(t=>/^F\d{3}$/.test(t))||'';
-   const windIndex=tokens.findIndex(t=>/^\d{3}\/\d{2,3}$/.test(t));
+   const windIndex=tokens.findIndex(t=>/^\d{3}\/\d{2,3}(?:KT)?$/.test(t));
    const windToken=windIndex>=0?tokens[windIndex]:'';
-   const wind=windToken&&(tokens[windIndex+1]||'')==='KT'?windToken+' KT':'';
+   const wind=windToken?(windToken.endsWith('KT')?windToken.replace(/KT$/,' KT'):(tokens[windIndex+1]||'')==='KT'?windToken+' KT':''):'';
    const temp=tokens.find(t=>/^(?:MS|PS)\d{2}$/.test(t))||'';
    const registration=tokens.find(t=>/^N[0-9]{1,5}[A-Z]{0,2}$/.test(t))||'';
-   return {flight:tokens[1]||'',points,flToken,wind,temp,registration};
+   // In short-form ARP, TB SMTH followed by bare IC reports smooth turbulence,
+   // but no icing intensity/status; do not fabricate an icing observation.
+   const tbIndex=tokens.findIndex(t=>t==='TB');
+   const tb=tbIndex>=0?(tokens[tbIndex+1]==='SMTH'?'SMTH':''):'';
+   const icIndex=tokens.findIndex(t=>t==='IC');
+   const ic=icIndex>=0 && /^(?:NEG|LGT|LT|MOD|SEV|TRACE|TRC|RIME|MXD|MX)$/.test(tokens[icIndex+1]||'') ? tokens[icIndex+1] : '';
+   return {flight:tokens[1]||'',points,flToken,wind,temp,registration,tb,ic};
  }
  function wxArpWindDisplay(wind){
    const m=String(wind||'').match(/^(\d{3})\/(\d{2,3}) KT$/);
@@ -10066,8 +10074,8 @@ createNoaaModelControl().addTo(map);
    const urgent=/^\s*[A-Z]{3,4}\s+UUA\b/i.test(raw);
    const llwsMatch=raw.match(/\bLLWS\s*([+\-\/0-9 ]+\s*KT)?/i);
    const llws=llwsMatch?llwsMatch[0].trim():'';
-   const turbulence=wxPirepTurbulence(f.TB);
-   const icing=wxPirepIcing(f.IC);
+   const turbulence=arp?.tb==='SMTH'?'SMTH (난기류 없음)':wxPirepTurbulence(f.TB);
+   const icing=wxPirepIcing(arp?arp.ic:f.IC);
    // V34: interpretation follows the slash-field order in RAW PIREP.
    // Do not sort by weather hazard or aircraft; preserve the originating report's sequence.
    const parts=[];
@@ -10107,7 +10115,9 @@ createNoaaModelControl().addTo(map);
      });
      if(arp.flToken)parts.push('FL (Flight Level): '+(arpAlt||arp.flToken));
      if(arp.temp)parts.push('Static Air Temperature: '+wxArpTemperature(arp.temp));
-     if(arp.wind)parts.push('Wind Direction / Speed: '+wxArpWindDisplay(arp.wind));
+     if(arp.wind)parts.push('Wind: '+wxArpWindDisplay(arp.wind));
+     if(arp.tb)parts.push('TB (Turbulence): '+turbulence);
+     if(arp.ic)parts.push('IC (Icing): '+icing);
      if(arp.registration)parts.push('Aircraft Registration: '+arp.registration);
    }
    // If no structured field can be decoded, the RAW PIREP/AIREP remains visible.
@@ -10119,9 +10129,9 @@ createNoaaModelControl().addTo(map);
      +row('OV (Position)',location,false)
      +row('운량 및 운고',f.SK,false)
      +row('LLWS (Wind Shear)',llws,llws?'urgent':false)
-     +(arp?row('Flight Identification',arp.flight,false)+row('Static Air Temperature',wxArpTemperature(arp.temp),false)+row('Wind Direction / Speed',wxArpWindDisplay(arp.wind),false)+row('Aircraft Registration',arp.registration,false):'')
-     +row('TB (Turbulence)',turbulence,!!f.TB)
-     +row('IC (Icing)',icing,f.IC?'icing':false)
+     +(arp?row('Flight Identification',arp.flight,false)+row('Static Air Temperature',wxArpTemperature(arp.temp),false)+row('Wind',wxArpWindDisplay(arp.wind),false)+row('Aircraft Registration',arp.registration,false):'')
+     +row('TB (Turbulence)',turbulence,!!(f.TB||arp?.tb))
+     +row('IC (Icing)',icing,(f.IC||arp?.ic)?'icing':false)
      +row('비고',f.RM,false)
      +'<div class="wx-pr-section">REPORT INTERPRETATION · 원문 해석</div>'
      +'<div class="wx-pr-explain">'+parts.map(line=>/^IC \(Icing\):/.test(line)?'<span class="wx-pr-interpret-icing">'+esc(line)+'</span>':esc(line)).join('<br>')+'</div>'
