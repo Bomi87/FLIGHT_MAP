@@ -2718,6 +2718,23 @@
 .wx-weather-legend small{display:block;font-size:9px;color:#cbd5e1;margin-top:4px;}
 @media(max-width:767px){.wx-weather-legend{font-size:9px;min-width:145px;padding:6px 8px;}}
 
+/* Weather V3: readable SIGMET details + legend toggle */
+.wx-weather-legend{display:none;}
+.wx-weather-legend.wx-visible{display:block;}
+.wx-weather-legend-btn{background:#1d4e89;color:white;border:none;border-radius:4px;box-shadow:0 1px 5px #0005;font:bold 10px Arial,sans-serif;min-width:88px;height:25px;padding:0 7px;cursor:pointer;display:block;margin-left:auto;}
+.wx-weather-legend-btn.wx-active{background:#16734d;}
+.wx-sigmet-popup{font:11px/1.45 Arial,sans-serif;color:#1f2937;min-width:240px;max-width:330px;}
+.wx-sigmet-popup .wx-pop-head{font-size:12px;font-weight:800;margin-bottom:5px;border-bottom:1px solid #d1d5db;padding-bottom:4px;}
+.wx-sigmet-popup .wx-pop-valid{font-size:10px;margin-bottom:5px;}
+.wx-sigmet-popup .wx-pop-raw{font-family:Arial,sans-serif;line-height:1.5;white-space:normal;overflow-wrap:anywhere;}
+.wx-sigmet-popup .wx-pop-raw div{margin:2px 0;}
+.wx-sigmet-popup .wx-pop-hazard{font-weight:800;color:#d62727;}
+.wx-sigmet-popup .wx-pop-coords{color:#46515e;}
+.wx-sigmet-popup .wx-pop-level{font-weight:800;color:#244ce0;}
+.wx-sigmet-popup .wx-pop-move{font-weight:700;color:#1c9045;}
+.wx-sigmet-popup .wx-pop-utc{font-weight:700;color:#252525;}
+
+
 </style>
 </head>
 <body>
@@ -9473,12 +9490,41 @@ createTokyoVaacControl().addTo(map);
 createSpcControl().addTo(map);
 createNoaaModelControl().addTo(map);
 
+
 /* ===== NOAA AWC live PIREP/AIREP + worldwide SIGMET ===== */
 (function(){
  const pirepLayer=L.layerGroup(), sigmetLayer=L.layerGroup();
  const esc=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const utc=ms=>new Date(ms).toISOString().slice(0,16).replace('T',' ')+' UTC';
  let pSeq=0,sSeq=0,refresh=null,moveTimer=null;
+ const sigmetExpiryLayers=[];
+ const parseSigmetTime=v=>{if(v==null||v==='')return NaN;const t=String(v).trim();if(/^\d{10}(?:\.\d+)?$/.test(t))return Number(t)*1000;if(/^\d{13}$/.test(t))return Number(t);const d=Date.parse(t);return Number.isFinite(d)?d:NaN};
+ // Render textual SIGMET as clearly separated, colour-coded rows.
+ function formatSigmetRaw(raw){
+   const tokens=String(raw||'').trim().split(/\s+/).filter(Boolean);
+   if(!tokens.length)return '<span>원문 없음</span>';
+   const out=[];let head=[],body=[],coords=[],tops=[],mov=[];
+   for(const t of tokens){
+     if(/^(WS[A-Z0-9]{2}\d{2}|W[A-Z]{3}\d{2})$/.test(t) || /^(SIGMET|VALID|FIR|AT|OBS|FCST|OBS\/FCST)$/i.test(t)){
+       if(!body.length && !coords.length)head.push(t);else body.push(t);
+     }else if(/^N\d{4,6}$|^S\d{4,6}$|^E\d{5,7}$|^W\d{5,7}$|^WI$/i.test(t) || t==='-')coords.push(t);
+     else if(/^(TOP|TOPS|FL\d+|ABV|BLW|BTN|SFC)$/i.test(t))tops.push(t);
+     else if(/^(MOV|STNR|NC|WKN|INTSF|N|NE|E|SE|S|SW|W|NW|KT|KMH)$/i.test(t)||/^(NC|INTSF|WKN)=$/i.test(t))mov.push(t);
+     else body.push(t);
+   }
+   // Preserve the complete original bulletin, with regex highlights and line breaks.
+   const safe=esc(String(raw||'').trim());
+   let formatted=safe.replace(/(\b(?:EMBD TS|FRQ TS|OBSC TS|SEV TURB|SEV ICE|SQL TS|TS GR|TC|VA)\b)/gi,'<span class="wx-pop-hazard">$1</span>');
+   formatted=formatted.replace(/(\b(?:N\d{4,6}|S\d{4,6})\s+(?:E\d{5,7}|W\d{5,7})\b)/g,'<span class="wx-pop-coords">$1</span>');
+   formatted=formatted.replace(/(\b(?:TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|FL\d{2,3})\b)/gi,'<span class="wx-pop-level">$1</span>');
+   formatted=formatted.replace(/(\b(?:MOV\s+[NSEW]{1,2}\s+\d{1,3}(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)\b)/gi,'<span class="wx-pop-move">$1</span>');
+   const chunks=formatted.split(/\n|\r/).flatMap(x=>x.match(/.{1,95}(?:\s|$)|.{1,95}/g)||[x]);
+   return chunks.map(x=>'<div>'+x+'</div>').join('');
+ }
+ const expiryLabel=ms=>{if(!Number.isFinite(ms))return '만료시각 미확인';const remain=ms-Date.now();if(remain<=0)return 'EXPIRED';const m=Math.ceil(remain/60000);return m<=5?'⚠ EXPIRES IN '+m+' MIN':m<=30?'EXPIRES IN '+m+' MIN':'EXPIRES IN '+m+' MIN'};
+ const expiryColor=ms=>{if(!Number.isFinite(ms))return '#64748b';const m=(ms-Date.now())/60000;return m<=5?'#dc2626':m<=30?'#d97706':'#475569'};
+ function pruneExpiredSigmets(){for(let i=sigmetExpiryLayers.length-1;i>=0;i--){const r=sigmetExpiryLayers[i];if(Date.now()>=r.expires){sigmetLayer.removeLayer(r.layer);sigmetExpiryLayers.splice(i,1)}}}
+ setInterval(pruneExpiredSigmets,15000);
  const WX_BACKEND_URL=AIRSPACE_SEARCH_BACKEND_URL;
  function jsonp(params){return new Promise((resolve,reject)=>{
    const callback='wxCb_'+Date.now()+'_'+Math.floor(Math.random()*1e7);
@@ -9498,33 +9544,34 @@ createNoaaModelControl().addTo(map);
   <label class="wx-label">SIGMET 현상</label><select class="wx-sig-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option><option value="other">OTHER</option></select>
   <hr style="border:0;border-top:1px solid #475569;margin:12px 0 8px">
   <label class="wx-switch"><input class="wx-pirep" type="checkbox"> PIREP / AIREP</label>
-  <label class="wx-label">보고 UTC 기간</label>
-  <select class="wx-age"><option value="1" selected>1H</option><option value="2">2H</option><option value="3">3H</option><option value="6">6H</option><option value="12">12H</option></select>
+  <label class="wx-label">보고 UTC 기간 · 최근 1시간</label>
   <div class="wx-time-window wx-report-range"></div>
   <label class="wx-label">보고 기상현상</label><select class="wx-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option></select>
-  <button class="wx-action wx-refresh" type="button">조회 / 새로고침</button>
+  <button class="wx-action wx-refresh" type="button">새로고침</button>
   <div class="wx-status" aria-live="polite">조회할 자료를 선택하세요.</div>
-  <div class="wx-note">NOAA AWC · PIREP/AIREP: 주로 미국/북대서양 · SIGMET: 전 세계 발행자료 (자료 지연/누락 가능). 항공 운항 시 공식 브리핑 별도 확인.</div></section>`;
-  const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'), age=$('.wx-age'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),status=$('.wx-status');
-  function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-Number(age.value)*3600000)+' ~ '+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
+  <div class="wx-note">· PIREP/AIREP: 주로 미국/북대서양<br>· SIGMET: 전 세계 발행자료</div></section>`;
+  const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),status=$('.wx-status');
+  function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-3600000)+' ~ '+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
   stamps();setInterval(stamps,60000);
   $('.wx-toggle').onclick=()=>{stamps();const open=panel.hidden;panel.hidden=!open;$('.wx-toggle').textContent=open?'WEATHER ▴':'WEATHER ▾';$('.wx-toggle').setAttribute('aria-expanded',String(open));};
   async function draw(part='all'){
    if(!chkP.checked){++pSeq;pirepLayer.clearLayers();map.removeLayer(pirepLayer)}
-   if(!chkS.checked){++sSeq;sigmetLayer.clearLayers();map.removeLayer(sigmetLayer)}
+   if(!chkS.checked){++sSeq;sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;map.removeLayer(sigmetLayer)}
    if(!chkP.checked&&!chkS.checked){status.textContent='모두 OFF';return}
    status.textContent='NOAA 데이터 조회 중…';const lines=[];
    if(chkP.checked && (part==='all'||part==='pirep')){
     const id=++pSeq;
     try{
-     const data=await jsonp({action:'pirepsearch',scope:'global',age:age.value});
+     const data=await jsonp({action:'pirepsearch',scope:'global',age:1});
      if(id!==pSeq||!chkP.checked)return;if(!data.ok)throw Error(data.error||'PIREP 오류');let n=0;
      const nextPireps=L.layerGroup();
      (data.items||[]).forEach(r=>{if(filter.value==='icing'&&!r.icing||filter.value==='turb'&&!r.turbulence)return;
       const color=r.icing?'#0ea5e9':r.turbulence?'#f97316':'#a855f7';
       const popup=`<b>${esc(r.type||'PIREP/AIREP')}</b><br>${esc(r.time||'UTC unknown')}<br>${r.altFt!=null?'Altitude: '+esc(r.altFt)+' ft<br>':''}<div style="white-space:pre-wrap;overflow-wrap:anywhere;max-width:300px">${esc(r.raw||'')}</div>`;
-      // Match repeated world-map copies when zoomed out. No location changes: only 360° wrapped duplicates.
-      [-360,0,360].forEach(shift=>L.circleMarker([r.lat,r.lon+shift],{radius:6,color:'#fff',weight:1,fillColor:color,fillOpacity:.9}).bindPopup(popup).addTo(nextPireps));n++;
+      // One report = one marker: place in the world copy nearest the current viewport.
+      const centerLng=map.getCenter().lng;
+      const wrappedLon=Number(r.lon)+360*Math.round((centerLng-Number(r.lon))/360);
+      L.circleMarker([r.lat,wrappedLon],{radius:6,color:'#fff',weight:1,fillColor:color,fillOpacity:.9}).bindPopup(popup).addTo(nextPireps);n++;
      });pirepLayer.clearLayers();nextPireps.eachLayer(marker=>pirepLayer.addLayer(marker));pirepLayer.addTo(map);lines.push(`PIREP/AIREP ${n}건`+(data.truncated?' (일부 데이터 제한)':''));
     }catch(e){if(id!==pSeq)return;lines.push('PIREP: '+(e.message||e));}
    }
@@ -9532,21 +9579,22 @@ createNoaaModelControl().addTo(map);
     const id=++sSeq;
     try{
      const data=await jsonp({action:'sigmetsearch'});if(id!==sSeq||!chkS.checked)return;if(!data.ok)throw Error(data.error||'SIGMET 오류');let n=0;
-     const nextSigmet=L.layerGroup();
+     const nextSigmet=L.layerGroup();const nextExpiry=[];
      (data.items||[]).forEach(item=>{
        if(sf.value!=='all'&&item.hazard!==sf.value)return;
        if(!item.geometry)return;
+       const expiry=parseSigmetTime(item.validTo);if(Number.isFinite(expiry)&&expiry<=Date.now())return;
        const hue=item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
        try{let g=L.geoJSON({type:'Feature',geometry:item.geometry,properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
        if(!g.getLayers().length)return;
-       const txt=`<b>SIGMET · ${esc(item.hazard.toUpperCase())}</b><br>${esc(item.name||'')}<br>Valid: ${esc(item.validFrom||'?')} ~ ${esc(item.validTo||'?')}<br><div style="white-space:pre-wrap;max-width:320px;overflow-wrap:anywhere">${esc(item.raw||'')}</div>`;
-       g.bindPopup(txt);g.addTo(nextSigmet);n++;}catch(_){/* discard invalid geometry */}
-     });sigmetLayer.clearLayers();nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetLayer.addTo(map);lines.push(`SIGMET ${n}개 영역`+(data.truncated?' (일부 제한)':''));
+       const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${esc(item.validFrom||'?')} ~ ${esc(item.validTo||'?')}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
+       g.bindPopup(txt());g.on('popupopen',()=>g.setPopupContent(txt()));g.addTo(nextSigmet);if(Number.isFinite(expiry))nextExpiry.push({layer:g,expires:expiry});n++;}catch(_){/* discard invalid geometry */}
+     });sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetExpiryLayers.push(...nextExpiry);sigmetLayer.addTo(map);const d=data.diagnostics||{};lines.push(`SIGMET ${n}개 영역 / 수신 ${d.received??'?'}건 · 만료 ${d.expired??'?'} · 도형 누락 ${d.missingGeometry??'?'} · 좌표 복구 ${d.geometryRecovered??'?'} · 미표시 ${d.unsupportedGeometry??'?'}`+(data.truncated?' (일부 제한)':''));
     }catch(e){if(id!==sSeq)return;lines.push('SIGMET: '+(e.message||e));}
    }
    stamps();status.textContent=lines.join(' · ')+' · '+utc(Date.now());
   }
-  [chkP,age,filter].forEach(input=>input.addEventListener('change',()=>draw('pirep')));[chkS,sf].forEach(input=>input.addEventListener('change',()=>draw('sigmet')));$('.wx-refresh').onclick=()=>draw('all');
+  [chkP,filter].forEach(input=>input.addEventListener('change',()=>draw('pirep')));[chkS,sf].forEach(input=>input.addEventListener('change',()=>draw('sigmet')));$('.wx-refresh').onclick=()=>draw('all');
   // Global PIREPs do not depend on viewport; never re-fetch on map movement.
   refresh=setInterval(()=>{if(chkP.checked||chkS.checked)draw('all')},300000);
   L.DomEvent.disableClickPropagation(el);L.DomEvent.disableScrollPropagation(el);return el;
@@ -9566,7 +9614,8 @@ createNoaaModelControl().addTo(map);
    L.DomEvent.disableClickPropagation(el);L.DomEvent.disableScrollPropagation(el);
    return el;
  }});
- new Legend().addTo(map);
+ const legendControl=new Legend();legendControl.addTo(map);
+ const LegendToggle=L.Control.extend({options:{position:'bottomright'},onAdd(){const el=L.DomUtil.create('div','leaflet-control');const btn=L.DomUtil.create('button','wx-weather-legend-btn',el);btn.type='button';btn.textContent='WX Alert OFF';btn.onclick=()=>{const legend=legendControl.getContainer();const on=legend.classList.toggle('wx-visible');btn.textContent=on?'WX Alert ON':'WX Alert OFF';btn.classList.toggle('wx-active',on);};L.DomEvent.disableClickPropagation(el);return el;}});new LegendToggle().addTo(map);
  new Ctrl().addTo(map);
 })();
 /* ===== Global Weather control end ===== */
