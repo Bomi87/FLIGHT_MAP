@@ -2731,6 +2731,52 @@
 .wx-weather-legend small{display:block;font-size:9px;color:#cbd5e1;margin-top:4px;}
 @media(max-width:767px){.wx-weather-legend{font-size:9px;min-width:145px;padding:6px 8px;}}
 
+/* V43: Compact WX ALERT panel only on narrow/mobile screens.
+   Keep all controls and data logic intact; hide nonessential explanatory UI. */
+@media (max-width: 767px) {
+  .wx-weather-legend,
+  .wx-weather-legend.wx-visible { display:none !important; }
+  .leaflet-control-global-weather .wx-panel {
+    width: 184px !important;
+    max-width: calc(100vw - 16px) !important;
+    right: 0 !important;
+    top: 29px !important;
+    padding: 9px 10px !important;
+    max-height: min(48dvh, 340px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    z-index: 10000;
+  }
+  .leaflet-control-global-weather .wx-mobile-hide,
+  .leaflet-control-global-weather .wx-note,
+  .leaflet-control-global-weather .wx-status,
+  .leaflet-control-global-weather .wx-undrawn { display:none !important; }
+  .leaflet-control-global-weather .wx-title { font-size: 11px !important; margin-bottom: 6px !important; }
+  .leaflet-control-global-weather .wx-switch { margin: 5px 0 !important; }
+  .leaflet-control-global-weather .wx-label { margin: 6px 0 3px !important; }
+  .leaflet-control-global-weather .wx-panel hr { margin: 8px 0 5px !important; }
+  .leaflet-control-global-weather .wx-panel select,
+  .leaflet-control-global-weather .wx-panel button.wx-action { height: 28px !important; }
+}
+
+/* V44: Mobile-only settings-close control; overlays remain active. */
+.leaflet-control-global-weather .wx-mobile-close{display:none;}
+@media (max-width: 767px){
+  .leaflet-control-global-weather .wx-panel:not([hidden]){position:absolute;}
+  .leaflet-control-global-weather .wx-mobile-close{
+    display:block!important;position:absolute!important;top:5px!important;right:5px!important;
+    width:25px!important;height:25px!important;min-width:25px!important;
+    padding:0!important;margin:0!important;line-height:22px!important;
+    border:1px solid #64748b!important;border-radius:4px!important;
+    background:#1e293b!important;color:#fff!important;
+    font-size:19px!important;font-weight:600!important;cursor:pointer!important;
+    z-index:2!important;
+  }
+  .leaflet-control-global-weather .wx-title{padding-right:28px!important;}
+  .leaflet-control-global-weather .wx-panel[hidden]{display:none!important;}
+}
+
 /* Weather V3: readable SIGMET details + legend toggle */
 .wx-weather-legend{display:none;}
 .wx-weather-legend.wx-visible{display:block;}
@@ -10144,14 +10190,14 @@ createNoaaModelControl().addTo(map);
  const Ctrl=L.Control.extend({options:{position:'topright'},onAdd:function(){
   const el=L.DomUtil.create('div','leaflet-control leaflet-control-global-weather control-group-weather');
   el.innerHTML=`<button class="wx-toggle" type="button" aria-expanded="false">WX ALERT OFF</button>
-  <section class="wx-panel" hidden><div class="wx-title">AVIATION WEATHER</div>
+  <section class="wx-panel" hidden><button class="wx-mobile-close" type="button" aria-label="설정창 숨기기" title="설정창 숨기기">×</button><div class="wx-title">AVIATION WEATHER</div>
   <label class="wx-switch"><input class="wx-sigmet" type="checkbox"> SIGMET (Global)</label>
-  <label class="wx-label">SIGMET 유효시각</label><div class="wx-time-window wx-sigmet-time"></div>
+  <label class="wx-label wx-mobile-hide">SIGMET 유효시각</label><div class="wx-time-window wx-sigmet-time wx-mobile-hide"></div>
   <label class="wx-label">SIGMET 현상</label><select class="wx-sig-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option><option value="other">OTHER</option></select>
   <hr style="border:0;border-top:1px solid #475569;margin:12px 0 8px">
   <label class="wx-switch"><input class="wx-pirep" type="checkbox"> PIREP / AIREP</label>
-  <label class="wx-label">보고 UTC 기간 · 최근 1시간</label>
-  <div class="wx-time-window wx-report-range"></div>
+  <label class="wx-label wx-mobile-hide">보고 UTC 기간 · 최근 1시간</label>
+  <div class="wx-time-window wx-report-range wx-mobile-hide"></div>
   <label class="wx-label">보고 기상현상</label><select class="wx-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option></select>
   <button class="wx-action wx-refresh" type="button">새로고침</button>
   <div class="wx-status" aria-live="polite">조회할 자료를 선택하세요.</div><div class="wx-undrawn" style="display:none;max-height:135px;overflow:auto;color:#fde68a;font:10px/1.45 Arial;margin-top:5px;white-space:pre-wrap"></div>
@@ -10159,13 +10205,33 @@ createNoaaModelControl().addTo(map);
   const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),status=$('.wx-status');
   function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-3600000)+' ~\n'+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
   stamps();setInterval(stamps,60000);
-  $('.wx-toggle').onclick=()=>{
-   stamps();const enabled=panel.hidden;
-   panel.hidden=!enabled;
+  // V44: On mobile, the ON button opens/closes settings without changing the data layers.
+  // Desktop retains the existing ON/OFF behavior.
+  let wxEnabled=false;
+  const wxIsMobile=()=>window.matchMedia('(max-width: 767px)').matches;
+  const wxToggle=$('.wx-toggle');
+  const wxClose=$('.wx-mobile-close');
+  function wxSetPanelVisible(visible){
+    panel.hidden=!visible;
+    wxToggle.setAttribute('aria-expanded',String(visible));
+  }
+  wxClose.onclick=(event)=>{
+    event.preventDefault();
+    event.stopPropagation();
+    wxSetPanelVisible(false);
+  };
+  wxToggle.onclick=()=>{
+   stamps();
+   if(wxIsMobile() && wxEnabled){
+     wxSetPanelVisible(panel.hidden);
+     return;
+   }
+   const enabled=!wxEnabled;
+   wxEnabled=enabled;
+   wxSetPanelVisible(enabled);
    chkS.checked=enabled;chkP.checked=enabled;
-   $('.wx-toggle').textContent=enabled?'WX ALERT ON':'WX ALERT OFF';
-   $('.wx-toggle').setAttribute('aria-expanded',String(enabled));
-   $('.wx-toggle').classList.toggle('wx-active',enabled);
+   wxToggle.textContent=enabled?'WX ALERT ON':'WX ALERT OFF';
+   wxToggle.classList.toggle('wx-active',enabled);
    const legend=legendControl.getContainer();
    if(legend)legend.classList.toggle('wx-visible',enabled);
    draw('all');
