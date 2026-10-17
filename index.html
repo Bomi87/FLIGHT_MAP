@@ -4296,7 +4296,16 @@ function getShapeCodeLabel(name) {
       const zoom = map.getZoom();
 
       ndbRawData.forEach(feature => {
-        const bestLon = mapWorldLongitude(feature.coords.lon, map.getCenter().lng);
+        // V17: nearby NDB follows route world copy, not a different map repeat.
+        let reference=map.getCenter().lng;
+        if(worldRouteV17Reference!==null){
+          const routeLon=mapWorldLongitude(feature.coords.lon,worldRouteV17Reference);
+          // For route-centered views align navigation points to the same copy.
+          const screenLon=mapWorldLongitude(feature.coords.lon,reference);
+          if(Math.abs(routeLon-worldRouteV17Reference)<105 &&
+             Math.abs(routeLon-reference)<Math.abs(screenLon-reference)+80){reference=worldRouteV17Reference;}
+        }
+        const bestLon=mapWorldLongitude(feature.coords.lon,reference);
         const latlng = [feature.coords.lat, bestLon];
 
         if (!isLatLngInExpandedBounds(latlng[0], latlng[1], NDB_BOUNDS_PAD_RATIO)) {
@@ -10432,24 +10441,81 @@ function worldCopyV16Walk(group,callback){
   if(!group || typeof group.eachLayer!=='function')return;
   group.eachLayer(l=>{if(typeof l.eachLayer==='function' && typeof l.getLatLngs!=='function')worldCopyV16Walk(l,callback);else callback(l)});
 }
+/* V17 ROUTE-COPY COORDINATOR.
+ * Important: different source files/segments can begin on different world copies
+ * BEFORE V16 global shifting. Normalize EACH source geometry independently to
+ * the SAME geographic corridor, and only then move that corridor with the view.
+ * Never stitch unrelated segments or invent a connecting leg.
+ */
+let worldRouteV17Reference=null;
+function worldRouteV17CircularPivot(segments){
+  // Treat 350E and 10W as the same meridian on a sphere.
+  let x=0,y=0;
+  for(const e of segments){
+    const a=e.longitude*Math.PI/180;
+    const weight=Math.min(8,Math.max(1,Math.sqrt(e.count)));
+    x+=weight*Math.cos(a);y+=weight*Math.sin(a);
+  }
+  if(!segments.length)return null;
+  if(Math.hypot(x,y)<1e-8){
+    // Opposite parts of the world: retain a stable anchor instead of oscillating.
+    return segments[0].longitude;
+  }
+  return Math.atan2(y,x)*180/Math.PI;
+}
+function worldRouteV17ExtractLatLngs(input,out){
+  if(!input)return out;
+  if(Array.isArray(input)){
+    for(const value of input)worldRouteV17ExtractLatLngs(value,out);
+  }else if(Number.isFinite(input.lat)&&Number.isFinite(input.lng))out.push(input);
+  return out;
+}
 function worldCopyV16Refresh(){
   const center=map.getCenter().lng;
-  // Route: one delta for all members, obtained from the longest polyline (rather
-  // than from a random waypoint). This prevents U.S.-Europe cut lines.
-  let routePivot=null,maxSpan=0;
+  const routePaths=[];
+  const routeLayers=[];
   worldCopyV16Walk(drawn,l=>{
-    const base=worldCopyV16Base(l);
-    if(base?.kind!=='path')return;
-    const n=typeof l.getLatLngs==='function'?l.getLatLngs().flat(Infinity).length:0;
-    if(n>maxSpan){maxSpan=n;routePivot=base.center;}
+    const b=worldCopyV16Base(l);
+    if(!b)return;
+    routeLayers.push({layer:l,base:b});
+    if(b.kind==='path'){
+      const vertices=worldRouteV17ExtractLatLngs(b.coords,[]);
+      if(vertices.length){
+        const mean=vertices.reduce((sum,p)=>sum+p.lng,0)/vertices.length;
+        routePaths.push({longitude:mean,count:vertices.length,vertices});
+      }
+    }
   });
-  if(routePivot===null){let sum=0,num=0;worldCopyV16Walk(drawn,l=>{const b=worldCopyV16Base(l);if(b){sum+=b.center;num++}});if(num)routePivot=sum/num;}
+  // Circular geometry pivot rather than a fixed 130E or 'longest line wins'.
+  const geographicPivot=worldRouteV17CircularPivot(routePaths);
+  const fallbackPivot=geographicPivot===null && routeLayers.length
+    ? worldRouteV17CircularPivot(routeLayers.map(r=>({longitude:r.base.center,count:1})))
+    : geographicPivot;
+  const routePivot=fallbackPivot===null?null:mapWorldLongitude(fallbackPivot,center);
+  worldRouteV17Reference=routePivot;
   if(routePivot!==null){
-    const delta=360*Math.round((center-routePivot)/360);
-    worldCopyV16Walk(drawn,l=>worldCopyV16Shift(l,delta));
-    // Recomputed route/airspace text labels must use the very same copy.
+    for(const entry of routeLayers){
+      const {layer,base}=entry;
+      let target=routePivot;
+      // The point markers use the world copy of their geographically closest
+      // line vertex; this prevents waypoint/line mismatches near +/-180 degrees.
+      if(base.kind==='point' && routePaths.length){
+        let best=Infinity;
+        for(const path of routePaths){
+          for(const p of path.vertices){
+            const deltaLat=(p.lat-base.coords.lat);
+            const deltaLng=((p.lng-base.coords.lng+540)%360)-180;
+            const score=deltaLat*deltaLat+Math.pow(deltaLng*Math.cos(base.coords.lat*Math.PI/180),2);
+            if(score<best){best=score;target=mapWorldLongitude(p.lng,routePivot);}
+          }
+        }
+      }
+      const destination=mapWorldLongitude(base.center,target);
+      const delta=destination-base.center;
+      worldCopyV16Shift(layer,delta);
+    }
     waypointLabelRegistry.forEach(item=>{
-      if(item.renderContext)item.renderContext.referenceLon=routePivot+delta;
+      if(item.renderContext)item.renderContext.referenceLon=routePivot;
     });
   }
   // Independent markers and boundaries each choose the nearest longitude copy.
