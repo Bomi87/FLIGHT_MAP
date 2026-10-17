@@ -2687,6 +2687,27 @@
 }
 
 /* ===== TornadoHQ 실시간 미국 경보 끝 ===== */
+
+/* WEATHER: independent collapsible selector below existing right-hand buttons */
+.leaflet-control-global-weather{position:relative!important;width:62px;margin-left:auto!important;overflow:visible!important;background:transparent!important;box-shadow:none!important;font:10px Arial,sans-serif;}
+.leaflet-control-global-weather .wx-toggle{display:block;width:62px;height:25px;border:0;border-radius:4px;background:#1d4ed8;color:white;font:700 9px Arial;cursor:pointer;box-shadow:0 1px 5px #0006;}
+.leaflet-control-global-weather .wx-toggle[aria-expanded="true"]{background:#1e40af;}
+.leaflet-control-global-weather .wx-panel{position:absolute;right:0;top:30px;width:228px;max-width:calc(100vw - 20px);padding:11px;background:#0f172a;color:#f8fafc;border:1px solid #64748b;border-radius:7px;box-shadow:0 5px 18px #0005;box-sizing:border-box;z-index:10000;}
+.leaflet-control-global-weather .wx-panel[hidden]{display:none!important;}
+.leaflet-control-global-weather .wx-title{font-weight:800;font-size:12px;margin:0 0 8px;}
+.leaflet-control-global-weather .wx-label{display:block;font-weight:700;margin:9px 0 4px;color:#cbd5e1;}
+.leaflet-control-global-weather .wx-panel select,.leaflet-control-global-weather .wx-panel button.wx-action{box-sizing:border-box;width:100%;height:29px;border:1px solid #64748b;border-radius:4px;padding:3px 6px;background:#1e293b;color:white;font:11px Arial;}
+.leaflet-control-global-weather .wx-row{display:flex;gap:6px;}
+.leaflet-control-global-weather .wx-row>*{flex:1;min-width:0;}
+.leaflet-control-global-weather .wx-panel button.wx-action{background:#2563eb;font-weight:700;cursor:pointer;margin-top:8px;}
+.leaflet-control-global-weather .wx-status{font:10px/1.4 Arial;color:#cbd5e1;margin-top:9px;word-break:break-word;}
+.leaflet-control-global-weather .wx-switch{display:flex;gap:7px;align-items:center;margin:7px 0;font-size:11px;font-weight:700;}
+.leaflet-control-global-weather input[type=checkbox]{accent-color:#60a5fa;}
+.leaflet-control-global-weather .wx-time-window{font:10px/1.5 Arial;color:#93c5fd;overflow-wrap:anywhere;margin-top:5px;}
+.leaflet-control-global-weather .wx-age{width:100%;} 
+.leaflet-control-global-weather .wx-note{font:10px/1.4 Arial;color:#fbbf24;margin-top:7px;}
+@media(max-width:767px){.leaflet-control-global-weather .wx-panel{max-height:70vh;overflow:auto;}}
+
 </style>
 </head>
 <body>
@@ -9441,6 +9462,85 @@ createTyphoonControl().addTo(map);
 createTokyoVaacControl().addTo(map);
 createSpcControl().addTo(map);
 createNoaaModelControl().addTo(map);
+
+/* ===== NOAA AWC live PIREP/AIREP + worldwide SIGMET ===== */
+(function(){
+ const pirepLayer=L.layerGroup(), sigmetLayer=L.layerGroup();
+ const esc=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ const utc=ms=>new Date(ms).toISOString().slice(0,16).replace('T',' ')+' UTC';
+ let seq=0,refresh=null,moveTimer=null;
+ const WX_BACKEND_URL=AIRSPACE_SEARCH_BACKEND_URL;
+ function jsonp(params){return new Promise((resolve,reject)=>{
+   const callback='wxCb_'+Date.now()+'_'+Math.floor(Math.random()*1e7);
+   const script=document.createElement('script');let finished=false;
+   const finish=(err,data)=>{if(finished)return;finished=true;clearTimeout(timer);script.remove();delete window[callback];err?reject(err):resolve(data)};
+   const timer=setTimeout(()=>finish(Error('응답 시간 초과')),25000);
+   window[callback]=data=>finish(null,data);
+   script.src=WX_BACKEND_URL+'?'+new URLSearchParams({...params,callback}).toString();
+   script.onerror=()=>finish(Error('GAS 연결 실패'));document.head.appendChild(script);
+ });}
+ const Ctrl=L.Control.extend({options:{position:'topright'},onAdd:function(){
+  const el=L.DomUtil.create('div','leaflet-control leaflet-control-global-weather');
+  el.innerHTML=`<button class="wx-toggle" type="button" aria-expanded="false">WEATHER ▾</button>
+  <section class="wx-panel" hidden><div class="wx-title">AVIATION WEATHER</div>
+  <label class="wx-switch"><input class="wx-pirep" type="checkbox"> PIREP / AIREP</label>
+  <label class="wx-label">보고 UTC 기간</label>
+  <select class="wx-age"><option value="1">1H</option><option value="2">2H</option><option value="3" selected>3H</option><option value="6">6H</option><option value="12">12H</option></select>
+  <div class="wx-time-window wx-report-range"></div>
+  <label class="wx-label">보고 기상현상</label><select class="wx-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option></select>
+  <hr style="border:0;border-top:1px solid #475569;margin:12px 0 8px">
+  <label class="wx-switch"><input class="wx-sigmet" type="checkbox"> SIGMET (Global)</label>
+  <label class="wx-label">SIGMET 유효시각</label><div class="wx-time-window wx-sigmet-time"></div>
+  <label class="wx-label">SIGMET 현상</label><select class="wx-sig-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option><option value="other">OTHER</option></select>
+  <button class="wx-action wx-refresh" type="button">조회 / 새로고침</button>
+  <div class="wx-status" aria-live="polite">조회할 자료를 선택하세요.</div>
+  <div class="wx-note">NOAA AWC · PIREP/AIREP: 주로 미국/북대서양 · SIGMET: 전 세계 발행자료 (자료 지연/누락 가능). 항공 운항 시 공식 브리핑 별도 확인.</div></section>`;
+  const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'), age=$('.wx-age'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),status=$('.wx-status');
+  function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-Number(age.value)*3600000)+' ~ '+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
+  stamps();setInterval(stamps,60000);
+  $('.wx-toggle').onclick=()=>{stamps();const open=panel.hidden;panel.hidden=!open;$('.wx-toggle').textContent=open?'WEATHER ▴':'WEATHER ▾';$('.wx-toggle').setAttribute('aria-expanded',String(open));};
+  async function draw(){
+   const id=++seq;const b=map.getBounds(),sw=b.getSouthWest(),ne=b.getNorthEast();
+   pirepLayer.clearLayers();sigmetLayer.clearLayers();if(!chkP.checked)map.removeLayer(pirepLayer);if(!chkS.checked)map.removeLayer(sigmetLayer);
+   if(!chkP.checked&&!chkS.checked){status.textContent='모두 OFF';return}
+   status.textContent='NOAA 데이터 조회 중…';const lines=[];
+   if(chkP.checked){
+    try{
+     if(ne.lat-sw.lat>65||ne.lng-sw.lng>90)throw Error('PIREP 조회는 지도를 확대해야 합니다 (위도 65°/경도 90° 이하)');
+     const data=await jsonp({action:'pirepsearch',south:sw.lat,west:sw.lng,north:ne.lat,east:ne.lng,age:age.value});
+     if(id!==seq)return;if(!data.ok)throw Error(data.error||'PIREP 오류');let n=0;
+     (data.items||[]).forEach(r=>{if(filter.value==='icing'&&!r.icing||filter.value==='turb'&&!r.turbulence)return;
+      const color=r.icing?'#0ea5e9':r.turbulence?'#f97316':'#a855f7';
+      L.circleMarker([r.lat,r.lon],{radius:6,color:'#fff',weight:1,fillColor:color,fillOpacity:.9})
+       .bindPopup(`<b>${esc(r.type||'PIREP/AIREP')}</b><br>${esc(r.time||'UTC unknown')}<br>${r.altFt!=null?'Altitude: '+esc(r.altFt)+' ft<br>':''}<div style="white-space:pre-wrap;overflow-wrap:anywhere;max-width:300px">${esc(r.raw||'')}</div>`).addTo(pirepLayer);n++;
+     });pirepLayer.addTo(map);lines.push(`PIREP/AIREP ${n}건`+(data.truncated?' (조회 상한 도달)':''));
+    }catch(e){if(id!==seq)return;lines.push('PIREP: '+(e.message||e));}
+   }
+   if(chkS.checked){
+    try{
+     const data=await jsonp({action:'sigmetsearch'});if(id!==seq)return;if(!data.ok)throw Error(data.error||'SIGMET 오류');let n=0;
+     (data.items||[]).forEach(item=>{
+       if(sf.value!=='all'&&item.hazard!==sf.value)return;
+       if(!item.geometry)return;
+       const hue=item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
+       try{let g=L.geoJSON({type:'Feature',geometry:item.geometry,properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
+       if(!g.getLayers().length)return;
+       const txt=`<b>SIGMET · ${esc(item.hazard.toUpperCase())}</b><br>${esc(item.name||'')}<br>Valid: ${esc(item.validFrom||'?')} ~ ${esc(item.validTo||'?')}<br><div style="white-space:pre-wrap;max-width:320px;overflow-wrap:anywhere">${esc(item.raw||'')}</div>`;
+       g.bindPopup(txt);g.addTo(sigmetLayer);n++;}catch(_){/* discard invalid geometry */}
+     });sigmetLayer.addTo(map);lines.push(`SIGMET ${n}개 영역`+(data.truncated?' (일부 제한)':''));
+    }catch(e){if(id!==seq)return;lines.push('SIGMET: '+(e.message||e));}
+   }
+   stamps();status.textContent=lines.join(' · ')+' · '+utc(Date.now());
+  }
+  [chkP,chkS,age,filter,sf].forEach(input=>input.addEventListener('change',draw));$('.wx-refresh').onclick=draw;
+  map.on('moveend',()=>{if(chkP.checked){clearTimeout(moveTimer);moveTimer=setTimeout(draw,900)}});
+  refresh=setInterval(()=>{if(chkP.checked||chkS.checked)draw()},300000);
+  L.DomEvent.disableClickPropagation(el);L.DomEvent.disableScrollPropagation(el);return el;
+ }});
+ new Ctrl().addTo(map);
+})();
+/* ===== Global Weather control end ===== */
+
 
 
 
