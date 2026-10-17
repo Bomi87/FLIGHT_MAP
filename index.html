@@ -3248,6 +3248,17 @@ function getShapeCodeLabel(name) {
     // 모든 지도 오버레이가 같은 world copy를 사용하도록 고정 기준 경도 적용
     // Europe: 약 +10 / Korea: 약 +127 / U.S.: 약 -100 -> +260 world copy
     const GLOBAL_WORLD_REFERENCE_LON = 130;
+    // V16: one longitude-copy policy for all map features. The original 130-degree
+    // default is kept for initial route parsing; the VIEW (not a country) determines
+    // which copy is ultimately presented.
+    function mapWorldLongitude(lon, pivot) {
+      const n = Number(lon);
+      const ref = Number.isFinite(Number(pivot)) ? Number(pivot) : map.getCenter().lng;
+      if (!Number.isFinite(n)) return lon;
+      return n + 360 * Math.round((ref - n) / 360);
+    }
+    window.__mapWorldLongitude = mapWorldLongitude;
+
 
     function wrapLon180(lon) {
       let x = Number(lon);
@@ -3931,7 +3942,7 @@ function getShapeCodeLabel(name) {
           extraRows
         );
 
-        const latlng = toRenderLatLng(p.lat, p.lon, renderContext);
+        const latlng = latlngs[i]; // V16: same unwrapped point as the GPX route line
 
         let iconColor = "#ffff00";
         if (i === 0) iconColor = "#00aa00";
@@ -4285,9 +4296,7 @@ function getShapeCodeLabel(name) {
       const zoom = map.getZoom();
 
       ndbRawData.forEach(feature => {
-        const refLon = GLOBAL_WORLD_REFERENCE_LON;
-
-        const bestLon = shiftLonNearReference(feature.coords.lon, refLon);
+        const bestLon = mapWorldLongitude(feature.coords.lon, map.getCenter().lng);
         const latlng = [feature.coords.lat, bestLon];
 
         if (!isLatLngInExpandedBounds(latlng[0], latlng[1], NDB_BOUNDS_PAD_RATIO)) {
@@ -4331,6 +4340,17 @@ function getShapeCodeLabel(name) {
       );
 
       const latlng = toRenderLatLng(feature.coords.lat, feature.coords.lon, renderContext);
+      if (renderContext?.lineVertices?.length) {
+        let closest=null, distance=Infinity;
+        for (const [lat, lon] of renderContext.lineVertices) {
+          const dLat=(lat-feature.coords.lat)*Math.cos(lat*Math.PI/180);
+          const dLon=(lon-feature.coords.lon);
+          const k=Math.round(dLon/360), aligned=feature.coords.lon+360*k;
+          const d=dLat*dLat+(lon-aligned)*(lon-aligned);
+          if(d<distance){distance=d;closest=aligned;}
+        }
+        if(closest!==null)latlng[1]=closest;
+      }
 
       addPointMarkerInstance(
         latlng,
@@ -4483,6 +4503,8 @@ function getShapeCodeLabel(name) {
       const routeEndpoints = getRouteEndpoints(pointFeatures);
       const routeSequence = buildRouteSequence(pointFeatures, routeEndpoints);
 
+      // V16: share actual unwrapped KML line longitudes with its waypoint markers.
+      renderContext.lineVertices = lineFeatures.flatMap(f => toRenderLatLngsFromCoords(f.coords,renderContext));
       lineFeatures.forEach(f => drawKMLLine(f, targetLayer, sourceName, renderContext));
       polygonFeatures.forEach(f => drawKMLPolygon(f, targetLayer, sourceName, renderContext));
 
@@ -9705,18 +9727,52 @@ createNoaaModelControl().addTo(map);
  function wxResolveOfLine(raw,fir){
   const rules=wxParseOfLine(raw);if(!rules.length)throw Error('No parseable OF LINE conditions');
   let result=null;
-  for(const rule of rules){const g=wxLineRegion(rule.direction,rule.points,fir);
+  for(const rule of rules){const g=wxLineRegion(rule.direction,rule.points,fir.geometry||fir);
     if(!g){if(rule.operator==='AND')return null;continue;}
     result=result?(rule.operator==='OR'?wxUnionMulti(result,g):wxClipMulti(result,g)):g;
     if(!result)return null;
   }
   return result;
  }
+
+ // Half-plane coordinate constraints: S OF N2403 AND W OF E11305 AND E OF E10754.
+ // Intersect with the matched FIR rather than inventing a free-standing box.
+ function wxResolveCoordinateBounds(raw,firFeature){
+   const base=firFeature.geometry||firFeature;
+   if(!wxAreaGeometry(base))throw Error('FIR polygon required for coordinate bounds');
+   const text=String(raw||'').toUpperCase().replace(/\s+/g,' ');
+   const matches=[...text.matchAll(/\b([NSEW])\s+OF\s+([NS])(\d{2})(\d{2})\b|\b([NSEW])\s+OF\s+([EW])(\d{3})(\d{2})\b/g)];
+   if(!matches.length)return null;
+   let xmin=-180,xmax=180,ymin=-90,ymax=90;
+   for(const m of matches){
+     const dir=m[1]||m[5];
+     if(m[1]){
+       const lat=(Number(m[3])+Number(m[4])/60)*(m[2]==='S'?-1:1);
+       if(dir==='N')ymin=Math.max(ymin,lat);
+       else if(dir==='S')ymax=Math.min(ymax,lat);
+       else throw Error('Invalid latitude bound '+dir);
+     }else{
+       const lon=(Number(m[7])+Number(m[8])/60)*(m[6]==='W'?-1:1);
+       if(dir==='E')xmin=Math.max(xmin,lon);
+       else if(dir==='W')xmax=Math.min(xmax,lon);
+       else throw Error('Invalid longitude bound '+dir);
+     }
+   }
+   if(xmin>=xmax||ymin>=ymax)return null;
+   const rectangle={type:'Polygon',coordinates:[[[xmin,ymin],[xmax,ymin],[xmax,ymax],[xmin,ymax],[xmin,ymin]]]};
+   return wxClipMulti(base,rectangle);
+ }
  function wxResolvedGeometry(item,firMap){
    const raw=String(item.raw||'').toUpperCase(),firCode=wxFirCode(item),fir=firMap?.get(firCode);
    // Highest priority: valid area polygon from NOAA. Never override with inferred FIR.
-   if(wxAreaGeometry(item.geometry)&&item.geometrySource==='NOAA')return {geometry:item.geometry,source:'NOAA',note:''};
+   if(wxAreaGeometry(item.geometry)&&item.geometrySource==='NOAA')return {geometry:item.geometry,source:'NOAA',note:/\b(?:[NSEW]\s+OF\s+[NSEW]\d{4,5}|(?:NE|NW|SE|SW|N|S|E|W)\s+OF\s+LINE)\b/.test(raw)?'NOAA area: compare with SIGMET geographic conditions (not independently verified)':''};
    if(/\bENTIRE\s+FIR\b/.test(raw))return fir?{geometry:fir.geometry,source:'RAW_ENTIRE_FIR',note:'FIR boundary from world_fir.geojson; verify AIRAC currency'}:{geometry:null,source:'MISSING_FIR',note:'FIR boundary unavailable'};
+   if(/\b[NS]\s+OF\s+[NS]\d{4}\b|\b[EW]\s+OF\s+[EW]\d{5}\b/.test(raw)){
+     if(!fir)return {geometry:null,source:'MISSING_FIR',note:'Coordinate constraints require FIR boundary'};
+     try{const geo=wxResolveCoordinateBounds(raw,fir);return geo?{geometry:geo,source:'RAW_COORD_BOUNDS',note:'Area derived from FIR + coordinate bounds; verify against official SIGMET'}:{geometry:null,source:'EMPTY_INTERSECTION',note:'Coordinate bounds do not intersect FIR'}}
+     catch(e){return {geometry:null,source:'COORD_BOUND_ERROR',note:String(e.message||e)}}
+   }
+
    if(/\b(?:NE|NW|SE|SW|N|S|E|W)\s+OF\s+LINE\b/.test(raw)){
      if(!fir)return {geometry:null,source:'MISSING_FIR',note:'OF LINE requires FIR boundary'};
      try{const geo=wxResolveOfLine(raw,fir);return geo?{geometry:geo,source:'RAW_OF_LINE',note:'Area derived from FIR + OF LINE; verify against official SIGMET'}:{geometry:null,source:'EMPTY_INTERSECTION',note:'OF LINE region outside FIR'}}
@@ -9752,7 +9808,7 @@ createNoaaModelControl().addTo(map);
   <label class="wx-label">보고 기상현상</label><select class="wx-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option></select>
   <button class="wx-action wx-refresh" type="button">새로고침</button>
   <div class="wx-status" aria-live="polite">조회할 자료를 선택하세요.</div><div class="wx-undrawn" style="display:none;max-height:135px;overflow:auto;color:#fde68a;font:10px/1.45 Arial;margin-top:5px;white-space:pre-wrap"></div>
-  <div class="wx-note">· PIREP/AIREP: 주로 미국/북대서양<br>· SIGMET: 전 세계 발행자료</div></section>`;
+  <div class="wx-note">· SIGMET: 전 세계 발행자료<br>· PIREP/AIREP: 주로 미국/북대서양</div></section>`;
   const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),status=$('.wx-status');
   function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-3600000)+' ~ '+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
   stamps();setInterval(stamps,60000);
@@ -9995,7 +10051,7 @@ function clearPositioningMarkers() {
 function renderPositioningMarkers(positions) {
   if (!Array.isArray(positions)) return;
 
-  const referenceLon = GLOBAL_WORLD_REFERENCE_LON;
+  const referenceLon = map.getCenter().lng;
 
   positions.forEach(pos => {
     const lat = Number(pos.lat);
@@ -10297,6 +10353,7 @@ async function refreshRouteOnly() {
       if (ndbVisible) {
         scheduleRedrawNDB();
       }
+      worldCopyV16Refresh();
     }, 80);
 
   } catch (err) {
@@ -10338,6 +10395,85 @@ async function init() {
     alert("Error: " + (err.message || err));
   }
 }
+
+
+/* ===== V16 GLOBAL WORLD-COPY COORDINATOR =====
+ * Feature geometry is translated only in integer 360-degree multiples.
+ * A route group translates together so its lines and markers can never diverge;
+ * point layers translate individually to the current view's nearest world copy.
+ * Original coordinates are stored and never modified; no API requests are made.
+ * WX SIGMET / PIREP handles itself in its existing independent rewrap handler.
+ */
+const worldCopyV16Snapshot=new WeakMap();
+const worldCopyV16Last=new WeakMap();
+function worldCopyV16MapLatLngs(input,delta) {
+  return input.map(x=>Array.isArray(x)?worldCopyV16MapLatLngs(x,delta):L.latLng(x.lat,x.lng+delta,x.alt));
+}
+function worldCopyV16Base(layer){
+  let base=worldCopyV16Snapshot.get(layer);
+  if(base)return base;
+  if(typeof layer.getLatLngs==='function') {
+    const coords=layer.getLatLngs();
+    base={kind:'path',coords,center:layer.getBounds().getCenter().lng};
+  } else if(typeof layer.getLatLng==='function') {
+    const p=layer.getLatLng();base={kind:'point',coords:p,center:p.lng};
+  } else return null;
+  worldCopyV16Snapshot.set(layer,base);
+  return base;
+}
+function worldCopyV16Shift(layer,delta){
+  const base=worldCopyV16Base(layer);if(!base)return;
+  if(worldCopyV16Last.get(layer)===delta)return;
+  if(base.kind==='path')layer.setLatLngs(worldCopyV16MapLatLngs(base.coords,delta));
+  else layer.setLatLng([base.coords.lat,base.coords.lng+delta]);
+  worldCopyV16Last.set(layer,delta);
+}
+function worldCopyV16Walk(group,callback){
+  if(!group || typeof group.eachLayer!=='function')return;
+  group.eachLayer(l=>{if(typeof l.eachLayer==='function' && typeof l.getLatLngs!=='function')worldCopyV16Walk(l,callback);else callback(l)});
+}
+function worldCopyV16Refresh(){
+  const center=map.getCenter().lng;
+  // Route: one delta for all members, obtained from the longest polyline (rather
+  // than from a random waypoint). This prevents U.S.-Europe cut lines.
+  let routePivot=null,maxSpan=0;
+  worldCopyV16Walk(drawn,l=>{
+    const base=worldCopyV16Base(l);
+    if(base?.kind!=='path')return;
+    const n=typeof l.getLatLngs==='function'?l.getLatLngs().flat(Infinity).length:0;
+    if(n>maxSpan){maxSpan=n;routePivot=base.center;}
+  });
+  if(routePivot===null){let sum=0,num=0;worldCopyV16Walk(drawn,l=>{const b=worldCopyV16Base(l);if(b){sum+=b.center;num++}});if(num)routePivot=sum/num;}
+  if(routePivot!==null){
+    const delta=360*Math.round((center-routePivot)/360);
+    worldCopyV16Walk(drawn,l=>worldCopyV16Shift(l,delta));
+    // Recomputed route/airspace text labels must use the very same copy.
+    waypointLabelRegistry.forEach(item=>{
+      if(item.renderContext)item.renderContext.referenceLon=routePivot+delta;
+    });
+  }
+  // Independent markers and boundaries each choose the nearest longitude copy.
+  [positioningLayer, searchedAirspaceLayer, airportSearchLayer,
+    firLayer, artccLayer, typhoonLayer, spcLayer, tokyoVaacLayer,
+    tornadoHqWarningLayer].forEach(group=>{
+    worldCopyV16Walk(group,l=>{
+      const b=worldCopyV16Base(l);if(!b)return;
+      const delta=360*Math.round((center-b.center)/360);
+      worldCopyV16Shift(l,delta);
+    });
+  });
+}
+let worldCopyV16Timer=null;
+map.on('moveend zoomend',()=>{
+  clearTimeout(worldCopyV16Timer);
+  worldCopyV16Timer=setTimeout(()=>{
+    worldCopyV16Refresh();
+    scheduleRedrawNDB();
+    scheduleRouteTextUpdate(20);
+    scheduleAirspaceLabelUpdate(20);
+  },65);
+});
+/* ===== V16 END ===== */
 
 window.addEventListener("resize", () => {
   refreshMapSize();
