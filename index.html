@@ -10068,17 +10068,37 @@ createNoaaModelControl().addTo(map);
    const llws=llwsMatch?llwsMatch[0].trim():'';
    const turbulence=wxPirepTurbulence(f.TB);
    const icing=wxPirepIcing(f.IC);
+   // V34: interpretation follows the slash-field order in RAW PIREP.
+   // Do not sort by weather hazard or aircraft; preserve the originating report's sequence.
    const parts=[];
    if(reportingStation)parts.push('Reporting Station: '+reportingStation);
    if(reportType)parts.push('Report Type: '+reportType);
-   if(f.TB)parts.push('TB (Turbulence): '+turbulence);
-   if(f.IC)parts.push('IC (Icing): '+icing);
-   if(f.TP)parts.push('TP (Type of Aircraft): '+wxPirepAircraft(f.TP));
-   if(f.OV)parts.push('OV (Over / Position): '+f.OV);
-   if(f.TM && /^\d{4}$/.test(f.TM))parts.push('TM (Time): '+f.TM.slice(0,2)+':'+f.TM.slice(2)+' UTC');
-   if(f.FL)parts.push('FL (Flight Level): '+alt);
-   if(llws)parts.push('LLWS (Low Level Wind Shear): '+llws);
-   if(f.RM)parts.push('RM (Remarks): '+f.RM);
+   if(!arp){
+     const displayField={
+       OV:v=>'OV (Over / Position): '+v,
+       TM:v=>'TM (Time): '+(/^\d{4}$/.test(v)?v.slice(0,2)+':'+v.slice(2)+' UTC':v),
+       FL:v=>'FL (Flight Level): '+alt,
+       TP:v=>'TP (Type of Aircraft): '+wxPirepAircraft(v),
+       TB:v=>'TB (Turbulence): '+wxPirepTurbulence(v),
+       IC:v=>'IC (Icing): '+wxPirepIcing(v),
+       RM:v=>'RM (Remarks): '+v,
+       SK:v=>'SK (Sky Condition): '+v,
+       WX:v=>'WX (Weather): '+v,
+       TA:v=>'TA (Air Temperature): '+v,
+       WV:v=>'WV (Wind): '+v
+     };
+     const seen=new Set();
+     const fieldPattern=/\/([A-Z]{2})\s*([^/]*?)(?=\s*\/[A-Z]{2}|$)/g;
+     for(const match of raw.matchAll(fieldPattern)){
+       const key=match[1],val=match[2].trim();
+       if(!val)continue;
+       const format=displayField[key];
+       parts.push(format?format(val):key+': '+val);
+       seen.add(key);
+     }
+     // LLWS embedded in an RM section is already preserved in the RM text.
+     if(llws&&!seen.has('RM'))parts.push('LLWS (Low Level Wind Shear): '+llws);
+   }
    if(arp){
      if(arp.flight)parts.push('Aircraft Identification: '+arp.flight);
      arp.points.forEach((point,i)=>{
