@@ -1699,6 +1699,7 @@
 .leaflet-control-typhoon button,
 .leaflet-control-vaac button,
 .leaflet-control-spc button,
+.leaflet-control-global-weather .wx-toggle,
 .leaflet-control-noaa-model .noaa-model-toggle {
   background: #334155 !important;
   color: #f8fafc !important;
@@ -1756,6 +1757,7 @@
 .leaflet-control-typhoon button,
 .leaflet-control-vaac button,
 .leaflet-control-spc button,
+.leaflet-control-global-weather .wx-toggle,
 .leaflet-control-noaa-model .noaa-model-toggle {
   width: 58px !important;
   min-width: 58px !important;
@@ -1804,6 +1806,7 @@
 .leaflet-control-typhoon button,
 .leaflet-control-vaac button,
 .leaflet-control-spc button,
+.leaflet-control-global-weather .wx-toggle,
 .leaflet-control-noaa-model .noaa-model-toggle {
   background: #1e3a5f !important;
 }
@@ -1926,6 +1929,7 @@
 .leaflet-control-typhoon button,
 .leaflet-control-vaac button,
 .leaflet-control-spc button,
+.leaflet-control-global-weather .wx-toggle,
 .leaflet-control-noaa-model .noaa-model-toggle {
   display: block !important;
   width: 62px !important;
@@ -2019,6 +2023,7 @@
 .leaflet-control-typhoon button,
 .leaflet-control-vaac button,
 .leaflet-control-spc button,
+.leaflet-control-global-weather .wx-toggle,
 .leaflet-control-noaa-model .noaa-model-toggle {
   background: #1f3a5f !important;   /* navy */
   color: #f8fafc !important;
@@ -2092,6 +2097,7 @@
 .leaflet-control-typhoon button,
 .leaflet-control-vaac button,
 .leaflet-control-spc button,
+.leaflet-control-global-weather .wx-toggle,
 .leaflet-control-noaa-model .noaa-model-toggle {
   background: #27496d !important;
   color: #ffffff !important;
@@ -2691,8 +2697,13 @@
 
 /* WEATHER: independent collapsible selector below existing right-hand buttons */
 .leaflet-control-global-weather{position:relative!important;width:62px;margin-left:auto!important;overflow:visible!important;background:transparent!important;box-shadow:none!important;font:10px Arial,sans-serif;}
-.leaflet-control-global-weather .wx-toggle{display:block;width:62px;height:25px;border:0;border-radius:4px;background:#1d4ed8;color:white;font:700 9px Arial;cursor:pointer;box-shadow:0 1px 5px #0006;}
-.leaflet-control-global-weather .wx-toggle[aria-expanded="true"]{background:#1e40af;}
+.leaflet-control-global-weather{position:relative;}
+.leaflet-control-global-weather .wx-toggle{display:block !important;width:62px !important;min-width:62px !important;max-width:62px !important;height:25px !important;box-sizing:border-box !important;margin:0 !important;border:0 !important;border-radius:4px !important;background:#2563eb !important;color:#fff !important;font:700 9px/1.1 Arial !important;cursor:pointer !important;box-shadow:0 1px 4px rgba(0,0,0,.28) !important;text-align:center !important;padding:0 4px !important;white-space:normal !important;letter-spacing:.1px !important;}
+.leaflet-control-global-weather .wx-toggle:hover{background:#1d4ed8 !important;}
+.leaflet-control-global-weather .wx-toggle[aria-expanded="true"],
+.leaflet-control-global-weather .wx-toggle.wx-active{background:#1e40af !important;}
+.leaflet-control-global-weather .wx-toggle[aria-expanded="true"]:hover,
+.leaflet-control-global-weather .wx-toggle.wx-active:hover{background:#1e3a8a !important;}
 .leaflet-control-global-weather .wx-panel{position:absolute;right:0;top:30px;width:228px;max-width:calc(100vw - 20px);padding:11px;background:#0f172a;color:#f8fafc;border:1px solid #64748b;border-radius:7px;box-shadow:0 5px 18px #0005;box-sizing:border-box;z-index:10000;}
 .leaflet-control-global-weather .wx-panel[hidden]{display:none!important;}
 .leaflet-control-global-weather .wx-title{font-weight:800;font-size:12px;margin:0 0 8px;}
@@ -2734,6 +2745,20 @@
 .wx-sigmet-popup .wx-pop-level{font-weight:800;color:#244ce0;}
 .wx-sigmet-popup .wx-pop-move{font-weight:700;color:#1c9045;}
 .wx-sigmet-popup .wx-pop-utc{font-weight:700;color:#252525;}
+
+
+/* V20: readable aviation pilot-report popups, mobile-friendly */
+.wx-pirep-popup{font:12px/1.5 Arial,sans-serif;color:#1f2937;width:min(350px,calc(100vw - 85px));max-width:350px;overflow-wrap:anywhere;}
+.wx-pirep-popup .wx-pr-head{font-size:13px;font-weight:800;border-bottom:1px solid #d7dee6;padding-bottom:6px;margin-bottom:8px;color:#172554;}
+.wx-pirep-popup .wx-pr-date{font-size:11px;font-weight:700;color:#475569;margin:3px 0 8px;}
+.wx-pirep-popup .wx-pr-line{margin:4px 0;display:flex;gap:8px;align-items:baseline;}
+.wx-pirep-popup .wx-pr-key{font-size:10px;min-width:64px;flex-shrink:0;color:#64748b;font-weight:700;}
+.wx-pirep-popup .wx-pr-value{font-size:12px;font-weight:600;}
+.wx-pirep-popup .wx-pr-alert{color:#b45309;font-weight:800;}
+.wx-pirep-popup .wx-pr-section{font-size:10px;letter-spacing:.35px;font-weight:800;color:#475569;margin:11px 0 4px;}
+.wx-pirep-popup .wx-pr-explain{padding:8px 10px;background:#f1f5f9;border-radius:5px;border-left:3px solid #94a3b8;line-height:1.6;}
+.wx-pirep-popup .wx-pr-raw{font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #e2e8f0;background:#fff;border-radius:4px;padding:7px;margin:0;}
+.leaflet-popup-content:has(.wx-pirep-popup){margin:12px 12px 11px;width:auto!important;max-width:calc(100vw - 65px);}
 
 
 </style>
@@ -9581,18 +9606,67 @@ createNoaaModelControl().addTo(map);
    return n+360*Math.round((center-n)/360);
  }
  function wxDisplayLongitude(lon){return wxTargetLon(lon)}
+ function wxNormalizeRingForDisplay(ring, referenceLon, forcedOffset){
+   if(!Array.isArray(ring)||!ring.length)return ring;
+   const out=[];
+   let prevLon=null;
+   for(let i=0;i<ring.length;i++){
+     const pair=ring[i];
+     if(!Array.isArray(pair)||pair.length<2)continue;
+     const rawLon=Number(pair[0]), lat=Number(pair[1]);
+     if(!Number.isFinite(rawLon)||!Number.isFinite(lat))continue;
+     let lon=prevLon==null?shiftLonNearReference(rawLon, referenceLon):unwrapLonNext(prevLon, rawLon);
+     const extra=pair.slice(2);
+     out.push([lon, lat, ...extra]);
+     prevLon=lon;
+   }
+   if(!out.length)return ring;
+   const outerAnchor=out.map(p=>p[0]).sort((a,b)=>a-b)[Math.floor(out.length/2)];
+   const offset=Number.isFinite(forcedOffset)?forcedOffset:(wxTargetLon(outerAnchor)-outerAnchor);
+   const shifted=out.map(p=>[p[0]+offset,p[1],...p.slice(2)]);
+   if(shifted.length>2){
+     const first=shifted[0], last=shifted[shifted.length-1];
+     if(Math.abs(first[0]-last[0])>1e-9 || Math.abs(first[1]-last[1])>1e-9){
+       shifted.push([...first]);
+     }else{
+       shifted[shifted.length-1]=[first[0],first[1],...first.slice(2)];
+     }
+   }
+   return shifted;
+ }
+ function wxNormalizePolygonForDisplay(polygon, referenceLon){
+   if(!Array.isArray(polygon)||!polygon.length)return polygon;
+   const outer=wxNormalizeRingForDisplay(polygon[0], referenceLon);
+   if(!Array.isArray(outer)||!outer.length)return polygon;
+   const anchor=outer.map(p=>p[0]).sort((a,b)=>a-b)[Math.floor(outer.length/2)];
+   const offset=wxTargetLon(anchor)-anchor;
+   const normalized=[wxNormalizeRingForDisplay(polygon[0], referenceLon, offset)];
+   for(let i=1;i<polygon.length;i++){
+     normalized.push(wxNormalizeRingForDisplay(polygon[i], normalized[0][0]?.[0] ?? referenceLon, offset));
+   }
+   return normalized;
+ }
  function wxShiftGeometryToRight(geometry){
    if(!geometry||!geometry.coordinates)return geometry;
-   const type=geometry.type;
-   const coords=[];
-   function collect(v){if(Array.isArray(v)&&typeof v[0]==='number'&&typeof v[1]==='number')coords.push(v[0]);else if(Array.isArray(v))v.forEach(collect)}
-   collect(geometry.coordinates);
-   if(!coords.length)return geometry;
-   const source=coords.slice().sort((a,b)=>a-b)[Math.floor(coords.length/2)];
-   const offset=wxTargetLon(source)-source;
-   // Shift all vertices by the same multiple of 360 to preserve relative shape.
-   function shift(v){return Array.isArray(v)&&typeof v[0]==='number'&&typeof v[1]==='number'?[v[0]+offset,...v.slice(1)]:Array.isArray(v)?v.map(shift):v}
-   return {...geometry,coordinates:shift(geometry.coordinates)};
+   const center=map.getCenter().lng;
+   if(geometry.type==='Polygon'){
+     return {...geometry, coordinates: wxNormalizePolygonForDisplay(geometry.coordinates, center)};
+   }
+   if(geometry.type==='MultiPolygon'){
+     return {...geometry, coordinates: (geometry.coordinates||[]).map(poly=>wxNormalizePolygonForDisplay(poly, center))};
+   }
+   if(geometry.type==='LineString'){
+     const ring=wxNormalizeRingForDisplay(geometry.coordinates, center);
+     return {...geometry, coordinates:ring};
+   }
+   if(geometry.type==='MultiLineString'){
+     return {...geometry, coordinates:(geometry.coordinates||[]).map(line=>wxNormalizeRingForDisplay(line, center))};
+   }
+   if(geometry.type==='Point' && Array.isArray(geometry.coordinates) && geometry.coordinates.length>=2){
+     const lon=wxTargetLon(geometry.coordinates[0]);
+     return {...geometry, coordinates:[lon, geometry.coordinates[1], ...geometry.coordinates.slice(2)]};
+   }
+   return geometry;
  }
  // Already hosted beside index.html in GitHub Pages. Do not alter existing FIR toggle.
  let wxFirPromise=null;
@@ -9855,8 +9929,98 @@ createNoaaModelControl().addTo(map);
    script.src=WX_BACKEND_URL+'?'+new URLSearchParams({...params,callback}).toString();
    script.onerror=()=>finish(Error('GAS 연결 실패'));document.head.appendChild(script);
  });}
+ // V20: preserve raw pilot report, decode only explicitly reported fields.
+ function wxPirepRawFields(raw){
+   const text=String(raw||'').replace(/\s+/g,' ').trim();
+   const fields={};
+   for(const match of text.matchAll(/\/([A-Z]{2})\s*([^/]*?)(?=\s*\/[A-Z]{2}|$)/g)){
+     if(fields[match[1]]==null)fields[match[1]]=match[2].trim();
+   }
+   return fields;
+ }
+ function wxPirepTimeUtc(value,raw){
+   const parsed=Number(value);
+   if(Number.isFinite(parsed)&&String(value).trim()&&parsed>1e9&&parsed<1e11){
+     const date=new Date(parsed*1000);
+     if(!Number.isNaN(date.getTime()))return date.toISOString().slice(0,16).replace('T',' ')+' UTC';
+   }
+   if(typeof value==='string'&&/\d{4}-\d\d-\d\d/.test(value)){
+     const t=Date.parse(value);
+     if(Number.isFinite(t))return new Date(t).toISOString().slice(0,16).replace('T',' ')+' UTC';
+   }
+   const tm=wxPirepRawFields(raw).TM;
+   if(/^\d{4}$/.test(tm||''))return tm.slice(0,2)+':'+tm.slice(2)+' UTC (원문, 일자 미확인)';
+   return 'UTC 시각 미확인';
+ }
+ function wxPirepDecodedAlt(r,fields){
+   const fl=String(fields.FL||'').match(/^(?:FL)?(\d{2,3})(?:\b|$)/i);
+   if(fl){const level=Number(fl[1]);return 'FL'+String(level).padStart(3,'0')+' ('+(level*100).toLocaleString('en-US')+' ft)';}
+   // The source altFt has sometimes been populated with 360 for FL360.
+   // Avoid giving a potentially false low altitude when source units are uncertain.
+   const n=Number(r.altFt);
+   return Number.isFinite(n)&&n>=1000&&n<=65000 ? n.toLocaleString('en-US')+' ft' : '고도 미확인';
+ }
+ function wxPirepTurbulence(value){
+   const t=String(value||'').toUpperCase();
+   if(!t)return '';
+   const terms=[];
+   if(/\bINTMT\b/.test(t))terms.push('간헐적');
+   if(/\bOCNL\b/.test(t))terms.push('때때로');
+   if(/\bCONT\b/.test(t))terms.push('지속적');
+   if(/\bLGT\b/.test(t))terms.push('약한');
+   if(/\bMOD\b/.test(t))terms.push('보통');
+   if(/\bSEV\b/.test(t))terms.push('심한');
+   if(/\bEXTRM\b/.test(t))terms.push('극심한');
+   return (terms.length?terms.join(' ')+' 난기류':'난기류 보고')+' ('+t+')';
+ }
+ function wxPirepIcing(value){
+   const t=String(value||'').toUpperCase();if(!t)return '';
+   const intensity=/\bSEV\b/.test(t)?'심한':/\bMOD\b/.test(t)?'보통':/\bLGT\b/.test(t)?'약한':'';
+   return (intensity?intensity+' ':'')+'착빙 보고 ('+t+')';
+ }
+ function wxPirepAircraft(value){
+   const code=String(value||'').trim().toUpperCase();
+   const known={B748:'Boeing 747-8',B744:'Boeing 747-400',B738:'Boeing 737-800',B77W:'Boeing 777-300ER',B789:'Boeing 787-9',A320:'Airbus A320',A321:'Airbus A321',A359:'Airbus A350-900',GLF6:'Gulfstream G650'};
+   return code ? (known[code]?known[code]+' ('+code+')':code) : '';
+ }
+ function wxPirepPopup(r){
+   const raw=String(r.raw||'');const f=wxPirepRawFields(raw);
+   const row=(label,value,emphasize)=>value?'<div class="wx-pr-line"><span class="wx-pr-key">'+esc(label)+'</span><span class="wx-pr-value'+(emphasize?' wx-pr-alert':'')+'">'+esc(value)+'</span></div>':'';
+   const title=String(r.type||'PIREP/AIREP');
+   const reportHeader=raw.toUpperCase().match(/^\s*([A-Z]{4})\s+(UUA|UA)\b/);
+   const reportingStation=reportHeader?reportHeader[1]:'';
+   const reportType=reportHeader?(reportHeader[2]==='UA'?'Routine Pilot Report':'Urgent Pilot Report'):'';
+   const location=f.OV?f.OV:Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lon))?Number(r.lat).toFixed(2)+', '+Number(r.lon).toFixed(2):'';
+   const alt=wxPirepDecodedAlt(r,f);
+   const turbulence=wxPirepTurbulence(f.TB);
+   const icing=wxPirepIcing(f.IC);
+   const parts=[];
+   if(reportingStation)parts.push('Reporting Station: '+reportingStation);
+   if(reportType)parts.push('Report Type: '+reportType);
+   if(f.TB)parts.push('TB: '+turbulence);
+   if(f.IC)parts.push('IC: '+icing);
+   if(f.TP)parts.push('TP: 항공기 기종 '+wxPirepAircraft(f.TP));
+   if(f.OV)parts.push('Reported Location: '+f.OV);
+   if(f.TM)parts.push('TM: '+f.TM.slice(0,2)+':'+f.TM.slice(2)+' UTC (원문)');
+   if(f.FL)parts.push('FL: 고도 '+alt);
+   if(f.RM)parts.push('Remark: '+f.RM);
+   if(!parts.length)parts.push('정형 필드 해석 불가 — 원문 확인');
+   return '<div class="wx-pirep-popup">'
+     +'<div class="wx-pr-head">'+esc(title)+'</div>'
+     +'<div class="wx-pr-date">'+esc(wxPirepTimeUtc(r.time,raw))+'</div>'
+     +row('Reporting Station',reportingStation,false)+row('Report Type',reportType,false)
+     +row('고도',alt,false)+row('항공기',wxPirepAircraft(f.TP),false)
+     +row('Reported Location',location,false)+row('난기류',turbulence,!!f.TB)
+     +row('착빙',icing,!!f.IC)
+     +'<div class="wx-pr-section">REPORT INTERPRETATION · 원문 해석</div>'
+     +'<div class="wx-pr-explain">'+parts.map(esc).join('<br>')+'</div>'
+     +'<div class="wx-pr-section">RAW PIREP/AIREP</div>'
+     +'<div class="wx-pr-raw">'+esc(raw)+'</div>'
+     +'</div>';
+ }
+
  const Ctrl=L.Control.extend({options:{position:'topright'},onAdd:function(){
-  const el=L.DomUtil.create('div','leaflet-control leaflet-control-global-weather');
+  const el=L.DomUtil.create('div','leaflet-control leaflet-control-global-weather control-group-weather');
   el.innerHTML=`<button class="wx-toggle" type="button" aria-expanded="false">WX ALERT OFF</button>
   <section class="wx-panel" hidden><div class="wx-title">AVIATION WEATHER</div>
   <label class="wx-switch"><input class="wx-sigmet" type="checkbox"> SIGMET (Global)</label>
@@ -9897,7 +10061,7 @@ createNoaaModelControl().addTo(map);
      const nextPireps=L.layerGroup();
      (data.items||[]).forEach(r=>{if(filter.value==='icing'&&!r.icing||filter.value==='turb'&&!r.turbulence)return;
       const color=r.icing?'#0ea5e9':r.turbulence?'#f97316':'#a855f7';
-      const popup=`<b>${esc(r.type||'PIREP/AIREP')}</b><br>${esc(r.time||'UTC unknown')}<br>${r.altFt!=null?'Altitude: '+esc(r.altFt)+' ft<br>':''}<div style="white-space:pre-wrap;overflow-wrap:anywhere;max-width:300px">${esc(r.raw||'')}</div>`;
+      const popup=wxPirepPopup(r);
       // One report = one marker: place in the world copy nearest the current viewport.
       const wrappedLon=wxDisplayLongitude(r.lon);
       L.circleMarker([r.lat,wrappedLon],{radius:6,color:'#fff',weight:1,fillColor:color,fillOpacity:.9}).bindPopup(popup).addTo(nextPireps);n++;
