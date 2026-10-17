@@ -9771,10 +9771,62 @@ createNoaaModelControl().addTo(map);
    const rectangle={type:'Polygon',coordinates:[[[xmin,ymin],[xmax,ymin],[xmax,ymax],[xmin,ymax],[xmin,ymin]]]};
    return wxClipMulti(base,rectangle);
  }
+ // V18: Augment NOAA polygons only with independently expressed WI areas
+ // which NOAA's Geometry omitted. Keep original NOAA geometry intact.
+ function wxIndependentWISections(raw){
+   const text=String(raw||'').toUpperCase().replace(/\s+/g,' ');
+   // Stop at every new geographic clause or flight-level/motion statement.
+   const startRx=/\bWI\s+(?=[NS]\d{4}\s*[EW]\d{5})/g;
+   const starts=[...text.matchAll(startRx)].map(m=>m.index);
+   const areas=[];
+   for(const start of starts){
+     const prefix=text.slice(Math.max(0,start-12),start);
+     // Explicit conjunction means WI may be a constraint on an earlier area.
+     if(/\bAND\s*$/.test(prefix))continue;
+     const tail=text.slice(start+2);
+     const stop=tail.search(/\s+(?:(?:NE|NW|SE|SW|N|S|E|W)\s+OF\s+LINE|(?:N|S)\s+OF\s+[NS]\d{4}|(?:E|W)\s+OF\s+[EW]\d{5}|WI\s+[NS]\d{4}|TOP\b|BASE\b|FL\d{2,3}\b|MOV\b|STNR\b|INTSF\b|WKN\b|NC\b|CNL\b|VALID\b|=)/);
+     const section=stop<0?tail:tail.slice(0,stop);
+     const clean=section.replace(/\s+/g,' ').trim();
+     // Reject any prose / operators that would change the meaning of WI.
+     const coordinatePattern=/[NS]\d{4}\s*[EW]\d{5}/g;
+     const tokens=clean.match(coordinatePattern)||[];
+     const residue=clean.replace(coordinatePattern,'').replace(/[\s-]/g,'').trim();
+     if(residue||tokens.length<3)continue;
+     const pts=wxCoordsFromRaw(clean);
+     if(pts.length!==tokens.length||pts.length<3)continue;
+     const first=pts[0],last=pts[pts.length-1];
+     if(first[0]!==last[0]||first[1]!==last[1])pts.push([...first]);
+     // Nonzero ring area and non-degenerate polygons only.
+     let area=0;for(let i=1;i<pts.length;i++)area+=pts[i-1][0]*pts[i][1]-pts[i][0]*pts[i-1][1];
+     if(Math.abs(area)<1e-8)continue;
+     areas.push({type:'Polygon',coordinates:[pts]});
+   }
+   return areas;
+ }
+ function wxAugmentNoaaWithWI(item){
+   const base=item.geometry;
+   if(!wxAreaGeometry(base))return null;
+   const wiAreas=wxIndependentWISections(item.raw);
+   if(!wiAreas.length||typeof polygonClipping==='undefined')return null;
+   try{
+     let result=base,added=0;
+     for(const wi of wiAreas){
+       const uncovered=polygonClipping.difference(wxMulti(wi),wxMulti(result));
+       if(!wxValidMulti(uncovered))continue;
+       const merged=wxUnionMulti(result,wi);
+       if(!merged)continue;
+       result=merged;added++;
+     }
+     return added?{geometry:result,source:'NOAA_WI_AUGMENTED',note:'',addedWI:added}:null;
+   }catch(err){
+     console.warn('SIGMET WI augmentation skipped; retaining NOAA geometry',item.name,err);
+     return null;
+   }
+ }
  function wxResolvedGeometry(item,firMap){
    const raw=String(item.raw||'').toUpperCase(),firCode=wxFirCode(item),fir=firMap?.get(firCode);
    // Highest priority: valid area polygon from NOAA. Never override with inferred FIR.
-   if(wxAreaGeometry(item.geometry)&&item.geometrySource==='NOAA')return {geometry:item.geometry,source:'NOAA',note:/\b(?:[NSEW]\s+OF\s+[NSEW]\d{4,5}|(?:NE|NW|SE|SW|N|S|E|W)\s+OF\s+LINE)\b/.test(raw)?'NOAA area: compare with SIGMET geographic conditions (not independently verified)':''};
+   if(wxAreaGeometry(item.geometry)&&item.geometrySource==='NOAA')return wxAugmentNoaaWithWI(item)||{geometry:item.geometry,source:'NOAA',note:''};
    if(/\bENTIRE\s+FIR\b/.test(raw))return fir?{geometry:fir.geometry,source:'RAW_ENTIRE_FIR',note:'FIR boundary from world_fir.geojson; verify AIRAC currency'}:{geometry:null,source:'MISSING_FIR',note:'FIR boundary unavailable'};
    if(/\b[NS]\s+OF\s+[NS]\d{4}\b|\b[EW]\s+OF\s+[EW]\d{5}\b/.test(raw)){
      if(!fir)return {geometry:null,source:'MISSING_FIR',note:'Coordinate constraints require FIR boundary'};
@@ -9865,7 +9917,7 @@ createNoaaModelControl().addTo(map);
        const hue=item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
        try{let g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(resolved.geometry),properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
        if(!g.getLayers().length)return;
-       const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div>${resolved.note?'<div style="font-size:10px;color:#b45309">'+esc(resolved.note)+'</div>':''}<div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
+       const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
        g.bindPopup(txt());g.on('popupopen',()=>g.setPopupContent(txt()));g.addTo(nextSigmet);if(Number.isFinite(expiry))nextExpiry.push({layer:g,expires:expiry});n++;}catch(e){console.warn('SIGMET draw failed',item.name,e);undrawn.push((item.name||'Unknown')+' — '+String(e.message||e))}
      });sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetExpiryLayers.push(...nextExpiry);sigmetLayer.addTo(map);const missingEl=el.querySelector('.wx-undrawn');missingEl.style.display=undrawn.length?'block':'none';missingEl.textContent=undrawn.length?'Unmapped SIGMET ('+undrawn.length+'): '+undrawn.join(' | '):'';const d=data.diagnostics||{};lines.push(`SIGMET ${n}개 영역 / 수신 ${d.received??'?'}건 · 만료 ${d.expired??'?'} · 도형 누락 ${d.missingGeometry??'?'} · 좌표 복구 ${d.geometryRecovered??'?'} · 미표시 ${d.unsupportedGeometry??'?'}`+(data.truncated?' (일부 제한)':''));
     }catch(e){if(id!==sSeq)return;lines.push('SIGMET: '+(e.message||e));}
