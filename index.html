@@ -2748,6 +2748,16 @@
 
 
 /* V20: readable aviation pilot-report popups, mobile-friendly */
+
+/* V27: urgent PIREPs and selectable reports sharing the exact same location */
+.wx-urgent-pirep-icon{border:0!important;background:none!important;box-shadow:none!important;}
+.wx-urgent-pirep-mark{width:19px;height:19px;box-sizing:border-box;border:2px solid #fff;border-radius:50%;background:#dc2626;color:#fff;font:900 14px/15px Arial,sans-serif;text-align:center;box-shadow:0 1px 5px #0008;}
+.wx-urgent-head{display:inline-block;background:#dc2626;color:white;border-radius:3px;padding:1px 5px;margin-right:6px;font-size:11px;}
+.wx-pirep-group{width:min(355px,calc(100vw - 75px));max-height:430px;overflow-y:auto;}
+.wx-group-header{font:800 12px/1.5 Arial;color:#991b1b;padding:5px 0;}
+.wx-pirep-group details{border-top:1px solid #cbd5e1;padding:5px 0;}
+.wx-pirep-group summary{cursor:pointer;font:700 11px/1.4 Arial;color:#1e40af;padding:4px 0;}
+.wx-pirep-group .wx-pirep-popup{max-width:100%;width:auto;}
 .wx-pirep-popup{font:12px/1.5 Arial,sans-serif;color:#1f2937;width:min(350px,calc(100vw - 85px));max-width:350px;overflow-wrap:anywhere;}
 .wx-pirep-popup .wx-pr-head{font-size:13px;font-weight:800;border-bottom:1px solid #d7dee6;padding-bottom:6px;margin-bottom:8px;color:#172554;}
 .wx-dual-hazard-icon{background:none!important;border:none!important;box-shadow:none!important;line-height:0!important;}
@@ -10046,12 +10056,15 @@ createNoaaModelControl().addTo(map);
    const arp=wxAirepArpFields(raw);
    const row=(label,value,emphasize)=>value?'<div class="wx-pr-line"><span class="wx-pr-key">'+esc(label)+'</span><span class="wx-pr-value'+(emphasize==='icing'?' wx-pr-icing':emphasize?' wx-pr-alert':'')+'">'+esc(value)+'</span></div>':'';
    const title=String(r.type||'PIREP/AIREP');
-   const reportHeader=raw.toUpperCase().match(/^\s*([A-Z]{4})\s+(UUA|UA)\b/);
+   const reportHeader=raw.toUpperCase().match(/^\s*([A-Z]{3,4})\s+(UUA|UA)\b/);
    const reportingStation=reportHeader?reportHeader[1]:'';
    const reportType=reportHeader?(reportHeader[2]==='UA'?'Routine Pilot Report':'Urgent Pilot Report'):arp?'AIREP (ARP format)':'';
    const location=f.OV?f.OV:arp?.points[0]?.point || (Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lon))?Number(r.lat).toFixed(2)+', '+Number(r.lon).toFixed(2):'');
    const arpAlt=arp?.flToken && /^F(\d{3})$/.test(arp.flToken) ? (Number(arp.flToken.slice(1))*100).toLocaleString('en-US')+' FT' : '';
    const alt=arp ? (arpAlt||'고도 미확인') : wxPirepDecodedAlt(r,f);
+   const urgent=/^\s*[A-Z]{3,4}\s+UUA\b/i.test(raw);
+   const llwsMatch=raw.match(/\bLLWS\s*([+\-\/0-9 ]+\s*KT)?/i);
+   const llws=llwsMatch?llwsMatch[0].trim():'';
    const turbulence=wxPirepTurbulence(f.TB);
    const icing=wxPirepIcing(f.IC);
    const parts=[];
@@ -10063,6 +10076,7 @@ createNoaaModelControl().addTo(map);
    if(f.OV)parts.push('OV (Over / Position): '+f.OV);
    if(f.TM && /^\d{4}$/.test(f.TM))parts.push('TM (Time): '+f.TM.slice(0,2)+':'+f.TM.slice(2)+' UTC');
    if(f.FL)parts.push('FL (Flight Level): '+alt);
+   if(llws)parts.push('LLWS (Low Level Wind Shear): '+llws);
    if(f.RM)parts.push('RM (Remarks): '+f.RM);
    if(arp){
      if(arp.flight)parts.push('Aircraft Identification: '+arp.flight);
@@ -10077,11 +10091,12 @@ createNoaaModelControl().addTo(map);
    }
    if(!parts.length)parts.push('정형 필드 없음 — 원문 확인');
    return '<div class="wx-pirep-popup">'
-     +'<div class="wx-pr-head">'+esc(title)+'</div>'
+     +'<div class="wx-pr-head">'+(urgent?'<span class="wx-urgent-head">❗ URGENT PIREP</span>':'')+esc(title)+'</div>'
      +'<div class="wx-pr-date">'+esc(wxPirepTimeUtc(r.time,raw))+'</div>'
      +row('Reporting Station',reportingStation,false)+row('Report Type',reportType,false)
      +row('고도',alt,false)+row('항공기',wxPirepAircraft(f.TP),false)
      +row('OV (Position)',location,false)
+     +row('LLWS (Wind Shear)',llws,llws?'urgent':false)
      +(arp?row('Flight Identification',arp.flight,false)+row('Static Air Temperature',wxArpTemperature(arp.temp),false)+row('Wind Direction / Speed',wxArpWindDisplay(arp.wind),false)+row('Aircraft Registration',arp.registration,false):'')
      +row('TB (Turbulence)',turbulence,!!f.TB)
      +row('IC (Icing)',icing,f.IC?'icing':false)
@@ -10132,25 +10147,40 @@ createNoaaModelControl().addTo(map);
      const data=(part==='rewrap'&&wxResponses.pirep)||await jsonp({action:'pirepsearch',scope:'global',age:1}); wxResponses.pirep=data;
      if(id!==pSeq||!chkP.checked)return;if(!data.ok)throw Error(data.error||'PIREP 오류');let n=0;
      const nextPireps=L.layerGroup();
-     (data.items||[]).forEach(r=>{if(filter.value==='icing'&&!r.icing||filter.value==='turb'&&!r.turbulence)return;
-      const color=r.icing?'#0ea5e9':r.turbulence?'#f97316':'#a855f7';
-      const popup=wxPirepPopup(r);
-      // One report = one marker: place in the world copy nearest the current viewport.
-      const wrappedLon=wxDisplayLongitude(r.lon);
-      // Dual hazard: one position, one popup, two equal semicircles.
-      // Left orange = turbulence; right blue = icing.
-      let marker;
-      if(r.icing && r.turbulence){
-       const icon=L.divIcon({
-        className:'wx-dual-hazard-icon',
-        html:'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 A7 7 0 0 0 8 15 Z" fill="#f97316"/><path d="M8 1 A7 7 0 0 1 8 15 Z" fill="#0ea5e9"/><circle cx="8" cy="8" r="7" fill="none" stroke="white" stroke-width="1.5"/></svg>',
-        iconSize:[16,16],iconAnchor:[8,8],popupAnchor:[0,-9]
+     const groups=new Map();
+     (data.items||[]).forEach(r=>{
+       if(filter.value==='icing'&&!r.icing||filter.value==='turb'&&!r.turbulence)return;
+       if(!Number.isFinite(Number(r.lat))||!Number.isFinite(Number(r.lon)))return;
+       const key=Number(r.lat).toFixed(5)+'|'+Number(r.lon).toFixed(5);
+       if(!groups.has(key))groups.set(key,[]);
+       groups.get(key).push(r);
+     });
+     groups.forEach(reports=>{
+       reports.sort((a,b)=>{
+         const urgent=x=>/^\s*[A-Z]{3,4}\s+UUA\b/i.test(String(x.raw||''));
+         return Number(urgent(b))-Number(urgent(a)) || (Date.parse(b.time)||0)-(Date.parse(a.time)||0);
        });
-       marker=L.marker([r.lat,wrappedLon],{icon:icon});
-      }else{
-       marker=L.circleMarker([r.lat,wrappedLon],{radius:6,color:'#fff',weight:1,fillColor:color,fillOpacity:.9});
-      }
-      marker.bindPopup(popup).addTo(nextPireps);n++;
+       const r=reports[0], isUrgent=reports.some(x=>/^\s*[A-Z]{3,4}\s+UUA\b/i.test(String(x.raw||'')));
+       const hasIcing=reports.some(x=>x.icing),hasTurb=reports.some(x=>x.turbulence);
+       const wrappedLon=wxDisplayLongitude(r.lon);
+       const popup=reports.length===1?wxPirepPopup(r):
+          '<div class="wx-pirep-group"><div class="wx-group-header">'+reports.length+' PIREP/AIREP · Same position</div>'+
+          reports.map((item,i)=>'<details '+(i===0?'open':'')+'><summary>'+( /^\s*[A-Z]{3,4}\s+UUA\b/i.test(String(item.raw||''))?'❗ URGENT · ':'')+
+          esc(wxPirepTimeUtc(item.time,item.raw))+' · '+esc(wxPirepRawFields(item.raw).TP||'PIREP')+'</summary>'+wxPirepPopup(item)+'</details>').join('')+'</div>';
+       let marker;
+       if(isUrgent){
+         marker=L.marker([r.lat,wrappedLon],{icon:L.divIcon({className:'wx-urgent-pirep-icon',
+           html:'<div class="wx-urgent-pirep-mark">!</div>',iconSize:[20,20],iconAnchor:[10,10],popupAnchor:[0,-10]})});
+       }else if(hasIcing&&hasTurb){
+         marker=L.marker([r.lat,wrappedLon],{icon:L.divIcon({className:'wx-dual-hazard-icon',
+           html:'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 A7 7 0 0 0 8 15 Z" fill="#f97316"/><path d="M8 1 A7 7 0 0 1 8 15 Z" fill="#0ea5e9"/><circle cx="8" cy="8" r="7" fill="none" stroke="white" stroke-width="1.5"/></svg>',
+           iconSize:[16,16],iconAnchor:[8,8],popupAnchor:[0,-9]})});
+       }else{
+         marker=L.circleMarker([r.lat,wrappedLon],{radius:6,color:'#fff',weight:1,
+           fillColor:hasIcing?'#0ea5e9':hasTurb?'#f97316':'#a855f7',fillOpacity:.9});
+       }
+       marker.bindPopup(popup,{maxWidth:390,maxHeight:480}).addTo(nextPireps);
+       n+=reports.length;
      });pirepLayer.clearLayers();nextPireps.eachLayer(marker=>pirepLayer.addLayer(marker));pirepLayer.addTo(map);lines.push(`PIREP/AIREP ${n}건`+(data.truncated?' (일부 데이터 제한)':''));
     }catch(e){if(id!==pSeq)return;lines.push('PIREP: '+(e.message||e));}
    }
