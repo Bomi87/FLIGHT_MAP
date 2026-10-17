@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/dist/polygon-clipping.umd.min.js"></script>
 
   <style>
     html, body {
@@ -9496,7 +9497,7 @@ createNoaaModelControl().addTo(map);
  const pirepLayer=L.layerGroup(), sigmetLayer=L.layerGroup();
  const esc=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const utc=ms=>new Date(ms).toISOString().slice(0,16).replace('T',' ')+' UTC';
- let pSeq=0,sSeq=0,refresh=null,moveTimer=null;
+ let pSeq=0,sSeq=0,refresh=null,moveTimer=null; let wxLastPayload=null; let wxLastWrapKey=""; let wxRedrawCached=null;
  const sigmetExpiryLayers=[];
  const parseSigmetTime=v=>{if(v==null||v==='')return NaN;const t=String(v).trim();if(/^\d{10}(?:\.\d+)?$/.test(t))return Number(t)*1000;if(/^\d{13}$/.test(t))return Number(t);const d=Date.parse(t);return Number.isFinite(d)?d:NaN};
  // Render textual SIGMET as clearly separated, colour-coded rows.
@@ -9540,26 +9541,194 @@ createNoaaModelControl().addTo(map);
  const expiryColor=ms=>{if(!Number.isFinite(ms))return '#64748b';const m=(ms-Date.now())/60000;return m<=5?'#dc2626':m<=30?'#d97706':'#475569'};
  function pruneExpiredSigmets(){for(let i=sigmetExpiryLayers.length-1;i>=0;i--){const r=sigmetExpiryLayers[i];if(Date.now()>=r.expires){sigmetLayer.removeLayer(r.layer);sigmetExpiryLayers.splice(i,1)}}}
  setInterval(pruneExpiredSigmets,15000);
- // In the global map, display western-hemisphere weather on the right-hand world copy.
- // One feature is rendered once; shifting by 360 preserves its true geographic position.
- function wxDisplayLongitude(lon){
-   const n=Number(lon);
-   return n < -30 ? n+360 : n;
+ // The map's default duplicate world is for presentation only. Render one WX copy.
+ // For a global overview, western-hemisphere data is shown on the RIGHT copy.
+ // For regional zoom, choose the longitude copy nearest the actual viewport center.
+ function wxTargetLon(lon){
+   const n=Number(lon), center=map.getCenter().lng;
+   if(map.getZoom()<=3 && center>-100 && center<180 && n< -30)return n+360;
+   return n+360*Math.round((center-n)/360);
  }
+ function wxDisplayLongitude(lon){return wxTargetLon(lon)}
  function wxShiftGeometryToRight(geometry){
-   if(!geometry || !geometry.coordinates)return geometry;
-   const all=[];
-   function walk(v){if(Array.isArray(v)&&typeof v[0]==='number'&&typeof v[1]==='number')all.push(v[0]);else if(Array.isArray(v))v.forEach(walk);}
-   walk(geometry.coordinates);
-   if(!all.length)return geometry;
-   // Keep every polygon vertex shifted together to preserve the shape.
-   // US/Atlantic SIGMETs are usually defined with negative longitudes.
-   const sorted=all.slice().sort((a,b)=>a-b),median=sorted[Math.floor(sorted.length/2)];
-   if(median>=-30)return geometry;
-   const copy=v=>Array.isArray(v)&&typeof v[0]==='number'&&typeof v[1]==='number'?[v[0]+360,...v.slice(1)]:Array.isArray(v)?v.map(copy):v;
-   return {...geometry,coordinates:copy(geometry.coordinates)};
+   if(!geometry||!geometry.coordinates)return geometry;
+   const type=geometry.type;
+   const coords=[];
+   function collect(v){if(Array.isArray(v)&&typeof v[0]==='number'&&typeof v[1]==='number')coords.push(v[0]);else if(Array.isArray(v))v.forEach(collect)}
+   collect(geometry.coordinates);
+   if(!coords.length)return geometry;
+   const source=coords.slice().sort((a,b)=>a-b)[Math.floor(coords.length/2)];
+   const offset=wxTargetLon(source)-source;
+   // Shift all vertices by the same multiple of 360 to preserve relative shape.
+   function shift(v){return Array.isArray(v)&&typeof v[0]==='number'&&typeof v[1]==='number'?[v[0]+offset,...v.slice(1)]:Array.isArray(v)?v.map(shift):v}
+   return {...geometry,coordinates:shift(geometry.coordinates)};
+ }
+ // Already hosted beside index.html in GitHub Pages. Do not alter existing FIR toggle.
+ let wxFirPromise=null;
+ function wxFirData(){
+   if(!wxFirPromise)wxFirPromise=fetch('world_fir.geojson',{cache:'force-cache'})
+     .then(r=>{if(!r.ok)throw Error('FIR GeoJSON HTTP '+r.status);return r.json()})
+     .then(data=>{
+       // Build a global ICAO-to-FIR boundary index. Never overwrite duplicate ICAO entries.
+       // Some FIRs have multiple records/islands in world_fir.geojson.
+       const grouped=new Map();
+       for(const feature of data.features||[]){
+         if(!feature||!feature.geometry)continue;
+         const prop=feature.properties||{};
+         const code=String(prop.icaocode||'').trim().toUpperCase();
+         if(!/^[A-Z]{4}$/.test(code))continue;
+         const kind=String(prop.kind||'FIR').toUpperCase();
+         if(kind && !kind.includes('FIR'))continue;
+         const g=feature.geometry;
+         const polygons=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];
+         if(!polygons.length)continue;
+         if(!grouped.has(code))grouped.set(code,[]);
+         grouped.get(code).push(...polygons);
+       }
+       const result=new Map();
+       for(const [code,polygons] of grouped){
+         result.set(code,{type:'Feature',properties:{icaocode:code},geometry:{type:'MultiPolygon',coordinates:polygons}});
+       }
+       return result;
+     })
+     .catch(e=>{wxFirPromise=null;throw e});
+   return wxFirPromise;
+ }
+ function wxFirCode(item){
+   const raw=String(item.raw||'').toUpperCase();
+   // Match the FIR explicitly identified in the SIGMET, not the issuing office.
+   let match=raw.match(/\b([A-Z]{4})\s+(?:[A-Z][A-Z \/-]{2,45}\s+)?FIR\b/)
+     ||raw.match(/\b([A-Z]{4})\s+SIGMET\s+[A-Z0-9]+\b/);
+   if(match)return match[1];
+   // Fallback only for a standalone ICAO FIR identifier; do not guess from a location name.
+   const label=String(item.firCode||item.fir||'').trim().toUpperCase();
+   return /^[A-Z]{4}$/.test(label)?label:'';
+ }
+ function wxCoordsFromRaw(raw){
+   const coords=[];const re=/([NS])(\d{2})(\d{2})\s*([EW])(\d{3})(\d{2})/gi;let m;
+   while((m=re.exec(raw||''))){const lat=(+m[2]+(+m[3])/60)*(m[1].toUpperCase()==='S'?-1:1);const lon=(+m[5]+(+m[6])/60)*(m[4].toUpperCase()==='W'?-1:1);if(Math.abs(lat)<=90&&Math.abs(lon)<=180)coords.push([lon,lat])}
+   return coords;
+ }
+ function wxRawWIPolygon(raw){
+   const match=String(raw||'').match(/\bWI\s+([\s\S]*?)(?=\s+(?:TOP|BASE|MOV|STNR|INTSF|WKN|NC|CNL|VALID)\b|$)/i);
+   if(!match)return null;
+   const pts=wxCoordsFromRaw(match[1]);if(pts.length<3)return null;
+   const a=pts[0],z=pts[pts.length-1];if(a[0]!==z[0]||a[1]!==z[1])pts.push(a.slice());
+   return {type:'Polygon',coordinates:[pts]};
+ }
+ /* WX V13: NOAA authoritative polygon FIRST; infer only when NOAA has no area polygon.
+  * World-wide FIR half-plane/polyline clipping with polygon-clipping. All geometric
+  * inferences are marked RAW_* and require the official AIP/FIR data validation.
+  */
+ function wxAreaGeometry(g){return !!g&&['Polygon','MultiPolygon'].includes(g.type)&&Array.isArray(g.coordinates)&&g.coordinates.length>0}
+ function wxMulti(g){return g.type==='Polygon'?[g.coordinates]:g.coordinates}
+ function wxGeometryBounds(g){
+   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+   function visit(v){if(Array.isArray(v)&&typeof v[0]==='number'&&typeof v[1]==='number'){
+    minX=Math.min(minX,v[0]);maxX=Math.max(maxX,v[0]);minY=Math.min(minY,v[1]);maxY=Math.max(maxY,v[1]);
+   }else if(Array.isArray(v))v.forEach(visit)}visit(g.coordinates);
+   return Number.isFinite(minX)?[minX,minY,maxX,maxY]:null;
+ }
+ function wxValidMulti(mp){return Array.isArray(mp)&&mp.some(p=>Array.isArray(p)&&p.some(r=>Array.isArray(r)&&r.length>=4))}
+ function wxFromMulti(mp){return wxValidMulti(mp)?{type:'MultiPolygon',coordinates:mp}:null}
+ function wxClipMulti(a,b){
+  if(typeof polygonClipping==='undefined')throw Error('Polygon clipping library unavailable');
+  return wxFromMulti(polygonClipping.intersection(wxMulti(a),wxMulti(b)));
+ }
+ function wxUnionMulti(a,b){
+  if(typeof polygonClipping==='undefined')throw Error('Polygon clipping library unavailable');
+  return wxFromMulti(polygonClipping.union(wxMulti(a),wxMulti(b)));
+ }
+ // rectangle boundary positions clockwise, 0=bottom left, L=bottom right, etc.
+ function wxRectPosition(pt,b){const [x0,y0,x1,y1]=b,W=x1-x0,H=y1-y0;
+  const [x,y]=pt,eps=1e-6;
+  if(Math.abs(y-y0)<eps)return x-x0;
+  if(Math.abs(x-x1)<eps)return W+y-y0;
+  if(Math.abs(y-y1)<eps)return W+H+x1-x;
+  if(Math.abs(x-x0)<eps)return 2*W+H+y1-y;
+  return NaN;
+ }
+ function wxRayToRect(p,v,b){let best=null,small=Infinity;const [x,y]=p,[dx,dy]=v,[x0,y0,x1,y1]=b;
+  for(const xx of [x0,x1])if(Math.abs(dx)>1e-10){const t=(xx-x)/dx,yy=y+t*dy;if(t>1e-7&&t<small&&yy>=y0-1e-6&&yy<=y1+1e-6){small=t;best=[xx,Math.max(y0,Math.min(y1,yy))]}}
+  for(const yy of [y0,y1])if(Math.abs(dy)>1e-10){const t=(yy-y)/dy,xx=x+t*dx;if(t>1e-7&&t<small&&xx>=x0-1e-6&&xx<=x1+1e-6){small=t;best=[Math.max(x0,Math.min(x1,xx)),yy]}}
+  return best;
+ }
+ function wxRectWalk(a,b,rect){
+  const [x0,y0,x1,y1]=rect,W=x1-x0,H=y1-y0,P=2*(W+H);
+  const corners=[[x1,y0],[x1,y1],[x0,y1],[x0,y0]];
+  const t0=wxRectPosition(a,rect),t1=wxRectPosition(b,rect);
+  if(!Number.isFinite(t0)||!Number.isFinite(t1))return null;
+  const finish=t1<t0?t1+P:t1;const result=[];
+  for(let i=0;i<4;i++){const t=[W,W+H,2*W+H,P][i];if(t>t0+1e-7&&t<finish-1e-7)result.push(corners[i]);if(t+P>t0+1e-7&&t+P<finish-1e-7)result.push(corners[i])}
+  result.sort((u,v)=>((wxRectPosition(u,rect)-t0+P)%P)-((wxRectPosition(v,rect)-t0+P)%P));
+  return result;
+ }
+ function wxDirectionVector(dir){return {N:[0,1],S:[0,-1],E:[1,0],W:[-1,0],NE:[1,1],NW:[-1,1],SE:[1,-1],SW:[-1,-1]}[dir]||null}
+ function wxLineRegion(dir,pts,fir){
+  if(pts.length<2)throw Error('OF LINE requires >=2 vertices');
+  const bb=wxGeometryBounds(fir);if(!bb)throw Error('Missing FIR bounds');
+  // Pad FIR bounds so the clipping boundary remains entirely outside FIR.
+  const rect=[Math.max(-360,bb[0]-8),Math.max(-90,bb[1]-8),Math.min(540,bb[2]+8),Math.min(90,bb[3]+8)];
+  const first=pts[0],last=pts[pts.length-1],fwd=[pts[1][0]-first[0],pts[1][1]-first[1]],tail=[last[0]-pts[pts.length-2][0],last[1]-pts[pts.length-2][1]];
+  const start=wxRayToRect(first,[-fwd[0],-fwd[1]],rect),end=wxRayToRect(last,tail,rect);
+  if(!start||!end)throw Error('OF LINE extension cannot reach FIR enclosing rectangle');
+  const path=[start,...pts,end],forwardCorners=wxRectWalk(end,start,rect),reverseCorners=wxRectWalk(start,end,rect);
+  if(!forwardCorners||!reverseCorners)throw Error('OF LINE invalid rectangle boundary');
+  const ringA=[...path,...forwardCorners,start],ringB=[...path,...reverseCorners.reverse(),start];
+  const pA={type:'Polygon',coordinates:[ringA]},pB={type:'Polygon',coordinates:[ringB]};
+  // Pick side by the line orientation: relative side's outward normal closest to N/NE/...
+  const dv=wxDirectionVector(dir);if(!dv)throw Error('Unsupported OF LINE direction '+dir);
+  let dx=0,dy=0;for(let i=0;i<pts.length-1;i++){dx+=pts[i+1][0]-pts[i][0];dy+=pts[i+1][1]-pts[i][1]}
+  if(Math.hypot(dx,dy)<1e-9)throw Error('Degenerate OF LINE');
+  const left=[-dy,dx],dot=left[0]*dv[0]+left[1]*dv[1];
+  if(Math.abs(dot)<1e-7)throw Error('Ambiguous '+dir+' OF LINE side');
+  // Determine which polygon lies to the left: test a tiny left-offset point near first segment.
+  const seg=pts.find((p,i)=>i<pts.length-1&&(pts[i+1][0]!==p[0]||pts[i+1][1]!==p[1]));
+  const idx=pts.indexOf(seg),ddx=pts[idx+1][0]-seg[0],ddy=pts[idx+1][1]-seg[1],mag=Math.hypot(ddx,ddy);
+  const test=[(seg[0]+pts[idx+1][0])/2-ddy/mag*0.0001,(seg[1]+pts[idx+1][1])/2+ddx/mag*0.0001];
+  function inRing(pt,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if(((a[1]>pt[1])!==(b[1]>pt[1]))&&(pt[0]<(b[0]-a[0])*(pt[1]-a[1])/(b[1]-a[1])+a[0]))inside=!inside}return inside}
+  const leftA=inRing(test,ringA),leftB=inRing(test,ringB);
+  if(leftA===leftB)throw Error('Cannot determine OF LINE polygon side');
+  const targetLeft=dot>0,cut=targetLeft?(leftA?pA:pB):(leftA?pB:pA);
+  return wxClipMulti(fir,cut);
+ }
+ function wxParseOfLine(raw){
+  const text=String(raw||'').toUpperCase().replace(/\s+/g,' ');
+  const rx=/\b(?:(AND|OR)\s+)?(NE|NW|SE|SW|N|S|E|W)\s+OF\s+LINE\s+([\s\S]*?)(?=\s+(?:AND|OR)\s+(?:NE|NW|SE|SW|N|S|E|W)\s+OF\s+LINE\b|\s+(?:TOP|BASE|FL\d|MOV|STNR|INTSF|WKN|NC|CNL)\b|$)/g;
+  const list=[];let m;
+  while((m=rx.exec(text))){
+    const pts=wxCoordsFromRaw(m[3]);if(pts.length<2)continue;
+    list.push({operator:m[1]||'AND',direction:m[2],points:pts});
+  }
+  return list;
+ }
+ function wxResolveOfLine(raw,fir){
+  const rules=wxParseOfLine(raw);if(!rules.length)throw Error('No parseable OF LINE conditions');
+  let result=null;
+  for(const rule of rules){const g=wxLineRegion(rule.direction,rule.points,fir);
+    if(!g){if(rule.operator==='AND')return null;continue;}
+    result=result?(rule.operator==='OR'?wxUnionMulti(result,g):wxClipMulti(result,g)):g;
+    if(!result)return null;
+  }
+  return result;
+ }
+ function wxResolvedGeometry(item,firMap){
+   const raw=String(item.raw||'').toUpperCase(),firCode=wxFirCode(item),fir=firMap?.get(firCode);
+   // Highest priority: valid area polygon from NOAA. Never override with inferred FIR.
+   if(wxAreaGeometry(item.geometry)&&item.geometrySource==='NOAA')return {geometry:item.geometry,source:'NOAA',note:''};
+   if(/\bENTIRE\s+FIR\b/.test(raw))return fir?{geometry:fir.geometry,source:'RAW_ENTIRE_FIR',note:'FIR boundary from world_fir.geojson; verify AIRAC currency'}:{geometry:null,source:'MISSING_FIR',note:'FIR boundary unavailable'};
+   if(/\b(?:NE|NW|SE|SW|N|S|E|W)\s+OF\s+LINE\b/.test(raw)){
+     if(!fir)return {geometry:null,source:'MISSING_FIR',note:'OF LINE requires FIR boundary'};
+     try{const geo=wxResolveOfLine(raw,fir);return geo?{geometry:geo,source:'RAW_OF_LINE',note:'Area derived from FIR + OF LINE; verify against official SIGMET'}:{geometry:null,source:'EMPTY_INTERSECTION',note:'OF LINE region outside FIR'}}
+     catch(e){return {geometry:null,source:'OF_LINE_ERROR',note:String(e.message||e)}}
+   }
+   const wi=wxRawWIPolygon(raw);
+   if(wi)return {geometry:wi,source:'RAW_WI',note:'Polygon from SIGMET WI vertices'};
+   if(wxAreaGeometry(item.geometry))return {geometry:item.geometry,source:'NOAA',note:''};
+   return {geometry:null,source:'UNMAPPED',note:'No polygon available'};
  }
  const WX_BACKEND_URL=AIRSPACE_SEARCH_BACKEND_URL;
+ const wxResponses={};
  function jsonp(params){return new Promise((resolve,reject)=>{
    const callback='wxCb_'+Date.now()+'_'+Math.floor(Math.random()*1e7);
    const script=document.createElement('script');let finished=false;
@@ -9582,7 +9751,7 @@ createNoaaModelControl().addTo(map);
   <div class="wx-time-window wx-report-range"></div>
   <label class="wx-label">보고 기상현상</label><select class="wx-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option></select>
   <button class="wx-action wx-refresh" type="button">새로고침</button>
-  <div class="wx-status" aria-live="polite">조회할 자료를 선택하세요.</div>
+  <div class="wx-status" aria-live="polite">조회할 자료를 선택하세요.</div><div class="wx-undrawn" style="display:none;max-height:135px;overflow:auto;color:#fde68a;font:10px/1.45 Arial;margin-top:5px;white-space:pre-wrap"></div>
   <div class="wx-note">· PIREP/AIREP: 주로 미국/북대서양<br>· SIGMET: 전 세계 발행자료</div></section>`;
   const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),status=$('.wx-status');
   function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-3600000)+' ~ '+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
@@ -9603,10 +9772,10 @@ createNoaaModelControl().addTo(map);
    if(!chkS.checked){++sSeq;sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;map.removeLayer(sigmetLayer)}
    if(!chkP.checked&&!chkS.checked){status.textContent='모두 OFF';return}
    status.textContent='NOAA 데이터 조회 중…';const lines=[];
-   if(chkP.checked && (part==='all'||part==='pirep')){
+   if(chkP.checked && (part==='all'||part==='pirep'||part==='rewrap')){
     const id=++pSeq;
     try{
-     const data=await jsonp({action:'pirepsearch',scope:'global',age:1});
+     const data=(part==='rewrap'&&wxResponses.pirep)||await jsonp({action:'pirepsearch',scope:'global',age:1}); wxResponses.pirep=data;
      if(id!==pSeq||!chkP.checked)return;if(!data.ok)throw Error(data.error||'PIREP 오류');let n=0;
      const nextPireps=L.layerGroup();
      (data.items||[]).forEach(r=>{if(filter.value==='icing'&&!r.icing||filter.value==='turb'&&!r.turbulence)return;
@@ -9618,26 +9787,29 @@ createNoaaModelControl().addTo(map);
      });pirepLayer.clearLayers();nextPireps.eachLayer(marker=>pirepLayer.addLayer(marker));pirepLayer.addTo(map);lines.push(`PIREP/AIREP ${n}건`+(data.truncated?' (일부 데이터 제한)':''));
     }catch(e){if(id!==pSeq)return;lines.push('PIREP: '+(e.message||e));}
    }
-   if(chkS.checked && (part==='all'||part==='sigmet')){
+   if(chkS.checked && (part==='all'||part==='sigmet'||part==='rewrap')){
     const id=++sSeq;
     try{
-     const data=await jsonp({action:'sigmetsearch'});if(id!==sSeq||!chkS.checked)return;if(!data.ok)throw Error(data.error||'SIGMET 오류');let n=0;
-     const nextSigmet=L.layerGroup();const nextExpiry=[];
+     const data=(part==='rewrap'&&wxResponses.sigmet)||await jsonp({action:'sigmetsearch'}); wxResponses.sigmet=data;if(id!==sSeq||!chkS.checked)return;if(!data.ok)throw Error(data.error||'SIGMET 오류');let n=0;
+     let firMap=null;try{firMap=await wxFirData()}catch(e){console.warn('WX FIR',e)} if(id!==sSeq||!chkS.checked)return;
+     const nextSigmet=L.layerGroup();const nextExpiry=[];const undrawn=[];let reviewed=0;
      (data.items||[]).forEach(item=>{
        if(sf.value!=='all'&&item.hazard!==sf.value)return;
-       if(!item.geometry)return;
+       const resolved=wxResolvedGeometry(item,firMap);if(!resolved.geometry){undrawn.push((item.name||wxFirCode(item)||'Unknown FIR')+' — '+resolved.source+(resolved.note?' ('+resolved.note+')':''));return;} if(resolved.source==='RAW_OF_LINE')reviewed++;
        const expiry=parseSigmetTime(item.validTo);if(Number.isFinite(expiry)&&expiry<=Date.now())return;
        const hue=item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
-       try{let g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(item.geometry),properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
+       try{let g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(resolved.geometry),properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
        if(!g.getLayers().length)return;
-       const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
-       g.bindPopup(txt());g.on('popupopen',()=>g.setPopupContent(txt()));g.addTo(nextSigmet);if(Number.isFinite(expiry))nextExpiry.push({layer:g,expires:expiry});n++;}catch(_){/* discard invalid geometry */}
-     });sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetExpiryLayers.push(...nextExpiry);sigmetLayer.addTo(map);const d=data.diagnostics||{};lines.push(`SIGMET ${n}개 영역 / 수신 ${d.received??'?'}건 · 만료 ${d.expired??'?'} · 도형 누락 ${d.missingGeometry??'?'} · 좌표 복구 ${d.geometryRecovered??'?'} · 미표시 ${d.unsupportedGeometry??'?'}`+(data.truncated?' (일부 제한)':''));
+       const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div>${resolved.note?'<div style="font-size:10px;color:#b45309">'+esc(resolved.note)+'</div>':''}<div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
+       g.bindPopup(txt());g.on('popupopen',()=>g.setPopupContent(txt()));g.addTo(nextSigmet);if(Number.isFinite(expiry))nextExpiry.push({layer:g,expires:expiry});n++;}catch(e){console.warn('SIGMET draw failed',item.name,e);undrawn.push((item.name||'Unknown')+' — '+String(e.message||e))}
+     });sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetExpiryLayers.push(...nextExpiry);sigmetLayer.addTo(map);const missingEl=el.querySelector('.wx-undrawn');missingEl.style.display=undrawn.length?'block':'none';missingEl.textContent=undrawn.length?'Unmapped SIGMET ('+undrawn.length+'): '+undrawn.join(' | '):'';const d=data.diagnostics||{};lines.push(`SIGMET ${n}개 영역 / 수신 ${d.received??'?'}건 · 만료 ${d.expired??'?'} · 도형 누락 ${d.missingGeometry??'?'} · 좌표 복구 ${d.geometryRecovered??'?'} · 미표시 ${d.unsupportedGeometry??'?'}`+(data.truncated?' (일부 제한)':''));
     }catch(e){if(id!==sSeq)return;lines.push('SIGMET: '+(e.message||e));}
    }
    stamps();status.textContent=lines.join(' · ')+' · '+utc(Date.now());
   }
   [chkP,filter].forEach(input=>input.addEventListener('change',()=>draw('pirep')));[chkS,sf].forEach(input=>input.addEventListener('change',()=>draw('sigmet')));$('.wx-refresh').onclick=()=>draw('all');
+  // On pan or zoom, reposition from the last response without fetching again.
+  let lastAnchor=''; map.on('moveend zoomend',()=>{if(!chkP.checked&&!chkS.checked)return;const k=map.getZoom()<=3?'global:'+Math.floor(map.getCenter().lng/180):'regional:'+Math.floor(map.getCenter().lng/180);if(k!==lastAnchor){lastAnchor=k;if(wxResponses.pirep||wxResponses.sigmet)draw('rewrap')}});
   // Global PIREPs do not depend on viewport; never re-fetch on map movement.
   refresh=setInterval(()=>{if(chkP.checked||chkS.checked)draw('all')},300000);
   L.DomEvent.disableClickPropagation(el);L.DomEvent.disableScrollPropagation(el);return el;
