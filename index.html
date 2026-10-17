@@ -10101,6 +10101,7 @@ createNoaaModelControl().addTo(map);
      +(arp?row('Flight Identification',arp.flight,false)+row('Static Air Temperature',wxArpTemperature(arp.temp),false)+row('Wind Direction / Speed',wxArpWindDisplay(arp.wind),false)+row('Aircraft Registration',arp.registration,false):'')
      +row('TB (Turbulence)',turbulence,!!f.TB)
      +row('IC (Icing)',icing,f.IC?'icing':false)
+     +row('비고',f.RM,false)
      +'<div class="wx-pr-section">REPORT INTERPRETATION · 원문 해석</div>'
      +'<div class="wx-pr-explain">'+parts.map(line=>/^IC \(Icing\):/.test(line)?'<span class="wx-pr-interpret-icing">'+esc(line)+'</span>':esc(line)).join('<br>')+'</div>'
      +'<div class="wx-pr-section">RAW PIREP/AIREP</div>'
