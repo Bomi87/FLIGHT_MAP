@@ -9967,43 +9967,44 @@ createNoaaModelControl().addTo(map);
    return 'UTC 시각 미확인';
  }
  function wxPirepDecodedAlt(r,fields){
-   const raw=String(fields.FL||'').trim();
-   const fl=raw.match(/^(?:FL)?(\d{2,3})(?:\b|$)/i);
-   if(fl){
-     const feet=Number(fl[1])*100;
-     return feet.toLocaleString('en-US')+' FT';
+   const raw=String(fields.FL||'').trim().toUpperCase();
+   if(raw){
+     const compact=raw.replace(/\s+/g,'');
+     if(compact==='DURD')return 'During Descent (강하 중)';
+     if(compact==='DURC')return 'During Climb (상승 중)';
+     const fl=compact.match(/^(?:FL)?(\d{2,3})$/);
+     if(fl)return (Number(fl[1])*100).toLocaleString('en-US')+' FT';
+     // An unrecognized altitude / flight phase code is still useful information.
+     // Do not replace an actual reported field with a guess or "unknown".
+     return raw;
    }
-   // Backend altFt may contain a flight-level number (e.g. 360) instead of feet.
-   // Without a literal /FL field, never guess whether such values mean FL or feet.
+   // Only use a clearly expressed altitude in feet from the backend when the
+   // source report has no /FL field. Values such as 360 can be FL or feet.
    const n=Number(r.altFt);
    return r.altFt!=null && String(r.altFt).trim()!=='' && Number.isFinite(n) && n>=1000 && n<=65000
-     ? Math.round(n).toLocaleString('en-US')+' FT' : '고도 미확인';
+     ? Math.round(n).toLocaleString('en-US')+' FT' : '';
  }
- function wxPirepTurbulence(value){
-   const t=String(value||'').trim().toUpperCase();
+ // PIREP severity wording: keep exact original codes in parentheses.
+ // LGT=약한, MOD=중강도, SEV=강한; hyphenated values denote ranges.
+ function wxPirepSeverityKorean(raw, phenomenon){
+   const t=String(raw||'').trim().toUpperCase();
    if(!t)return '';
-   if(/\b(?:NEG|NEGATIVE|NIL)\b/.test(t))return 'NEGATIVE (난기류 없음)';
-   const terms=[];
-   if(/\bINTMT\b/.test(t))terms.push('간헐적');
-   if(/\bOCNL\b/.test(t))terms.push('때때로');
-   if(/\bCONT\b/.test(t))terms.push('지속적');
-   if(/\bLGT\b/.test(t))terms.push('약한');
-   if(/\bMOD\b/.test(t))terms.push('보통');
-   if(/\bSEV\b/.test(t))terms.push('심한');
-   if(/\bEXTRM\b/.test(t))terms.push('극심한');
-   return (terms.length?terms.join(' ')+' 난기류':'난기류 보고')+' ('+t+')';
+   if(/\b(?:NEG|NEGATIVE|NIL)\b/.test(t))return phenomenon==='착빙'?'ICING NEGATIVE (착빙 없음)':'NEGATIVE (난기류 없음)';
+   const strength={LGT:'약한',MOD:'중강도',SEV:'강한',EXTRM:'극심한'};
+   let severity='';
+   const range=t.match(/\b(LGT|MOD|SEV|EXTRM)\s*[-–~]\s*(LGT|MOD|SEV|EXTRM)\b/);
+   if(range)severity=strength[range[1]]+'~'+strength[range[2]];
+   else{
+     const matches=[...t.matchAll(/\b(LGT|MOD|SEV|EXTRM)\b/g)].map(m=>m[1]);
+     if(matches.length===1)severity=strength[matches[0]];
+     else if(matches.length>1)severity=matches.map(code=>strength[code]).join('~');
+   }
+   const frequency=/\bINTMT\b/.test(t)?'간헐적 ': /\bOCNL\b/.test(t)?'때때로 ': /\bCONT\b/.test(t)?'지속적 ':'';
+   const desc=severity ? frequency+severity+' '+phenomenon : frequency+phenomenon+' 보고';
+   return desc+' ('+t+')';
  }
- function wxPirepIcing(value){
-   const t=String(value||'').trim().toUpperCase();
-   if(!t)return '';
-   if(/\b(?:NEG|NEGATIVE|NIL)\b/.test(t))return 'ICING NEGATIVE (착빙 없음)';
-   const terms=[];
-   if(/\bINTMT\b/.test(t))terms.push('간헐적');
-   if(/\bLGT\b/.test(t))terms.push('약한');
-   if(/\bMOD\b/.test(t))terms.push('보통');
-   if(/\bSEV\b/.test(t))terms.push('심한');
-   return (terms.length?terms.join(' ')+' 착빙':'착빙 보고')+' ('+t+')';
- }
+ function wxPirepTurbulence(value){return wxPirepSeverityKorean(value,'난기류')}
+ function wxPirepIcing(value){return wxPirepSeverityKorean(value,'착빙')}
  function wxPirepAircraft(value){
    const code=String(value||'').trim().toUpperCase();
    const known={B748:'Boeing 747-8',B744:'Boeing 747-400',B738:'Boeing 737-800',B77W:'Boeing 777-300ER',B789:'Boeing 787-9',A320:'Airbus A320',A321:'Airbus A321',A359:'Airbus A350-900',GLF6:'Gulfstream G650'};
@@ -10061,7 +10062,7 @@ createNoaaModelControl().addTo(map);
    const reportType=reportHeader?(reportHeader[2]==='UA'?'Routine Pilot Report':'Urgent Pilot Report'):arp?'AIREP (ARP format)':'';
    const location=f.OV?f.OV:arp?.points[0]?.point || (Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lon))?Number(r.lat).toFixed(2)+', '+Number(r.lon).toFixed(2):'');
    const arpAlt=arp?.flToken && /^F(\d{3})$/.test(arp.flToken) ? (Number(arp.flToken.slice(1))*100).toLocaleString('en-US')+' FT' : '';
-   const alt=arp ? (arpAlt||'고도 미확인') : wxPirepDecodedAlt(r,f);
+   const alt=arp ? (arpAlt||arp?.flToken||'') : wxPirepDecodedAlt(r,f);
    const urgent=/^\s*[A-Z]{3,4}\s+UUA\b/i.test(raw);
    const llwsMatch=raw.match(/\bLLWS\s*([+\-\/0-9 ]+\s*KT)?/i);
    const llws=llwsMatch?llwsMatch[0].trim():'';
@@ -10089,7 +10090,7 @@ createNoaaModelControl().addTo(map);
      if(arp.wind)parts.push('Wind Direction / Speed: '+wxArpWindDisplay(arp.wind));
      if(arp.registration)parts.push('Aircraft Registration: '+arp.registration);
    }
-   if(!parts.length)parts.push('정형 필드 없음 — 원문 확인');
+   // If no structured field can be decoded, the RAW PIREP/AIREP remains visible.
    return '<div class="wx-pirep-popup">'
      +'<div class="wx-pr-head">'+(urgent?'<span class="wx-urgent-head">❗ URGENT PIREP</span>':'')+esc(title)+'</div>'
      +'<div class="wx-pr-date">'+esc(wxPirepTimeUtc(r.time,raw))+'</div>'
@@ -10165,7 +10166,7 @@ createNoaaModelControl().addTo(map);
        const wrappedLon=wxDisplayLongitude(r.lon);
        const popup=reports.length===1?wxPirepPopup(r):
           '<div class="wx-pirep-group"><div class="wx-group-header">'+reports.length+' PIREP/AIREP · Same position</div>'+
-          reports.map((item,i)=>'<details '+(i===0?'open':'')+'><summary>'+( /^\s*[A-Z]{3,4}\s+UUA\b/i.test(String(item.raw||''))?'❗ URGENT · ':'')+
+          reports.map((item,i)=>'<details><summary>'+( /^\s*[A-Z]{3,4}\s+UUA\b/i.test(String(item.raw||''))?'❗ URGENT · ':'')+
           esc(wxPirepTimeUtc(item.time,item.raw))+' · '+esc(wxPirepRawFields(item.raw).TP||'PIREP')+'</summary>'+wxPirepPopup(item)+'</details>').join('')+'</div>';
        let marker;
        if(isUrgent){
