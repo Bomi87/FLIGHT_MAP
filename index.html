@@ -2752,7 +2752,7 @@
 .wx-pirep-popup .wx-pr-head{font-size:13px;font-weight:800;border-bottom:1px solid #d7dee6;padding-bottom:6px;margin-bottom:8px;color:#172554;}
 .wx-pirep-popup .wx-pr-date{font-size:11px;font-weight:700;color:#475569;margin:3px 0 8px;}
 .wx-pirep-popup .wx-pr-line{margin:4px 0;display:flex;gap:8px;align-items:baseline;}
-.wx-pirep-popup .wx-pr-key{font-size:10px;min-width:64px;flex-shrink:0;color:#64748b;font-weight:700;}
+.wx-pirep-popup .wx-pr-key{font-size:10px;min-width:96px;flex-shrink:0;color:#64748b;font-weight:700;}
 .wx-pirep-popup .wx-pr-value{font-size:12px;font-weight:600;}
 .wx-pirep-popup .wx-pr-alert{color:#b45309;font-weight:800;}
 .wx-pirep-popup .wx-pr-section{font-size:10px;letter-spacing:.35px;font-weight:800;color:#475569;margin:11px 0 4px;}
@@ -9953,16 +9953,22 @@ createNoaaModelControl().addTo(map);
    return 'UTC 시각 미확인';
  }
  function wxPirepDecodedAlt(r,fields){
-   const fl=String(fields.FL||'').match(/^(?:FL)?(\d{2,3})(?:\b|$)/i);
-   if(fl){const level=Number(fl[1]);return 'FL'+String(level).padStart(3,'0')+' ('+(level*100).toLocaleString('en-US')+' ft)';}
-   // The source altFt has sometimes been populated with 360 for FL360.
-   // Avoid giving a potentially false low altitude when source units are uncertain.
+   const raw=String(fields.FL||'').trim();
+   const fl=raw.match(/^(?:FL)?(\d{2,3})(?:\b|$)/i);
+   if(fl){
+     const feet=Number(fl[1])*100;
+     return feet.toLocaleString('en-US')+' FT';
+   }
+   // Backend altFt may contain a flight-level number (e.g. 360) instead of feet.
+   // Without a literal /FL field, never guess whether such values mean FL or feet.
    const n=Number(r.altFt);
-   return Number.isFinite(n)&&n>=1000&&n<=65000 ? n.toLocaleString('en-US')+' ft' : '고도 미확인';
+   return r.altFt!=null && String(r.altFt).trim()!=='' && Number.isFinite(n) && n>=1000 && n<=65000
+     ? Math.round(n).toLocaleString('en-US')+' FT' : '고도 미확인';
  }
  function wxPirepTurbulence(value){
-   const t=String(value||'').toUpperCase();
+   const t=String(value||'').trim().toUpperCase();
    if(!t)return '';
+   if(/\b(?:NEG|NEGATIVE|NIL)\b/.test(t))return 'NEGATIVE (난기류 없음)';
    const terms=[];
    if(/\bINTMT\b/.test(t))terms.push('간헐적');
    if(/\bOCNL\b/.test(t))terms.push('때때로');
@@ -9974,44 +9980,84 @@ createNoaaModelControl().addTo(map);
    return (terms.length?terms.join(' ')+' 난기류':'난기류 보고')+' ('+t+')';
  }
  function wxPirepIcing(value){
-   const t=String(value||'').toUpperCase();if(!t)return '';
-   const intensity=/\bSEV\b/.test(t)?'심한':/\bMOD\b/.test(t)?'보통':/\bLGT\b/.test(t)?'약한':'';
-   return (intensity?intensity+' ':'')+'착빙 보고 ('+t+')';
+   const t=String(value||'').trim().toUpperCase();
+   if(!t)return '';
+   if(/\b(?:NEG|NEGATIVE|NIL)\b/.test(t))return 'ICING NEGATIVE (착빙 없음)';
+   const terms=[];
+   if(/\bINTMT\b/.test(t))terms.push('간헐적');
+   if(/\bLGT\b/.test(t))terms.push('약한');
+   if(/\bMOD\b/.test(t))terms.push('보통');
+   if(/\bSEV\b/.test(t))terms.push('심한');
+   return (terms.length?terms.join(' ')+' 착빙':'착빙 보고')+' ('+t+')';
  }
  function wxPirepAircraft(value){
    const code=String(value||'').trim().toUpperCase();
    const known={B748:'Boeing 747-8',B744:'Boeing 747-400',B738:'Boeing 737-800',B77W:'Boeing 777-300ER',B789:'Boeing 787-9',A320:'Airbus A320',A321:'Airbus A321',A359:'Airbus A350-900',GLF6:'Gulfstream G650'};
    return code ? (known[code]?known[code]+' ('+code+')':code) : '';
  }
+ // ARP is a non-/field AIREP format. Extract clear tokens conservatively,
+ // without applying the UA/UUA slash-field parser to unrelated ARP tokens.
+ function wxAirepArpFields(raw){
+   const text=String(raw||'').trim().replace(/\s+/g,' ');
+   if(!/^ARP\s/i.test(text))return null;
+   const parts=text.split(/\s+/);
+   const coordinate=/^(\d{2})(\d{2})([NS])(\d{3})(\d{2})([EW])$/;
+   const points=[];
+   parts.forEach((token,index)=>{
+     if(coordinate.test(token)){
+       const next=parts[index+1];
+       points.push({point:token,time:/^\d{4}$/.test(next||'')?next:''});
+     }
+   });
+   const flToken=parts.find(t=>/^F\d{3}$/.test(t))||'';
+   const windToken=parts.find(t=>/^\d{3}\/\d{2,3}$/.test(t))||'';
+   const windIdx=parts.indexOf(windToken);
+   return {
+     flight:parts[1]||'',points,flToken,
+     wind:windToken&&(parts[windIdx+1]||'').toUpperCase()==='KT'?windToken+' KT':'',
+     // No inference about the remaining coded groups (MS43, QXT, etc.).
+     unparsed:parts.filter(t=>/^(?:MS\d+|\d{5}[A-Z]|[A-Z]{3}|\d{6}|F\d{2}[A-Z])$/.test(t))
+   };
+ }
  function wxPirepPopup(r){
-   const raw=String(r.raw||'');const f=wxPirepRawFields(raw);
+   const raw=String(r.raw||'');
+   const f=wxPirepRawFields(raw);
+   const arp=wxAirepArpFields(raw);
    const row=(label,value,emphasize)=>value?'<div class="wx-pr-line"><span class="wx-pr-key">'+esc(label)+'</span><span class="wx-pr-value'+(emphasize?' wx-pr-alert':'')+'">'+esc(value)+'</span></div>':'';
    const title=String(r.type||'PIREP/AIREP');
    const reportHeader=raw.toUpperCase().match(/^\s*([A-Z]{4})\s+(UUA|UA)\b/);
    const reportingStation=reportHeader?reportHeader[1]:'';
-   const reportType=reportHeader?(reportHeader[2]==='UA'?'Routine Pilot Report':'Urgent Pilot Report'):'';
-   const location=f.OV?f.OV:Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lon))?Number(r.lat).toFixed(2)+', '+Number(r.lon).toFixed(2):'';
-   const alt=wxPirepDecodedAlt(r,f);
+   const reportType=reportHeader?(reportHeader[2]==='UA'?'Routine Pilot Report':'Urgent Pilot Report'):arp?'AIREP (ARP format)':'';
+   const location=f.OV?f.OV:arp?.points[0]?.point || (Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lon))?Number(r.lat).toFixed(2)+', '+Number(r.lon).toFixed(2):'');
+   const alt=arp? '고도 확인 필요' : wxPirepDecodedAlt(r,f);
    const turbulence=wxPirepTurbulence(f.TB);
    const icing=wxPirepIcing(f.IC);
    const parts=[];
    if(reportingStation)parts.push('Reporting Station: '+reportingStation);
    if(reportType)parts.push('Report Type: '+reportType);
-   if(f.TB)parts.push('TB: '+turbulence);
-   if(f.IC)parts.push('IC: '+icing);
-   if(f.TP)parts.push('TP: 항공기 기종 '+wxPirepAircraft(f.TP));
-   if(f.OV)parts.push('Reported Location: '+f.OV);
-   if(f.TM)parts.push('TM: '+f.TM.slice(0,2)+':'+f.TM.slice(2)+' UTC (원문)');
-   if(f.FL)parts.push('FL: 고도 '+alt);
-   if(f.RM)parts.push('Remark: '+f.RM);
-   if(!parts.length)parts.push('정형 필드 해석 불가 — 원문 확인');
+   if(f.TB)parts.push('TB (Turbulence): '+turbulence);
+   if(f.IC)parts.push('IC (Icing): '+icing);
+   if(f.TP)parts.push('TP (Type of Aircraft): '+wxPirepAircraft(f.TP));
+   if(f.OV)parts.push('OV (Over / Position): '+f.OV);
+   if(f.TM && /^\d{4}$/.test(f.TM))parts.push('TM (Time): '+f.TM.slice(0,2)+':'+f.TM.slice(2)+' UTC');
+   if(f.FL)parts.push('FL (Flight Level): '+alt);
+   if(f.RM)parts.push('RM (Remarks): '+f.RM);
+   if(arp){
+     if(arp.flight)parts.push('Flight Identification: '+arp.flight);
+     arp.points.forEach((point,i)=>parts.push('Position '+(i+1)+': '+point.point+(point.time?' · '+point.time.slice(0,2)+':'+point.time.slice(2)+' UTC':'')));
+     if(arp.flToken)parts.push('Altitude code: '+arp.flToken+' (원문 코드 · 고도 해석 확인 필요)');
+     if(arp.wind)parts.push('Wind group: '+arp.wind+' (풍향/풍속 표기 · 의미 확인 필요)');
+     parts.push('기타 ARP 코드: 원문 확인 (임의 해석하지 않음)');
+   }
+   if(!parts.length)parts.push('정형 필드 없음 — 원문 확인');
    return '<div class="wx-pirep-popup">'
      +'<div class="wx-pr-head">'+esc(title)+'</div>'
      +'<div class="wx-pr-date">'+esc(wxPirepTimeUtc(r.time,raw))+'</div>'
      +row('Reporting Station',reportingStation,false)+row('Report Type',reportType,false)
      +row('고도',alt,false)+row('항공기',wxPirepAircraft(f.TP),false)
-     +row('Reported Location',location,false)+row('난기류',turbulence,!!f.TB)
-     +row('착빙',icing,!!f.IC)
+     +row('OV (Position)',location,false)
+     +row('TB (Turbulence)',turbulence,!!f.TB)
+     +row('IC (Icing)',icing,!!f.IC)
      +'<div class="wx-pr-section">REPORT INTERPRETATION · 원문 해석</div>'
      +'<div class="wx-pr-explain">'+parts.map(esc).join('<br>')+'</div>'
      +'<div class="wx-pr-section">RAW PIREP/AIREP</div>'
