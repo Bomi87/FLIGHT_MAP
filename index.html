@@ -1207,7 +1207,7 @@
     width: 150px;
     max-width: calc(100vw - 16px);
     /* V60: WX ALERT 모바일 패널 아래쪽으로 검색 버튼 이동 */
-    margin-bottom: calc(205px + env(safe-area-inset-bottom, 0px)) !important;
+    margin-bottom: calc(145px + env(safe-area-inset-bottom, 0px)) !important;
     gap: 5px;
     pointer-events: none;
   }
@@ -10455,23 +10455,16 @@ createNoaaModelControl().addTo(map);
      let firMap=null;try{firMap=await wxFirData()}catch(e){console.warn('WX FIR',e)} if(id!==sSeq||!chkS.checked)return;
      const nextSigmet=L.layerGroup();const nextExpiry=[];const undrawn=[];let reviewed=0;
      (data.items||[]).forEach(item=>{
-       // WMO WV bulletin takes priority even if VA ERUPTION / VA CLD is omitted.
-       // Match a full WMO abbreviated heading, not arbitrary occurrences of 'WV'.
-       const sigRaw=String(item.raw||'');
-       const isVaSigmet=/(?:^|\s)WV[A-Z]{2}\d{2}\s+[A-Z]{4}\s+\d{6}(?=\s|$)/i.test(sigRaw) ||
-         /\bVA\s+(?:ERUPTION|CLD)\b|\bVOLCANIC\s+ASH\b/i.test(sigRaw);
-       const effectiveHazard=isVaSigmet?'va':String(item.hazard||'other').toLowerCase();
-       // Existing OTHER filter also includes volcanic ash (no separate VA filter).
-       const filterHazard=effectiveHazard==='va'?'other':effectiveHazard;
-       if(sf.value!=='all'&&filterHazard!==sf.value)return;
+       if(sf.value!=='all'&&item.hazard!==sf.value)return;
        const resolved=wxResolvedGeometry(item,firMap);if(!resolved.geometry){undrawn.push((item.name||wxFirCode(item)||'Unknown FIR')+' — '+resolved.source+(resolved.note?' ('+resolved.note+')':''));return;} if(resolved.source==='RAW_OF_LINE')reviewed++;
        const expiry=parseSigmetTime(item.validTo);if(Number.isFinite(expiry)&&expiry<=Date.now())return;
+       const isVaSigmet=/\b(?:VA\s+(?:ERUPTION|CLD)|VOLCANIC\s+ASH)\b/i.test(String(item.raw||''));
         const hue=isVaSigmet?'#64748b':item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
        try{let g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(resolved.geometry),properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
        if(!g.getLayers().length)return;
-       const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(isVaSigmet?'VA (VOLCANIC ASH)':effectiveHazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
+       const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
        g.bindPopup(txt());g.on('popupopen',()=>g.setPopupContent(txt()));g.addTo(nextSigmet);
-       // VA ERUPTION: conspicuous volcano badge in addition to grey polygon.
+       // Confirmed volcanic-ash SIGMET: volcano icon over grey polygon.
        // Place the marker in the same layer group so expiration/OFF hides both together.
        if(isVaSigmet && g.getBounds().isValid()){
          const centre=g.getBounds().getCenter();
@@ -10501,7 +10494,7 @@ createNoaaModelControl().addTo(map);
    el.innerHTML='<strong>AVIATION WEATHER LEGEND</strong>'+
     '<div><i style="background:#38bdf8"></i> SIGMET · ICING</div>'+
     '<div><i style="background:#f97316"></i> SIGMET · TURBULENCE</div>'+
-    '<div><i style="background:#64748b"></i> SIGMET · VA ERUPTION 🌋</div>'+
+    '<div><i style="background:#64748b"></i> SIGMET · VOLCANIC ASH 🌋</div>'+
      '<div><i style="background:#ef4444"></i> SIGMET · OTHER</div>'+
     '<div class="wx-legend-sep"></div>'+
     '<div><i style="background:#0ea5e9"></i> PIREP/AIREP · ICING</div>'+
