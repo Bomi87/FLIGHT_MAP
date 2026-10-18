@@ -25,7 +25,12 @@
 
     #map {
       height: 100vh;
+      height: 100dvh;
       width: 100%;
+    }
+    @media (max-width:767px) {
+      html, body { height: 100%; height: 100dvh; overflow: hidden; }
+      #map { height: 100%; height: 100dvh; min-height: 100%; }
     }
 
     .popup-body {
@@ -2816,7 +2821,7 @@
 .wx-sigmet-popup .wx-pop-va{font-weight:800;color:#64748b;}
 /* V54 VA eruption marker — bold contrasting background over light/dark basemaps. */
 .wx-volcano-badge-icon {background:transparent!important;border:0!important;box-shadow:none!important;}
-.wx-volcano-badge {display:flex;width:30px;height:30px;align-items:center;justify-content:center;box-sizing:border-box;background:transparent!important;border:0!important;border-radius:0;box-shadow:none!important;font-size:26px;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.8);}
+.wx-volcano-badge {display:flex;width:20px;height:20px;align-items:center;justify-content:center;box-sizing:border-box;background:transparent!important;border:0!important;border-radius:0;box-shadow:none!important;font-size:18px;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.8);}
 .wx-sigmet-popup .wx-pop-coords{color:#46515e;}
 .wx-sigmet-popup .wx-pop-level{font-weight:800;color:#244ce0;}
 .wx-sigmet-popup .wx-pop-move{font-weight:700;color:#1c9045;}
@@ -2884,6 +2889,9 @@
       preferCanvas: true,
       zoomControl: true
     }).setView([30, 0], 3);
+    // Mobile: Leaflet zoom 1 makes the world tiles shorter than a tall phone viewport.
+    // Use zoom 3 as the minimum on narrow screens; desktop remains unchanged.
+    if (window.innerWidth < 768) map.setMinZoom(3);
 
     function refreshMapSize() {
       setTimeout(() => {
@@ -3363,6 +3371,19 @@ function getShapeCodeLabel(name) {
     // 모든 지도 오버레이가 같은 world copy를 사용하도록 고정 기준 경도 적용
     // Europe: 약 +10 / Korea: 약 +127 / U.S.: 약 -100 -> +260 world copy
     const GLOBAL_WORLD_REFERENCE_LON = 130;
+    let transatlanticDirection = null;
+    function transatlanticSide(first, last) {
+      if (!first || !last) return null;
+      const a=wrapLon180(first.lon), b=wrapLon180(last.lon);
+      const usa=x=>x>=-170&&x<=-50;
+      const eur=x=>x>=-25&&x<=45;
+      if (usa(a)&&eur(b)) return 'eastbound';
+      if (eur(a)&&usa(b)) return 'westbound';
+      return null;
+    }
+    function routeReferenceForSide(side) {
+      return side==='eastbound' ? 285 : side==='westbound' ? -70 : GLOBAL_WORLD_REFERENCE_LON;
+    }
     // V16: one longitude-copy policy for all map features. The original 130-degree
     // default is kept for initial route parsing; the VIEW (not a country) determines
     // which copy is ultimately presented.
@@ -4025,7 +4046,9 @@ function getShapeCodeLabel(name) {
         throw new Error("No valid route points in GPX");
       }
 
-      const referenceLon = GLOBAL_WORLD_REFERENCE_LON;
+      const side=transatlanticSide(points[0], points[points.length-1]);
+      if (side) transatlanticDirection=side;
+      const referenceLon = routeReferenceForSide(side);
       const renderContext = { referenceLon };
 
       window.__ROUTE_RENDER_REFERENCE_LON = GLOBAL_WORLD_REFERENCE_LON;
@@ -4618,8 +4641,13 @@ function getShapeCodeLabel(name) {
       }
 
       const renderContext = getRenderContext(features);
+      const firstLine=features.find(f=>f.type==='LineString'&&f.coords.length>=2);
+      const lastLine=[...features].reverse().find(f=>f.type==='LineString'&&f.coords.length>=2);
+      const side=firstLine&&lastLine ? transatlanticSide(firstLine.coords[0],lastLine.coords[lastLine.coords.length-1]) : null;
+      if (side) transatlanticDirection=side;
+      renderContext.referenceLon=routeReferenceForSide(side);
 
-      window.__ROUTE_RENDER_REFERENCE_LON = GLOBAL_WORLD_REFERENCE_LON;
+      window.__ROUTE_RENDER_REFERENCE_LON = renderContext.referenceLon;
 
       const pointFeatures = features.filter(f => f.type === "Point");
       const lineFeatures = features.filter(f => f.type === "LineString");
@@ -10418,7 +10446,7 @@ createNoaaModelControl().addTo(map);
          const vaBadge=L.marker(centre,{icon:L.divIcon({
            className:'wx-volcano-badge-icon',
            html:'<span class="wx-volcano-badge" aria-label="VA ERUPTION">🌋</span>',
-           iconSize:[30,30],iconAnchor:[15,15],popupAnchor:[0,-16]
+           iconSize:[20,20],iconAnchor:[10,10],popupAnchor:[0,-11]
          }),keyboard:true});
          vaBadge.bindPopup(txt());vaBadge.on('popupopen',()=>vaBadge.setPopupContent(txt()));
          g.addLayer(vaBadge);
@@ -10874,6 +10902,7 @@ async function autoLoadDefault() {
 }
 
 function clearRouteOnly() {
+  transatlanticDirection=null;
   drawn.clearLayers();
   routeBoundsGroup.clearLayers();
 
@@ -11048,7 +11077,11 @@ function worldCopyV16Refresh(){
   const fallbackPivot=geographicPivot===null && routeLayers.length
     ? worldRouteV17CircularPivot(routeLayers.map(r=>({longitude:r.base.center,count:1})))
     : geographicPivot;
-  const routePivot=fallbackPivot===null?null:mapWorldLongitude(fallbackPivot,center);
+  let routePivot=fallbackPivot===null?null:mapWorldLongitude(fallbackPivot,center);
+  // Keep the transatlantic route on the requested side of Korea/GPS on world view.
+  if(routePivot!==null && transatlanticDirection && map.getZoom()<=3){
+    routePivot=mapWorldLongitude(fallbackPivot,routeReferenceForSide(transatlanticDirection));
+  }
   worldRouteV17Reference=routePivot;
   if(routePivot!==null){
     for(const entry of routeLayers){
@@ -11107,6 +11140,10 @@ window.addEventListener("resize", () => {
 
 window.addEventListener("load", refreshMapSize);
 window.addEventListener("pageshow", refreshMapSize);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', refreshMapSize);
+}
+window.addEventListener('orientationchange', () => setTimeout(refreshMapSize, 220));
 
 map.on("moveend zoomend", function () {
   scheduleRouteTextUpdate(20);
