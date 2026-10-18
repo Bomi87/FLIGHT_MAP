@@ -10408,7 +10408,13 @@ createNoaaModelControl().addTo(map);
   wxToggle.onclick=()=>{
    stamps();
    if(wxEnabled){
-     wxSwitchOff(); // Any second tap turns SIGMET and PIREP OFF.
+     // Mobile only: when X has hidden the settings panel, reopen it
+     // without disabling active weather layers. While visible, turn OFF.
+     if(wxIsMobile() && panel.hidden){
+       wxSetPanelVisible(true);
+       return;
+     }
+     wxSwitchOff();
      return;
    }
    wxEnabled=true;
