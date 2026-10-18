@@ -10178,27 +10178,32 @@ createNoaaModelControl().addTo(map);
    return r.altFt!=null && String(r.altFt).trim()!=='' && Number.isFinite(n) && n>=1000 && n<=65000
      ? Math.round(n).toLocaleString('en-US')+' FT' : '';
  }
- // PIREP severity wording: keep exact original codes in parentheses.
- // LGT=약한, MOD=중강도, SEV=강한; hyphenated values denote ranges.
- function wxPirepSeverityKorean(raw, phenomenon){
-   const original=String(raw||'').trim();
-   const t=original.toUpperCase();
-   if(!t)return '';
-   // Exact negative code only: never infer absence from mixed reports.
-   if(/^(?:NEG|NEGATIVE|NIL)$/.test(t))return phenomenon==='착빙'?'ICING NEGATIVE (착빙 없음)':'NEGATIVE (난기류 없음)';
-   // Translate an isolated severity only. Keep every combined qualifier,
-   // turbulence type, altitude range, and frequency exactly as reported.
-   const meanings={LT:'약한',LGT:'약한',MOD:'중강도',SEV:'강한',EXTRM:'극심한'};
-   if(Object.prototype.hasOwnProperty.call(meanings,t))return meanings[t]+' '+phenomenon+' ('+original+')';
-   return original;
- }
- function wxPirepTurbulence(value){return wxPirepSeverityKorean(value,'난기류')}
- // Icing: preserve all reported intensity/type groups verbatim. Only NEG is expanded.
- function wxPirepIcing(value){
+ // Shared TB / IC / SK weather decoder for both slash-field PIREP and ARP AIREP.
+ // Parse full fields; interpret only unambiguous standalone values and retain
+ // qualifiers, combinations, altitude ranges and unknown codes verbatim.
+ function wxReportWeatherText(key,value){
    const raw=String(value||'').trim();
    if(!raw)return '';
-   return /^(?:NEG|NEGATIVE)$/i.test(raw)?'ICING NEGATIVE (착빙 없음)':raw;
+   const upper=raw.toUpperCase().replace(/\s+/g,' ');
+   const negative=/^(?:NONE|NEG|NEGATIVE|NIL)$/;
+   if(key==='TB'){
+     if(negative.test(upper)||/^(?:SMTH|SMOOTH)$/.test(upper))return upper+' (난기류 없음)';
+     const level={LT:'약한',LGT:'약한',LIGHT:'약한',MOD:'중강도',MODERATE:'중강도',SEV:'강한',SEVERE:'강한',EXTRM:'극심한',EXTREME:'극심한'};
+     return Object.prototype.hasOwnProperty.call(level,upper)?level[upper]+' 난기류 ('+raw+')':raw;
+   }
+   if(key==='IC'){
+     if(negative.test(upper))return 'ICING NEGATIVE (착빙 없음)';
+     const level={LT:'약한',LGT:'약한',LIGHT:'약한',MOD:'중강도',MODERATE:'중강도',SEV:'강한',SEVERE:'강한',EXTRM:'극심한',EXTREME:'극심한'};
+     return Object.prototype.hasOwnProperty.call(level,upper)?level[upper]+' 착빙 ('+raw+')':raw;
+   }
+   if(key==='SK'){
+     if(upper==='CLEAR'||upper==='CLR'||upper==='SKC')return raw+' (맑음)';
+     return raw;
+   }
+   return raw;
  }
+ function wxPirepTurbulence(value){return wxReportWeatherText('TB',value)}
+ function wxPirepIcing(value){return wxReportWeatherText('IC',value)}
  function wxPirepAircraft(value){
    const code=String(value||'').trim().toUpperCase();
    const known={B748:'Boeing 747-8',B744:'Boeing 747-400',B738:'Boeing 737-800',B77W:'Boeing 777-300ER',B789:'Boeing 787-9',A320:'Airbus A320',A321:'Airbus A321',A359:'Airbus A350-900',GLF6:'Gulfstream G650'};
@@ -10229,14 +10234,28 @@ createNoaaModelControl().addTo(map);
    const wind=windToken?(windToken.endsWith('KT')?windToken.replace(/KT$/,' KT'):(tokens[windIndex+1]||'')==='KT'?windToken+' KT':''):'';
    const temp=tokens.find(t=>/^(?:MS|PS)\d{2}$/.test(t))||'';
    const registration=tokens.find(t=>/^N[0-9]{1,5}[A-Z]{0,2}$/.test(t))||'';
-   // In short-form ARP, TB SMTH followed by bare IC reports smooth turbulence,
-   // but no icing intensity/status; do not fabricate an icing observation.
-   const tbIndex=tokens.findIndex(t=>t==='TB');
-   const tb=tbIndex>=0?(tokens[tbIndex+1]==='SMTH'?'SMTH':''):'';
-   const icIndex=tokens.findIndex(t=>t==='IC');
-   const ic=icIndex>=0 && /^(?:NEG|LGT|LT|MOD|SEV|TRACE|TRC|RIME|MXD|MX)$/.test(tokens[icIndex+1]||'') ? tokens[icIndex+1] : '';
-   return {flight:tokens[1]||'',points,flToken,wind,temp,registration,tb,ic};
+   // Universal ARP section parsing: recognize group keys, rather than matching
+   // a fixed list of severity words (e.g. LIGHT, MOD, CLEAR or NONE).
+   // Stop at known field/position/time boundaries; do not swallow aircraft data.
+   const weatherKeys=new Set(['TB','SK','IC','WX']);
+   const sectionKeys=new Set(['TB','SK','IC','WX','RM','TP','TA','WV','OV','TM','FL','AC','REG']);
+   const groups={};
+   for(let i=0;i<tokens.length;i++){
+     const key=tokens[i];
+     if(!weatherKeys.has(key))continue;
+     const values=[];
+     for(let j=i+1;j<tokens.length;j++){
+       const value=tokens[j];
+       if(sectionKeys.has(value)||/^(?:F\d{3}|(?:MS|PS)\d{2}|\d{3}\/\d{2,3}(?:KT)?|\d{4})$/.test(value)||coordinate.test(value)||/^(?:N[0-9]{1,5}[A-Z]{0,2})$/.test(value))break;
+       values.push(value);
+     }
+     if(values.length && !Object.prototype.hasOwnProperty.call(groups,key))groups[key]=values.join(' ');
+   }
+   return {flight:tokens[1]||'',points,flToken,wind,temp,registration,tb:groups.TB||'',sk:groups.SK||'',ic:groups.IC||'',wx:groups.WX||''};
  }
+ function wxArpTurbulence(value){return wxReportWeatherText('TB',value)}
+ function wxArpIcing(value){return wxReportWeatherText('IC',value)}
+ function wxArpSky(value){return wxReportWeatherText('SK',value)}
  function wxArpWindDisplay(wind){
    const m=String(wind||'').match(/^(\d{3})\/(\d{2,3}) KT$/);
    return m?Number(m[1])+'° / '+Number(m[2])+' KT':String(wind||'');
@@ -10268,8 +10287,8 @@ createNoaaModelControl().addTo(map);
    const urgent=/^\s*[A-Z]{3,4}\s+UUA\b/i.test(raw);
    const llwsMatch=raw.match(/\bLLWS\s*([+\-\/0-9 ]+\s*KT)?/i);
    const llws=llwsMatch?llwsMatch[0].trim():'';
-   const turbulence=arp?.tb==='SMTH'?'SMTH (난기류 없음)':wxPirepTurbulence(f.TB);
-   const icing=wxPirepIcing(arp?arp.ic:f.IC);
+   const turbulence=arp?wxArpTurbulence(arp.tb):wxPirepTurbulence(f.TB);
+   const icing=arp?wxArpIcing(arp.ic):wxPirepIcing(f.IC);
    // V34: interpretation follows the slash-field order in RAW PIREP.
    // Do not sort by weather hazard or aircraft; preserve the originating report's sequence.
    const parts=[];
@@ -10284,7 +10303,7 @@ createNoaaModelControl().addTo(map);
        TB:v=>'TB (Turbulence): '+wxPirepTurbulence(v),
        IC:v=>'IC (Icing): '+wxPirepIcing(v),
        RM:v=>'RM (Remarks): '+v,
-       SK:v=>'SK (Sky Condition): '+v,
+       SK:v=>'SK (Sky Condition): '+wxReportWeatherText('SK',v),
        WX:v=>'WX (Weather): '+v,
        TA:v=>'TA (Air Temperature): '+v,
        WV:v=>'WV (Wind): '+v
@@ -10311,6 +10330,8 @@ createNoaaModelControl().addTo(map);
      if(arp.temp)parts.push('OAT: '+wxArpTemperature(arp.temp));
      if(arp.wind)parts.push('Wind: '+wxArpWindDisplay(arp.wind));
      if(arp.tb)parts.push('TB (Turbulence): '+turbulence);
+     if(arp.sk)parts.push('SK (Sky Condition): '+wxArpSky(arp.sk));
+     if(arp.wx)parts.push('WX (Weather): '+arp.wx);
      if(arp.ic)parts.push('IC (Icing): '+icing);
      if(arp.registration)parts.push('Aircraft Registration: '+arp.registration);
    }
@@ -10321,7 +10342,7 @@ createNoaaModelControl().addTo(map);
      +row('Reporting Station',reportingStation,false)+row('Report Type',reportType,false)
      +row('고도',alt,false)+row('항공기',wxPirepAircraft(f.TP),false)
      +row('OV (Position)',location,false)
-     +row('운량 및 운고',f.SK,false)
+     +row('운량 및 운고',arp?wxArpSky(arp.sk):wxReportWeatherText('SK',f.SK),false)
      +row('LLWS (Wind Shear)',llws,llws?'urgent':false)
      +(arp?row('Flight Identification',arp.flight,false)+row('OAT',wxArpTemperature(arp.temp),false)+row('Wind',wxArpWindDisplay(arp.wind),false)+row('Aircraft Registration',arp.registration,false):'')
      +row('TB (Turbulence)',turbulence,!!(f.TB||arp?.tb))
