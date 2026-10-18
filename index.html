@@ -2889,9 +2889,9 @@
       preferCanvas: true,
       zoomControl: true
     }).setView([30, 0], 3);
-    // Mobile: Leaflet zoom 1 makes the world tiles shorter than a tall phone viewport.
-    // Use zoom 3 as the minimum on narrow screens; desktop remains unchanged.
-    if (window.innerWidth < 768) map.setMinZoom(3);
+    // Mobile pinch zoom and zoom-out must remain enabled.  Do not clamp
+    // minZoom to the initial view zoom (3), which blocks zooming out.
+    // The 100dvh / invalidateSize fix below stays independently enabled.
 
     function refreshMapSize() {
       setTimeout(() => {
@@ -3139,16 +3139,27 @@ let artccLoaded = false;
       }
     }
 
+    // Fit the initial camera only AFTER the mobile viewport has a stable size.
+    // The route is in a shifted world copy; always use routeBoundsGroup itself.
     function fitAllLoadedBounds() {
       try {
         const bounds = routeBoundsGroup.getBounds();
-        if (bounds && bounds.isValid && bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [20, 20] });
-          refreshMapSize();
-        }
+        if (!bounds || !bounds.isValid || !bounds.isValid()) return;
+        map.invalidateSize({ pan: false, animate: false });
+        map.fitBounds(bounds, { padding: [20, 20], animate: false });
       } catch (e) {
-        console.warn(e);
+        console.warn('Initial route fit failed:', e);
       }
+    }
+
+    function fitInitialRouteAfterLayout() {
+      // Run only at startup, not during 1-minute route refreshes or user zoom.
+      const apply = () => {
+        map.invalidateSize({ pan: false, animate: false });
+        fitAllLoadedBounds();
+        worldCopyV16Refresh();
+      };
+      requestAnimationFrame(() => requestAnimationFrame(apply));
     }
 
     // 브라우저 새로고침(F5/Reload)인지 확인한다.
@@ -9758,11 +9769,11 @@ createNoaaModelControl().addTo(map);
    // When a source has no coordinates (e.g. ENTIRE FIR), preserve the geographic text.
    const safe=esc(plain);
    // Highlight in a single pass over plain text, never over existing HTML markup.
-   const re=/(\bVA\s+(?:ERUPTION|CLD|CLOUD|OBS|FCST|MOV)\b|\bVOLCANIC\s+ASH\b|\b(?:SFC\s*\/\s*FL\d{2,3}|FL\d{2,3}\s*\/\s*(?:FL)?\d{2,3}|FL\d{2,3}\s*\/\s*SFC|FL\d{2,3})\b|EMBD TS|FRQ TS|OBSC TS|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
+   const re=/(\bVA\s+(?:ERUPTION|CLD|CLOUD|OBS|FCST|MOV)\b|\bVOLCANIC\s+ASH\b|\b(?:SFC\s*\/\s*FL\d{2,3}|FL\d{2,3}\s*\/\s*(?:FL)?\d{2,3}|FL\d{2,3}\s*\/\s*SFC|FL\d{2,3}|\d{3,5}\s*FT)\b|EMBD TS|FRQ TS|OBSC TS|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
    let result='',at=0;
    for(const hit of safe.matchAll(re)){
      result+=safe.slice(at,hit.index);
-     const t=hit[0], cls=/^(?:VA\b|VOLCANIC\s+ASH)/i.test(t)?'wx-pop-va':/^(?:TOP|FL\d|SFC\s*\/)/i.test(t)?'wx-pop-level':/^(?:MOV|STNR|NC=|INTSF=|WKN=)/i.test(t)?'wx-pop-move':'wx-pop-hazard';
+     const t=hit[0], cls=/^(?:VA\b|VOLCANIC\s+ASH)/i.test(t)?'wx-pop-va':/^(?:TOP|FL\d|SFC\s*\/|\d{3,5}\s*FT\b)/i.test(t)?'wx-pop-level':/^(?:MOV|STNR|NC=|INTSF=|WKN=)/i.test(t)?'wx-pop-move':'wx-pop-hazard';
      result+='<span class="'+cls+'">'+t+'</span>';
      at=hit.index+t.length;
    }
@@ -10982,7 +10993,7 @@ async function init() {
 
     // 실제 항로만 로드하며 이후 1분마다 이 항로만 갱신한다.
     await refreshRouteOnly();
-    fitAllLoadedBounds();
+    fitInitialRouteAfterLayout();
     restoreSearchedAirspacesFromSession();
 
   } catch (err) {
