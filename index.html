@@ -2813,6 +2813,7 @@
 .wx-sigmet-popup .wx-pop-raw{font-family:Arial,sans-serif;line-height:1.6;white-space:normal;overflow-wrap:normal;word-break:normal;}
 .wx-sigmet-popup .wx-pop-raw div{margin:2px 0;}
 .wx-sigmet-popup .wx-pop-hazard{font-weight:800;color:#d62727;}
+.wx-sigmet-popup .wx-pop-va{font-weight:800;color:#64748b;}
 .wx-sigmet-popup .wx-pop-coords{color:#46515e;}
 .wx-sigmet-popup .wx-pop-level{font-weight:800;color:#244ce0;}
 .wx-sigmet-popup .wx-pop-move{font-weight:700;color:#1c9045;}
@@ -9726,11 +9727,11 @@ createNoaaModelControl().addTo(map);
    // When a source has no coordinates (e.g. ENTIRE FIR), preserve the geographic text.
    const safe=esc(plain);
    // Highlight in a single pass over plain text, never over existing HTML markup.
-   const re=/(EMBD TS|FRQ TS|OBSC TS|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
+   const re=/(\bVA\s+(?:ERUPTION|CLD|CLOUD|OBS|FCST|MOV)\b|\bVOLCANIC\s+ASH\b|\bVA\b|\b(?:SFC\s*\/\s*FL\d{2,3}|FL\d{2,3}\s*\/\s*(?:FL)?\d{2,3}|FL\d{2,3}\s*\/\s*SFC|FL\d{2,3})\b|EMBD TS|FRQ TS|OBSC TS|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
    let result='',at=0;
    for(const hit of safe.matchAll(re)){
      result+=safe.slice(at,hit.index);
-     const t=hit[0], cls=/^TOP/i.test(t)?'wx-pop-level':/^MOV|^STNR|^(?:NC|INTSF|WKN)=/i.test(t)?'wx-pop-move':'wx-pop-hazard';
+     const t=hit[0], cls=/^(?:VA\b|VOLCANIC\s+ASH)/i.test(t)?'wx-pop-va':/^(?:TOP|FL\d|SFC\s*\/)/i.test(t)?'wx-pop-level':/^(?:MOV|STNR|NC=|INTSF=|WKN=)/i.test(t)?'wx-pop-move':'wx-pop-hazard';
      result+='<span class="'+cls+'">'+t+'</span>';
      at=hit.index+t.length;
    }
@@ -10331,11 +10332,7 @@ createNoaaModelControl().addTo(map);
   wxToggle.onclick=()=>{
    stamps();
    if(wxEnabled){
-     if(wxIsMobile() && panel.hidden){
-       wxSetPanelVisible(true); // Reopen controls without affecting layers.
-     }else{
-       wxSwitchOff(); // Turn OFF while the controls are visible.
-     }
+     wxSwitchOff(); // Any second tap turns SIGMET and PIREP OFF.
      return;
    }
    wxEnabled=true;
@@ -10405,7 +10402,8 @@ createNoaaModelControl().addTo(map);
        if(sf.value!=='all'&&item.hazard!==sf.value)return;
        const resolved=wxResolvedGeometry(item,firMap);if(!resolved.geometry){undrawn.push((item.name||wxFirCode(item)||'Unknown FIR')+' — '+resolved.source+(resolved.note?' ('+resolved.note+')':''));return;} if(resolved.source==='RAW_OF_LINE')reviewed++;
        const expiry=parseSigmetTime(item.validTo);if(Number.isFinite(expiry)&&expiry<=Date.now())return;
-       const hue=item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
+       const isVaSigmet=/(?:\bVA(?:\s+(?:ERUPTION|CLD|CLOUD))?\b|\bVOLCANIC\s+ASH\b)/i.test(String(item.raw||'')) || /^(?:va|volcanic(?:_ash)?)$/i.test(String(item.hazard||''));
+        const hue=isVaSigmet?'#94a3b8':item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
        try{let g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(resolved.geometry),properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
        if(!g.getLayers().length)return;
        const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
@@ -10428,7 +10426,8 @@ createNoaaModelControl().addTo(map);
    el.innerHTML='<strong>AVIATION WEATHER LEGEND</strong>'+
     '<div><i style="background:#38bdf8"></i> SIGMET · ICING</div>'+
     '<div><i style="background:#f97316"></i> SIGMET · TURBULENCE</div>'+
-    '<div><i style="background:#ef4444"></i> SIGMET · OTHER</div>'+
+    '<div><i style="background:#94a3b8"></i> SIGMET · VOLCANIC ASH (VA)</div>'+
+     '<div><i style="background:#ef4444"></i> SIGMET · OTHER</div>'+
     '<div class="wx-legend-sep"></div>'+
     '<div><i style="background:#0ea5e9"></i> PIREP/AIREP · ICING</div>'+
     '<div><i style="background:#f97316"></i> PIREP/AIREP · TURBULENCE</div>'+
