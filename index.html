@@ -2847,7 +2847,6 @@
 .wx-pirep-popup .wx-pr-value{font-size:12px;font-weight:600;}
 .wx-pirep-popup .wx-pr-alert{color:#b45309;font-weight:800;}
 .wx-pirep-popup .wx-pr-icing{color:#0284c7;font-weight:800;}
-.wx-pirep-popup .wx-pr-interpret-icing{color:#0284c7;font-weight:700;}
 .wx-pirep-popup .wx-pr-section{font-size:10px;letter-spacing:.35px;font-weight:800;color:#475569;margin:11px 0 4px;}
 .wx-pirep-popup .wx-pr-explain{padding:8px 10px;background:#f1f5f9;border-radius:5px;border-left:3px solid #94a3b8;line-height:1.6;}
 .wx-pirep-popup .wx-pr-raw{font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #e2e8f0;background:#fff;border-radius:4px;padding:7px;margin:0;}
@@ -10349,7 +10348,7 @@ createNoaaModelControl().addTo(map);
      +row('IC (Icing)',icing,(f.IC||arp?.ic)?'icing':false)
      +row('비고',f.RM,false)
      +'<div class="wx-pr-section">REPORT INTERPRETATION · 원문 해석</div>'
-     +'<div class="wx-pr-explain">'+parts.map(line=>/^IC \(Icing\):/.test(line)?'<span class="wx-pr-interpret-icing">'+esc(line)+'</span>':esc(line)).join('<br>')+'</div>'
+     +'<div class="wx-pr-explain">'+parts.map(line=>esc(line)).join('<br>')+'</div>'
      +'<div class="wx-pr-section">RAW PIREP/AIREP</div>'
      +'<div class="wx-pr-raw">'+esc(raw)+'</div>'
      +'</div>';
