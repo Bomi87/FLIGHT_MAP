@@ -2791,6 +2791,17 @@
   .leaflet-control-global-weather .wx-panel[hidden]{display:none!important;}
 }
 
+/* V49: Dedicated mobile weather OFF action in the settings panel. */
+.leaflet-control-global-weather .wx-mobile-off{display:none!important;}
+@media (max-width:767px){
+  .leaflet-control-global-weather .wx-panel .wx-mobile-off{
+    display:block!important;
+    margin-top:5px!important;
+    background:#475569!important;
+    border-color:#94a3b8!important;
+  }
+}
+
 /* Weather V3: readable SIGMET details + legend toggle */
 .wx-weather-legend{display:none;}
 .wx-weather-legend.wx-visible{display:block;}
@@ -9471,6 +9482,63 @@ function tokyoVaacJsonp() {
     document.head.appendChild(script);
   });
 }
+
+// Additional eight VAAC centres: parallel public-BOM backend request (V48).
+// This endpoint is the same GAS deployment as Tokyo, with action=globalVaac.
+const otherVaacLayer=L.featureGroup();
+let otherVaacData=null;
+function otherVaacJsonp(){
+  return new Promise((resolve,reject)=>{
+    const cb='globalVaacCb'+Date.now()+Math.floor(Math.random()*100000);
+    const script=document.createElement('script');
+    let done=false;
+    const finish=(err,value)=>{
+      if(done)return; done=true;
+      clearTimeout(timer);try{delete window[cb];}catch(_){window[cb]=undefined;}
+      script.remove(); err?reject(err):resolve(value);
+    };
+    const timer=setTimeout(()=>finish(new Error('Global VAAC 요청 시간 초과')),25000);
+    window[cb]=value=>finish(null,value);
+    script.onerror=()=>finish(new Error('Global VAAC 백엔드 연결 실패'));
+    const sep=TOKYO_VAAC_BACKEND_URL.includes('?')?'&':'?';
+    script.src=TOKYO_VAAC_BACKEND_URL+sep+'action=globalVaac&callback='+cb;
+    document.head.appendChild(script);
+  });
+}
+function renderOtherVaac(hour){
+  otherVaacLayer.clearLayers();
+  if(!Array.isArray(otherVaacData?.advisories))return 0;
+  const targetHours=hour==='all'?[0,6,12,18]:[Number(hour)];
+  const styleByHour={0:{color:'#a21caf',fillOpacity:0.20,dashArray:null},
+    6:{color:'#e11d48',fillOpacity:0.15,dashArray:'7 5'},
+    12:{color:'#f97316',fillOpacity:0.13,dashArray:'5 5'},
+    18:{color:'#ca8a04',fillOpacity:0.11,dashArray:'3 5'}};
+  let count=0;
+  for(const a of otherVaacData.advisories){
+    if(a.vaac==='TOKYO')continue;
+    for(const targetHour of targetHours){
+      const phase=a.phases?.find(p=>p.hour===targetHour);
+      if(!phase?.polygons?.length || Date.parse(phase.valid)<Date.now()-6*3600000)continue;
+      for(const p of phase.polygons){
+        if(!Array.isArray(p.coordinates)||p.coordinates.length<3)continue;
+        const ctx={referenceLon:GLOBAL_WORLD_REFERENCE_LON};
+        const points=p.coordinates.map(c=>toRenderLatLng(c[1],c[0],ctx));
+        const url=/^https:\/\/www\.bom\.gov\.au\/products\/Volc_ash_(latest|recent)\.shtml$/.test(a.sourceUrl)
+          ?a.sourceUrl:'https://www.bom.gov.au/products/Volc_ash_latest.shtml';
+        const popup='<b>'+escapeHtml(a.volcano)+'</b> · '+escapeHtml(a.vaac)+' VAAC '+escapeHtml(a.advisory)+
+          '<br>'+(targetHour?'+'+targetHour+'h 예보':'현재')+' · '+escapeHtml(p.level)+
+          '<br>유효: '+escapeHtml(phase.valid.replace('T',' ').slice(0,16))+'Z'+
+          '<br><a href="'+url+'" target="_blank" rel="noopener noreferrer">원문 VAA</a>';
+        const style=styleByHour[targetHour];
+        L.polygon(points,{color:style.color,weight:2,fillOpacity:style.fillOpacity,
+          dashArray:style.dashArray}).bindPopup(popup).addTo(otherVaacLayer);
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
 function renderTokyoVaac(hour) {
   tokyoVaacLayer.clearLayers();
   if (!tokyoVaacData?.advisories) return 0;
@@ -9528,14 +9596,19 @@ function createTokyoVaacControl() {
     const select=L.DomUtil.create('select','',box);
     select.style.display='none';
     const choices=[[0,'OBS'],[6,'+6hr'],[12,'+12hr'],[18,'+18hr']];
+    const hasPolygons=(data,hour)=>data?.advisories?.some(a=>a.phases?.some(p=>
+      p.hour===hour && Date.parse(p.valid)>=Date.now()-6*3600000 &&
+      p.polygons?.some(g=>Array.isArray(g.coordinates)&&g.coordinates.length>=3)));
+    const redraw=()=>{
+      const hour=select.value==='all'?'all':Number(select.value);
+      renderTokyoVaac(hour);renderOtherVaac(hour);
+    };
     const updateChoices=()=>{
       const preferred=select.value || 'all';
       select.replaceChildren();
 
       const availableHours = choices.filter(([hour]) =>
-        tokyoVaacData?.advisories.some(a=>a.phases?.some(phase=>
-          phase.hour===hour && Date.parse(phase.valid)>=Date.now()-6*3600000 &&
-          phase.polygons?.some(p=>Array.isArray(p.coordinates) && p.coordinates.length>=3)))
+        hasPolygons(tokyoVaacData,hour)||hasPolygons(otherVaacData,hour)
       );
 
       // 하나라도 유효한 phase가 있으면 첫 항목은 항상 "전체".
@@ -9566,10 +9639,11 @@ function createTokyoVaacControl() {
       const request=++tokyoVaacRequest;
       button.disabled=true; button.textContent='확인 중…';
       try {
-        const data=await tokyoVaacJsonp();
+        const results=await Promise.allSettled([tokyoVaacJsonp(),otherVaacJsonp()]);
         if (request!==tokyoVaacRequest) return;
-        if (!data?.ok || !Array.isArray(data.advisories)) throw new Error(data?.error||'VAAC 응답 형식 오류');
-        tokyoVaacData=data;
+        tokyoVaacData=results[0].status==='fulfilled'&&results[0].value?.ok?results[0].value:null;
+        otherVaacData=results[1].status==='fulfilled'&&results[1].value?.ok?results[1].value:null;
+        if(!tokyoVaacData&&!otherVaacData) throw new Error('VAAC 조회 실패');
         updateChoices();
         button.textContent=select.options.length ? '화산재 OFF' : '화산재 없음';
       } catch(error) {
@@ -9582,21 +9656,23 @@ function createTokyoVaacControl() {
     L.DomEvent.disableClickPropagation(box); L.DomEvent.disableScrollPropagation(box);
     select.addEventListener('change',()=>{
       if (!tokyoVaacEnabled) return;
-      renderTokyoVaac(select.value === 'all' ? 'all' : Number(select.value));
+      redraw();
     });
     button.addEventListener('click',async()=>{
       if (tokyoVaacEnabled) {
         ++tokyoVaacRequest; tokyoVaacEnabled=false;
-        map.removeLayer(tokyoVaacLayer); select.style.display='none'; button.textContent='화산재 OFF';
+        map.removeLayer(tokyoVaacLayer);map.removeLayer(otherVaacLayer); select.style.display='none'; button.textContent='화산재 OFF';
         button.classList.remove('vaac-on'); return;
       }
       const request=++tokyoVaacRequest;
       button.disabled=true; button.textContent='확인 중…';
       try {
-        const data=await tokyoVaacJsonp();
+        const results=await Promise.allSettled([tokyoVaacJsonp(),otherVaacJsonp()]);
         if (request!==tokyoVaacRequest) return;
-        if (!data?.ok || !Array.isArray(data.advisories)) throw new Error(data?.error||'VAAC 응답 형식 오류');
-        tokyoVaacData=data; tokyoVaacEnabled=true;
+        tokyoVaacData=results[0].status==='fulfilled'&&results[0].value?.ok?results[0].value:null;
+        otherVaacData=results[1].status==='fulfilled'&&results[1].value?.ok?results[1].value:null;
+        if(!tokyoVaacData&&!otherVaacData) throw new Error('모든 VAAC 소스 조회 실패');
+        tokyoVaacEnabled=true;
         updateChoices();
         if (!select.options.length) {
           tokyoVaacEnabled=false;
@@ -9604,8 +9680,8 @@ function createTokyoVaacControl() {
           return;
         }
         select.value = [...select.options].some(option=>option.value==='all') ? 'all' : select.value;
-        renderTokyoVaac(select.value === 'all' ? 'all' : Number(select.value));
-        tokyoVaacLayer.addTo(map);
+        redraw();
+        tokyoVaacLayer.addTo(map);otherVaacLayer.addTo(map);
         button.classList.add('vaac-on'); button.textContent='화산재 ON';
       } catch(error) {
         if (request===tokyoVaacRequest) {button.textContent='화산재 OFF'; alert('화산재 예보 실패: '+(error.message||String(error)));}
@@ -10214,6 +10290,7 @@ createNoaaModelControl().addTo(map);
   <div class="wx-time-window wx-report-range wx-mobile-hide"></div>
   <label class="wx-label">보고 기상현상</label><select class="wx-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option></select>
   <button class="wx-action wx-refresh" type="button">새로고침</button>
+  <button class="wx-action wx-mobile-off" type="button">WX ALERT OFF</button>
   <div class="wx-status" aria-live="polite">조회할 자료를 선택하세요.</div><div class="wx-mobile-status" aria-live="polite" style="display:none">조회할 자료를 선택하세요.</div><div class="wx-undrawn" style="display:none;max-height:135px;overflow:auto;color:#fde68a;font:10px/1.45 Arial;margin-top:5px;white-space:pre-wrap"></div>
   <div class="wx-note">· SIGMET: 전 세계 발행자료<br>· PIREP/AIREP: 주로 미국/북대서양</div></section>`;
   const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),status=$('.wx-status'),mobileStatus=$('.wx-mobile-status');
@@ -10225,6 +10302,7 @@ createNoaaModelControl().addTo(map);
   const wxIsMobile=()=>window.matchMedia('(max-width: 767px)').matches;
   const wxToggle=$('.wx-toggle');
   const wxClose=$('.wx-mobile-close');
+  const wxMobileOff=$('.wx-mobile-off');
   function wxSetPanelVisible(visible){
     panel.hidden=!visible;
     wxToggle.setAttribute('aria-expanded',String(visible));
@@ -10234,20 +10312,39 @@ createNoaaModelControl().addTo(map);
     event.stopPropagation();
     wxSetPanelVisible(false);
   };
+  // Mobile UX: X only hides settings; tapping ON while hidden reopens it.
+  // Tapping ON while settings are visible switches weather OFF.
+  function wxSwitchOff(){
+   wxEnabled=false;
+   wxSetPanelVisible(false);
+   chkS.checked=false;chkP.checked=false;
+   wxToggle.textContent='WX ALERT OFF';
+   wxToggle.classList.remove('wx-active');
+   const legend=legendControl.getContainer();
+   if(legend)legend.classList.remove('wx-visible');
+   draw('all');
+  }
+  wxMobileOff.onclick=(event)=>{
+   event.preventDefault();event.stopPropagation();
+   wxSwitchOff();
+  };
   wxToggle.onclick=()=>{
    stamps();
-   if(wxIsMobile() && wxEnabled){
-     wxSetPanelVisible(panel.hidden);
+   if(wxEnabled){
+     if(wxIsMobile() && panel.hidden){
+       wxSetPanelVisible(true); // Reopen controls without affecting layers.
+     }else{
+       wxSwitchOff(); // Turn OFF while the controls are visible.
+     }
      return;
    }
-   const enabled=!wxEnabled;
-   wxEnabled=enabled;
-   wxSetPanelVisible(enabled);
-   chkS.checked=enabled;chkP.checked=enabled;
-   wxToggle.textContent=enabled?'WX ALERT ON':'WX ALERT OFF';
-   wxToggle.classList.toggle('wx-active',enabled);
+   wxEnabled=true;
+   wxSetPanelVisible(true);
+   chkS.checked=true;chkP.checked=true;
+   wxToggle.textContent='WX ALERT ON';
+   wxToggle.classList.add('wx-active');
    const legend=legendControl.getContainer();
-   if(legend)legend.classList.toggle('wx-visible',enabled);
+   if(legend)legend.classList.add('wx-visible');
    draw('all');
   };
   async function draw(part='all'){
@@ -10966,7 +11063,7 @@ function worldCopyV16Refresh(){
   }
   // Independent markers and boundaries each choose the nearest longitude copy.
   [positioningLayer, searchedAirspaceLayer, airportSearchLayer,
-    firLayer, artccLayer, typhoonLayer, spcLayer, tokyoVaacLayer,
+    firLayer, artccLayer, typhoonLayer, spcLayer, tokyoVaacLayer, otherVaacLayer,
     tornadoHqWarningLayer].forEach(group=>{
     worldCopyV16Walk(group,l=>{
       const b=worldCopyV16Base(l);if(!b)return;
