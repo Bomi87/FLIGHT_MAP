@@ -2814,6 +2814,9 @@
 .wx-sigmet-popup .wx-pop-raw div{margin:2px 0;}
 .wx-sigmet-popup .wx-pop-hazard{font-weight:800;color:#d62727;}
 .wx-sigmet-popup .wx-pop-va{font-weight:800;color:#64748b;}
+/* V54 VA eruption marker — bold contrasting background over light/dark basemaps. */
+.wx-volcano-badge-icon {background:transparent!important;border:0!important;box-shadow:none!important;}
+.wx-volcano-badge {display:flex;width:30px;height:30px;align-items:center;justify-content:center;box-sizing:border-box;background:transparent!important;border:0!important;border-radius:0;box-shadow:none!important;font-size:26px;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.8);}
 .wx-sigmet-popup .wx-pop-coords{color:#46515e;}
 .wx-sigmet-popup .wx-pop-level{font-weight:800;color:#244ce0;}
 .wx-sigmet-popup .wx-pop-move{font-weight:700;color:#1c9045;}
@@ -9727,7 +9730,7 @@ createNoaaModelControl().addTo(map);
    // When a source has no coordinates (e.g. ENTIRE FIR), preserve the geographic text.
    const safe=esc(plain);
    // Highlight in a single pass over plain text, never over existing HTML markup.
-   const re=/(\bVA\s+(?:ERUPTION|CLD|CLOUD|OBS|FCST|MOV)\b|\bVOLCANIC\s+ASH\b|\bVA\b|\b(?:SFC\s*\/\s*FL\d{2,3}|FL\d{2,3}\s*\/\s*(?:FL)?\d{2,3}|FL\d{2,3}\s*\/\s*SFC|FL\d{2,3})\b|EMBD TS|FRQ TS|OBSC TS|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
+   const re=/(\bVA\s+(?:ERUPTION|CLD|CLOUD|OBS|FCST|MOV)\b|\bVOLCANIC\s+ASH\b|\b(?:SFC\s*\/\s*FL\d{2,3}|FL\d{2,3}\s*\/\s*(?:FL)?\d{2,3}|FL\d{2,3}\s*\/\s*SFC|FL\d{2,3})\b|EMBD TS|FRQ TS|OBSC TS|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
    let result='',at=0;
    for(const hit of safe.matchAll(re)){
      result+=safe.slice(at,hit.index);
@@ -10402,12 +10405,24 @@ createNoaaModelControl().addTo(map);
        if(sf.value!=='all'&&item.hazard!==sf.value)return;
        const resolved=wxResolvedGeometry(item,firMap);if(!resolved.geometry){undrawn.push((item.name||wxFirCode(item)||'Unknown FIR')+' — '+resolved.source+(resolved.note?' ('+resolved.note+')':''));return;} if(resolved.source==='RAW_OF_LINE')reviewed++;
        const expiry=parseSigmetTime(item.validTo);if(Number.isFinite(expiry)&&expiry<=Date.now())return;
-       const isVaSigmet=/(?:\bVA(?:\s+(?:ERUPTION|CLD|CLOUD))?\b|\bVOLCANIC\s+ASH\b)/i.test(String(item.raw||'')) || /^(?:va|volcanic(?:_ash)?)$/i.test(String(item.hazard||''));
-        const hue=isVaSigmet?'#94a3b8':item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
+       const isVaSigmet=/\bVA\s+ERUPTION\b/i.test(String(item.raw||''));
+        const hue=isVaSigmet?'#64748b':item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
        try{let g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(resolved.geometry),properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
        if(!g.getLayers().length)return;
        const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
-       g.bindPopup(txt());g.on('popupopen',()=>g.setPopupContent(txt()));g.addTo(nextSigmet);if(Number.isFinite(expiry))nextExpiry.push({layer:g,expires:expiry});n++;}catch(e){console.warn('SIGMET draw failed',item.name,e);undrawn.push((item.name||'Unknown')+' — '+String(e.message||e))}
+       g.bindPopup(txt());g.on('popupopen',()=>g.setPopupContent(txt()));g.addTo(nextSigmet);
+       // VA ERUPTION: conspicuous volcano badge in addition to grey polygon.
+       // Place the marker in the same layer group so expiration/OFF hides both together.
+       if(isVaSigmet && g.getBounds().isValid()){
+         const centre=g.getBounds().getCenter();
+         const vaBadge=L.marker(centre,{icon:L.divIcon({
+           className:'wx-volcano-badge-icon',
+           html:'<span class="wx-volcano-badge" aria-label="VA ERUPTION">🌋</span>',
+           iconSize:[30,30],iconAnchor:[15,15],popupAnchor:[0,-16]
+         }),keyboard:true});
+         vaBadge.bindPopup(txt());vaBadge.on('popupopen',()=>vaBadge.setPopupContent(txt()));
+         g.addLayer(vaBadge);
+       }if(Number.isFinite(expiry))nextExpiry.push({layer:g,expires:expiry});n++;}catch(e){console.warn('SIGMET draw failed',item.name,e);undrawn.push((item.name||'Unknown')+' — '+String(e.message||e))}
      });sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetExpiryLayers.push(...nextExpiry);sigmetLayer.addTo(map);const missingEl=el.querySelector('.wx-undrawn');missingEl.style.display=undrawn.length?'block':'none';missingEl.textContent=undrawn.length?'Unmapped SIGMET ('+undrawn.length+'): '+undrawn.join(' | '):'';const d=data.diagnostics||{};lines.push(`SIGMET ${n}개 영역 / 수신 ${d.received??'?'}건 · 만료 ${d.expired??'?'} · 도형 누락 ${d.missingGeometry??'?'} · 좌표 복구 ${d.geometryRecovered??'?'} · 미표시 ${d.unsupportedGeometry??'?'}`+(data.truncated?' (일부 제한)':''));
     }catch(e){if(id!==sSeq)return;lines.push('SIGMET: '+(e.message||e));}
    }
@@ -10426,7 +10441,7 @@ createNoaaModelControl().addTo(map);
    el.innerHTML='<strong>AVIATION WEATHER LEGEND</strong>'+
     '<div><i style="background:#38bdf8"></i> SIGMET · ICING</div>'+
     '<div><i style="background:#f97316"></i> SIGMET · TURBULENCE</div>'+
-    '<div><i style="background:#94a3b8"></i> SIGMET · VOLCANIC ASH (VA)</div>'+
+    '<div><i style="background:#64748b"></i> SIGMET · VA ERUPTION 🌋</div>'+
      '<div><i style="background:#ef4444"></i> SIGMET · OTHER</div>'+
     '<div class="wx-legend-sep"></div>'+
     '<div><i style="background:#0ea5e9"></i> PIREP/AIREP · ICING</div>'+
