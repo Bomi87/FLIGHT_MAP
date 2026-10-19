@@ -2725,6 +2725,9 @@
 @media(max-width:767px){.leaflet-control-global-weather .wx-panel{max-height:70vh;overflow:auto;}}
 
 
+/* V71: Show short NOAA fetch state on both desktop and mobile; detailed statistics remain hidden. */
+.leaflet-control-global-weather .wx-mobile-status{display:block;font:10px/1.4 Arial,sans-serif;color:#cbd5e1;margin-top:7px;overflow-wrap:anywhere;}
+
 /* Additional weather legend (bottom-right) */
 .wx-weather-legend{background:rgba(15,23,42,.92)!important;color:#f8fafc!important;border:1px solid #64748b;border-radius:6px;padding:8px 10px;font:10px/1.5 Arial,sans-serif;box-shadow:0 1px 6px #0004;min-width:160px;max-width:210px;}
 .wx-weather-legend strong{display:block;font-size:10px;margin-bottom:4px;}
@@ -10368,7 +10371,7 @@ createNoaaModelControl().addTo(map);
   <label class="wx-label">보고 기상현상</label><select class="wx-filter"><option value="all">ALL</option><option value="icing">ICING</option><option value="turb">TURBULENCE</option></select>
   <button class="wx-action wx-refresh" type="button">새로고침</button>
   <button class="wx-action wx-mobile-off" type="button">WX ALERT OFF</button>
-  <div class="wx-mobile-status" aria-live="polite" style="display:none">조회할 자료를 선택하세요.</div><div class="wx-undrawn" style="display:none;max-height:135px;overflow:auto;color:#fde68a;font:10px/1.45 Arial;margin-top:5px;white-space:pre-wrap"></div>
+  <div class="wx-mobile-status" aria-live="polite">조회할 자료를 선택하세요.</div><div class="wx-undrawn" style="display:none;max-height:135px;overflow:auto;color:#fde68a;font:10px/1.45 Arial;margin-top:5px;white-space:pre-wrap"></div>
   <div class="wx-note">· SIGMET: 전 세계 발행자료<br>· PIREP/AIREP: 주로 미국/북대서양</div></section>`;
   const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),mobileStatus=$('.wx-mobile-status');
   function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-3600000)+' ~\n'+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
