@@ -9,6 +9,7 @@
   <meta http-equiv="Expires" content="0" />
 
   <title>Flight Route Viewer</title>
+  <!-- SIGMET_MTW_HIGHLIGHT_FIX_20261020_V2 -->
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -9688,7 +9689,7 @@ function createTokyoVaacControl() {
 
       select.style.display=tokyoVaacEnabled && select.options.length ? 'block' : 'none';
     };
-    // 처음 열 때도 실제 예보 유무를 표시하되, 지도 표시는 사용자가 켤 때만 시작한다.
+    // 앱 최초 실행: 조회한 유효 화산재 예보를 자동으로 지도에 표시한다.
     const checkAvailability=async()=>{
       const request=++tokyoVaacRequest;
       button.disabled=true; button.textContent='확인 중…';
@@ -9699,10 +9700,21 @@ function createTokyoVaacControl() {
         otherVaacData=results[1].status==='fulfilled'&&results[1].value?.ok?results[1].value:null;
         if(!tokyoVaacData&&!otherVaacData) throw new Error('VAAC 조회 실패');
         updateChoices();
-        button.textContent=select.options.length ? '화산재 OFF' : '화산재 없음';
+        if (select.options.length) {
+          tokyoVaacEnabled=true;
+          select.value=[...select.options].some(option=>option.value==='all')?'all':select.value;
+          updateChoices();
+          redraw();
+          tokyoVaacLayer.addTo(map); otherVaacLayer.addTo(map);
+          button.classList.add('vaac-on'); button.textContent='화산재 ON';
+        } else {
+          tokyoVaacEnabled=false;
+          button.classList.remove('vaac-on'); button.textContent='화산재 없음';
+        }
       } catch(error) {
         if (request===tokyoVaacRequest) {
-          button.textContent='화산재 OFF';
+          tokyoVaacEnabled=false;
+          button.classList.remove('vaac-on'); button.textContent='화산재 OFF';
           console.warn('화산재 예보 상태 확인 실패:',error);
         }
       } finally {if(request===tokyoVaacRequest) button.disabled=false;}
@@ -9780,12 +9792,12 @@ createNoaaModelControl().addTo(map);
    // When a source has no coordinates (e.g. ENTIRE FIR), preserve the geographic text.
    const safe=esc(plain);
    // Highlight in a single pass over plain text, never over existing HTML markup.
-   const re=/(\bVA\s+(?:ERUPTION|CLD|CLOUD|OBS|FCST|MOV)\b|\bVOLCANIC\s+ASH\b|\b(?:SFC\s*\/\s*FL\d{2,3}|FL\d{2,3}\s*\/\s*(?:FL)?\d{2,3}|FL\d{2,3}\s*\/\s*SFC|FL\d{2,3}|\d{3,5}\s*FT)\b|EMBD TS|FRQ TS|OBSC TS|SEV MTW|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
+   const re=/(\bVA\s+(?:ERUPTION|CLD|CLOUD|OBS|FCST|MOV)\b|\bVOLCANIC\s+ASH\b|\b(?:SFC\s*\/\s*FL\d{2,3}|FL\d{2,3}\s*\/\s*(?:FL)?\d{2,3}|FL\d{2,3}\s*\/\s*SFC|FL\d{2,3}|\d{3,5}\s*FT)\b|EMBD TS|FRQ TS|OBSC TS|\bSEV\s+MTW\b|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
    let result='',at=0;
    for(const hit of safe.matchAll(re)){
      result+=safe.slice(at,hit.index);
      const t=hit[0], cls=/^(?:VA\b|VOLCANIC\s+ASH)/i.test(t)?'wx-pop-va':/^(?:TOP|FL\d|SFC\s*\/|\d{3,5}\s*FT\b)/i.test(t)?'wx-pop-level':/^(?:MOV|STNR|NC=|INTSF=|WKN=)/i.test(t)?'wx-pop-move':'wx-pop-hazard';
-     result+='<span class="'+cls+'">'+t+'</span>';
+     result+=(/^SEV\s+MTW$/i.test(t) ? '<span class="wx-pop-hazard" style="color:#d62727 !important;font-weight:900 !important">'+t+'</span>' : '<span class="'+cls+'">'+t+'</span>');
      at=hit.index+t.length;
    }
    return result+safe.slice(at);
