@@ -9780,7 +9780,7 @@ createNoaaModelControl().addTo(map);
    // When a source has no coordinates (e.g. ENTIRE FIR), preserve the geographic text.
    const safe=esc(plain);
    // Highlight in a single pass over plain text, never over existing HTML markup.
-   const re=/(\bVA\s+(?:ERUPTION|CLD|CLOUD|OBS|FCST|MOV)\b|\bVOLCANIC\s+ASH\b|\b(?:SFC\s*\/\s*FL\d{2,3}|FL\d{2,3}\s*\/\s*(?:FL)?\d{2,3}|FL\d{2,3}\s*\/\s*SFC|FL\d{2,3}|\d{3,5}\s*FT)\b|EMBD TS|FRQ TS|OBSC TS|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
+   const re=/(\bVA\s+(?:ERUPTION|CLD|CLOUD|OBS|FCST|MOV)\b|\bVOLCANIC\s+ASH\b|\b(?:SFC\s*\/\s*FL\d{2,3}|FL\d{2,3}\s*\/\s*(?:FL)?\d{2,3}|FL\d{2,3}\s*\/\s*SFC|FL\d{2,3}|\d{3,5}\s*FT)\b|EMBD TS|FRQ TS|OBSC TS|SEV MTW|SEV TURB|SEV ICE|SQL TS|TS GR|TOP(?:S)?\s+(?:ABV\s+|BLW\s+)?FL\d{2,3}|MOV\s+(?:N|NE|E|SE|S|SW|W|NW)\s*\d{1,3}\s*(?:KT|KMH)?|STNR|NC=|INTSF=|WKN=)/gi;
    let result='',at=0;
    for(const hit of safe.matchAll(re)){
      result+=safe.slice(at,hit.index);
