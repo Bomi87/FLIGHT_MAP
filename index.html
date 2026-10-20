@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" class="portal-auth-pending">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -11,6 +11,7 @@
   <title>Flight Route Viewer</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/dist/polygon-clipping.umd.min.js"></script>
@@ -2857,10 +2858,17 @@
 
 
 </style>
+  <!-- Flight Map: authorization must complete before ANY application initialization. -->
+  <style id="flightMapAuthStyles">
+    #appRoot { display: none; }
+    #authScreen { min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; background:#f4f7fb; font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    #authScreen .flight-auth-card { width:100%;max-width:410px;background:#fff;border:1px solid #e6ebf2;border-radius:20px;padding:25px;text-align:center;box-shadow:0 10px 28px rgba(15,23,42,.08);color:#17202a; }
+  </style>
 </head>
 <body>
-
-  <div id="map"></div>
+  <div id="authScreen"><div class="flight-auth-card"><strong style="font-size:21px">Flight Route Viewer</strong><p style="color:#667085">Google 계정과 앱 접근 권한을 확인 중입니다.</p><div id="googleButtonWrap"></div></div></div>
+  <div id="appRoot">
+    <div id="map"></div>
 
   <button id="posFloatingBtn" class="pos-floating-btn" type="button">POS</button>
 
@@ -2883,7 +2891,10 @@
     <button id="clearPositionBtn" type="button">지우기</button>
   </div>
 
-  <script>
+  </div> <!-- /appRoot -->
+
+  <!-- Delayed executable source: never run map initialization before authorization. -->
+  <script type="text/plain" id="protectedFlightMapSource">
     const map = L.map("map", {
       worldCopyJump: false,
       preferCanvas: true,
@@ -11228,6 +11239,77 @@ initPositioningControl();
 init();
   </script>
 
-  <script src="aircraft.js?v=8"></script>
+  <script>
+    (function () {
+      "use strict";
+      var started = false;
+      var permitted = {
+        "live/HL8080.kml": "hl8080-route",
+        "live/HL8372.kml": "hl8372-route",
+        "HL8080.kml": "hl8080-route",
+        "HL8372.kml": "hl8372-route"
+      };
+      var file = new URLSearchParams(window.location.search).get("file") || "";
+      var expectedAppId = permitted[file] || "";
+
+      function denyInvalidRoute() {
+        var screen = document.getElementById("authScreen");
+        var root = document.getElementById("appRoot");
+        if (root) root.style.display = "none";
+        if (screen) {
+          screen.style.display = "flex";
+          screen.innerHTML = '<div class="flight-auth-card"><strong>Access Required</strong><p>승인되지 않은 Flight Route 주소입니다. 포털에서 해당 항공기 앱을 선택해 주세요.</p></div>';
+        }
+        document.documentElement.classList.remove("portal-auth-pending");
+        document.documentElement.classList.add("portal-auth-ready");
+      }
+
+      // This callback is invoked only by the shared portal auth flow.
+      window.startProtectedApp = function (detail) {
+        if (started || !expectedAppId) return;
+        var appId = detail && detail.appId;
+        var user = detail && detail.user;
+        if (appId !== expectedAppId || !user || !window.CURRENT_PORTAL_USER ||
+            typeof window.portalCanAccessApp !== "function" ||
+            !window.portalCanAccessApp(user, expectedAppId)) {
+          denyInvalidRoute();
+          return;
+        }
+        started = true;
+        var source = document.getElementById("protectedFlightMapSource");
+        if (!source) return;
+        try {
+          var script = document.createElement("script");
+          script.textContent = source.textContent;
+          document.body.appendChild(script);
+          var aircraftScript = document.createElement("script");
+          aircraftScript.src = "aircraft.js?v=8";
+          aircraftScript.async = false;
+          document.body.appendChild(aircraftScript);
+        } catch (err) {
+          console.error("Flight Map initialization failed", err);
+          denyInvalidRoute();
+        }
+      };
+
+      if (!expectedAppId) {
+        denyInvalidRoute();
+        return;
+      }
+
+      var authScript = document.createElement("script");
+      authScript.src = "/common-auth.js";
+      authScript.onerror = function () {
+        var el = document.getElementById("authScreen");
+        if (el) {
+          el.style.display = "flex";
+          el.innerHTML = '<div class="flight-auth-card"><strong>인증 모듈 로딩 실패</strong><p>/common-auth.js 위치와 배포 상태를 확인해 주세요.</p></div>';
+        }
+        document.documentElement.classList.remove("portal-auth-pending");
+        document.documentElement.classList.add("portal-auth-ready");
+      };
+      document.body.appendChild(authScript);
+    })();
+  </script>
 </body>
 </html>
