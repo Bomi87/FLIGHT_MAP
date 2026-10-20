@@ -11298,12 +11298,12 @@ init();
       }
 
       var authScript = document.createElement("script");
-      authScript.src = "/common-auth.js";
+      authScript.src = "./common-auth.js";
       authScript.onerror = function () {
         var el = document.getElementById("authScreen");
         if (el) {
           el.style.display = "flex";
-          el.innerHTML = '<div class="flight-auth-card"><strong>인증 모듈 로딩 실패</strong><p>/common-auth.js 위치와 배포 상태를 확인해 주세요.</p></div>';
+          el.innerHTML = '<div class="flight-auth-card"><strong>인증 모듈 로딩 실패</strong><p>FLIGHT_MAP/common-auth.js 파일이 index.html과 같은 폴더에 배포되었는지 확인해 주세요.</p></div>';
         }
         document.documentElement.classList.remove("portal-auth-pending");
         document.documentElement.classList.add("portal-auth-ready");
