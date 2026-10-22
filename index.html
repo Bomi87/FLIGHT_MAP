@@ -10132,6 +10132,24 @@ createNoaaModelControl().addTo(map);
      const fullWI=wxRawWIPolygon(raw);
      if(fullWI)return {geometry:fullWI,source:'RAW_WI_ZERO_MERIDIAN',note:'Explicit WI vertices including longitude 00000'};
    }
+   // V22: Dateline-crossing explicit WI polygons must use the ordered SIGMET
+   // vertices. NOAA polygon geometries can be cut into the wrong 180-degree
+   // world copy; this only overrides them when the raw WI crosses the dateline.
+   // Keep the original (signed) longitudes here: wxShiftGeometryToRight()
+   // unwraps each consecutive longitude before drawing in Leaflet.
+   if(/\bWI\s+[NS]\d{4}\s*[EW]\d{5}/.test(raw)){
+     const rawWI=wxRawWIPolygon(raw);
+     if(rawWI){
+       const ring=rawWI.coordinates[0]||[];
+       let datelineCrossing=false;
+       for(let i=1;i<ring.length;i++){
+         if(Math.abs(Number(ring[i][0])-Number(ring[i-1][0]))>180){
+           datelineCrossing=true;break;
+         }
+       }
+       if(datelineCrossing)return {geometry:rawWI,source:'RAW_WI_DATELINE',note:'Explicit SIGMET vertices unwrapped across 180 longitude'};
+     }
+   }
    // Highest priority: valid area polygon from NOAA. Never override with inferred FIR.
    if(wxAreaGeometry(item.geometry)&&item.geometrySource==='NOAA')return wxAugmentNoaaWithWI(item)||{geometry:item.geometry,source:'NOAA',note:''};
    if(/\bENTIRE\s+FIR\b/.test(raw))return fir?{geometry:fir.geometry,source:'RAW_ENTIRE_FIR',note:'FIR boundary from world_fir.geojson; verify AIRAC currency'}:{geometry:null,source:'MISSING_FIR',note:'FIR boundary unavailable'};
