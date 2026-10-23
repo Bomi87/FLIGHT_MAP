@@ -10661,7 +10661,7 @@ createNoaaModelControl().addTo(map);
       if(v===null||v===undefined||v==='')continue;
       if(Array.isArray(v))v=v.filter(x=>typeof x==='string'||typeof x==='number').join('; ');
       if(typeof v!=='string'&&typeof v!=='number')continue;
-      const t=String(v).trim();
+      const t=String(v).trim().replace(/\bUSTAINED\s+SFC\s+WINDS\b/gi,'SUSTAINED SFC WINDS');
       if(!t||t==='[object Object]')continue;
       const norm=t.replace(/\s+/g,' ').toUpperCase();
       if(used.has(norm))continue;
