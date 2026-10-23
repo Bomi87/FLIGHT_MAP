@@ -10186,7 +10186,11 @@ createNoaaModelControl().addTo(map);
  }
  const WX_BACKEND_URL=AIRSPACE_SEARCH_BACKEND_URL;
  const wxResponses={};
- function jsonp(params){return new Promise((resolve,reject)=>{
+ const wxPendingJsonp=new Map();
+ function jsonp(params){
+   const key=JSON.stringify(params);
+   if(wxPendingJsonp.has(key))return wxPendingJsonp.get(key);
+   const promise=new Promise((resolve,reject)=>{
    const callback='wxCb_'+Date.now()+'_'+Math.floor(Math.random()*1e7);
    const script=document.createElement('script');let finished=false;
    const finish=(err,data)=>{if(finished)return;finished=true;clearTimeout(timer);script.remove();delete window[callback];err?reject(err):resolve(data)};
@@ -10194,7 +10198,11 @@ createNoaaModelControl().addTo(map);
    window[callback]=data=>finish(null,data);
    script.src=(params.action==='advisorysearch'?TOKYO_VAAC_BACKEND_URL:WX_BACKEND_URL)+'?'+new URLSearchParams({...params,callback}).toString();
    script.onerror=()=>finish(Error('GAS 연결 실패'));document.head.appendChild(script);
- });}
+   });
+   wxPendingJsonp.set(key,promise);
+   promise.then(()=>wxPendingJsonp.delete(key),()=>wxPendingJsonp.delete(key));
+   return promise;
+ }
  // V20: preserve raw pilot report, decode only explicitly reported fields.
  function wxPirepRawFields(raw){
    const text=String(raw||'').replace(/\s+/g,' ').trim();
@@ -10776,10 +10784,17 @@ createNoaaModelControl().addTo(map);
    if(!chkS.checked){++sSeq;sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;map.removeLayer(sigmetLayer)}
    if(!chkP.checked&&!chkS.checked&&!chkA.checked){mobileStatus.textContent='모두 OFF';return}
    mobileStatus.textContent='NOAA 데이터 조회 중…';const lines=[];
+   // Start independent NOAA requests concurrently instead of PIREP -> SIGMET -> AIRMET.
+   const isAll=(part==='all');
+   const pendingPirep=chkP.checked&&isAll?jsonp({action:'pirepsearch',scope:'global',age:1}).then(x=>({ok:true,data:x}),e=>({ok:false,error:e})):null;
+   const pendingSigmet=chkS.checked&&isAll?jsonp({action:'sigmetsearch'}).then(x=>({ok:true,data:x}),e=>({ok:false,error:e})):null;
+   if(chkA.checked&&isAll)drawAdvisories(false);
+
    if(chkP.checked && (part==='all'||part==='pirep'||part==='rewrap')){
     const id=++pSeq;
     try{
-     const data=(part==='rewrap'&&wxResponses.pirep)||await jsonp({action:'pirepsearch',scope:'global',age:1}); wxResponses.pirep=data;
+     const pResult=pendingPirep?await pendingPirep:null; if(pResult&&!pResult.ok)throw pResult.error;
+     const data=(pResult&&pResult.data)||(part==='rewrap'&&wxResponses.pirep)||await jsonp({action:'pirepsearch',scope:'global',age:1}); wxResponses.pirep=data;
      if(id!==pSeq||!chkP.checked)return;if(!data.ok)throw Error(data.error||'PIREP 오류');let n=0;
      const nextPireps=L.layerGroup();
      const groups=new Map();
@@ -10822,7 +10837,8 @@ createNoaaModelControl().addTo(map);
    if(chkS.checked && (part==='all'||part==='sigmet'||part==='rewrap')){
     const id=++sSeq;
     try{
-     const data=(part==='rewrap'&&wxResponses.sigmet)||await jsonp({action:'sigmetsearch'}); wxResponses.sigmet=data;if(id!==sSeq||!chkS.checked)return;if(!data.ok)throw Error(data.error||'SIGMET 오류');let n=0;
+     const sResult=pendingSigmet?await pendingSigmet:null; if(sResult&&!sResult.ok)throw sResult.error;
+     const data=(sResult&&sResult.data)||(part==='rewrap'&&wxResponses.sigmet)||await jsonp({action:'sigmetsearch'}); wxResponses.sigmet=data;if(id!==sSeq||!chkS.checked)return;if(!data.ok)throw Error(data.error||'SIGMET 오류');let n=0;
      let firMap=null;try{firMap=await wxFirData()}catch(e){console.warn('WX FIR',e)} if(id!==sSeq||!chkS.checked)return;
      const nextSigmet=L.layerGroup();const nextExpiry=[];const undrawn=[];let reviewed=0;
      (data.items||[]).forEach(item=>{
@@ -10850,7 +10866,7 @@ createNoaaModelControl().addTo(map);
      });sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetExpiryLayers.push(...nextExpiry);sigmetLayer.addTo(map);const missingEl=el.querySelector('.wx-undrawn');missingEl.style.display=undrawn.length?'block':'none';missingEl.textContent=undrawn.length?'Unmapped SIGMET ('+undrawn.length+'): '+undrawn.join(' | '):'';const d=data.diagnostics||{};lines.push(`SIGMET ${n}개 영역 / 수신 ${d.received??'?'}건 · 만료 ${d.expired??'?'} · 도형 누락 ${d.missingGeometry??'?'} · 좌표 복구 ${d.geometryRecovered??'?'} · 미표시 ${d.unsupportedGeometry??'?'}`+(data.truncated?' (일부 제한)':''));
     }catch(e){if(id!==sSeq)return;lines.push('SIGMET: '+(e.message||e));}
    }
-   if(chkA.checked && (part==='all'||part==='rewrap'))drawAdvisories(part==='rewrap');
+   if(chkA.checked && part==='rewrap')drawAdvisories(true);
    stamps();mobileStatus.textContent=lines.some(line=>/^\s*(?:SIGMET|PIREP):\s/.test(line))?'NOAA 데이터 조회 실패':'NOAA 데이터 조회 완료';
   }
   chkA.addEventListener('change',()=>drawAdvisories(true));[advFl,...advisoryTypes.map(k=>$('.wx-'+k))].forEach(input=>input.addEventListener('change',()=>drawAdvisories(true)));
