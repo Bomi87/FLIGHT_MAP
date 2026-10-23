@@ -10613,57 +10613,51 @@ createNoaaModelControl().addTo(map);
   function advisoryPopup(kind,p,top,hideTitle=false){
     const raw=advisorySupplementaryText(p);
     const hazard=String(p.hazard||p.product||p.airmetType||'ADVISORY').trim().toUpperCase();
-    const place=String(p.zone||p.firName||p.region||'').trim();
     const kindLabel=kind==='gairmet'?'G-AIRMET':kind.toUpperCase();
-    const isIFR=hazard==='IFR';
     const phenomenon=advisoryHazardLabel(kind,p);
-    // Keep hazard in the main detail row. The title identifies advisory and region.
-    const title=kindLabel+' · '+(isIFR?'IFR CONDITIONS':phenomenon)+(place?' — '+place:'');
-    let begin=p.validTimeFrom||p.validTime||'';
-    let end=p.validTimeTo||'';
-    if(kind==='gairmet'){
-      const forecastStart=p.validTime||p.forecastValidTime||p.forecastTime||p.validTimeFrom||'';
-      const startMs=Date.parse(String(forecastStart));
-      if(Number.isFinite(startMs)){
-        begin=new Date(startMs).toISOString();
-        end=new Date(startMs+3*60*60*1000-60*1000).toISOString();
-      }
-    }
-    const timeLabel=end?'VALID UTC':'FORECAST VALID UTC';
-    const timeText=end&&begin?(advisoryUtc(begin)+' – '+advisoryUtc(end)):(advisoryUtc(begin)||'미확인');
+    const baseFt=advisoryAltitudeFt(p.base,'base');
+    const toFl=ft=>'FL'+String(Math.round(ft/100)).padStart(3,'0');
+    const begin=p.validTimeFrom||p.validTime||p.forecastValidTime||p.forecastTime||'';
+    const end=p.validTimeTo||'';
+    const beginFormatted=advisoryUtc(begin);
+    const endFormatted=advisoryUtc(end);
+    const timeText=beginFormatted&&endFormatted?
+      beginFormatted.replace(/ UTC$/,'')+' – '+endFormatted:
+      (beginFormatted||endFormatted||'미확인');
+    const details=[];
+    const line=(label,value,color)=>{
+      if(value===null||value===undefined||String(value).trim()==='')return;
+      details.push('<div style="margin-top:2px"><span style="font-weight:700">'+label+':</span> '+
+        '<span'+(color?' style="color:'+color+';font-weight:900"':'')+'>'+advisoryEscape(String(value))+'</span></div>');
+    };
+    line('Region',p.region);
+    line('Zone',p.zone||p.firName);
+    line('Hazard',phenomenon,'#dc2626');
+    const freezingBase=advisoryBaseDescription(p);
+    if(baseFt!==null)line('Base',toFl(baseFt),'#1d4ed8');
+    else if(freezingBase)line('Base',freezingBase,'#1d4ed8');
+    if(top!==null)line('Top',toFl(top),'#1d4ed8');
+    line('Valid Time',timeText);
     let expiry='';
     const endMs=Date.parse(String(end||''));
     if(Number.isFinite(endMs)){
       const remain=endMs-Date.now();
       if(remain>0){
         const mins=Math.ceil(remain/60000);
-        expiry='<div style="font-weight:900;color:#334155;margin:5px 0">EXPIRES IN '+Math.floor(mins/60)+'hr '+(mins%60)+'mins</div>';
-      }else expiry='<div style="font-weight:800;color:#b91c1c;margin:5px 0">EXPIRED</div>';
+        const duration=mins<60?mins+'mins':Math.floor(mins/60)+'hr '+(mins%60)+'mins';
+        expiry='<div style="font-size:13px;line-height:1.35;font-weight:800;margin:2px 0 0;color:'+
+          (mins<=5?'#dc2626':'#334155')+'">'+(mins<=5?'⚠ ':'')+'EXPIRES IN '+duration+'</div>';
+      }else expiry='<div style="font-size:13px;line-height:1.35;font-weight:800;margin:2px 0 0;color:#dc2626">EXPIRED</div>';
     }
-    const base=advisoryAltitudeFt(p.base,'base');
-    const flLabel=ft=>'FL'+String(Math.round(ft/100)).padStart(3,'0');
-    const levelText=base!==null&&top!==null?(flLabel(base)+'/'+flLabel(top)):(top!==null?'TOP '+flLabel(top):'');
-    const phenomenonDisplay=hazard==='MT-OBSC'?'MOUNTAIN OBSCURATION':
-      hazard==='SFC-WIND'?'STRONG SURFACE WINDS':isIFR?'IFR CONDITIONS EXPECTED':phenomenon;
-    let explanation='<div><span style="color:#dc2626;font-weight:900">'+advisoryEscape(phenomenonDisplay)+'</span>'+
-      (levelText?' <span style="color:#1d4ed8;font-weight:900">'+advisoryEscape(levelText)+'</span>':'')+'</div>';
-    const freezingBase=advisoryBaseDescription(p);
-    if(freezingBase)explanation+=advisoryDetailLine('BASE',freezingBase,'color:#1d4ed8');
+    let extra='';
     if(raw){
-      // Avoid repeating a short text that contains only the phenomenon already shown.
       const norm=v=>String(v).toUpperCase().replace(/[^A-Z0-9]/g,'');
-      if(norm(raw)!==norm(phenomenonDisplay)&&norm(raw)!==norm(phenomenon)){
-        explanation+='<div style="margin-top:4px;white-space:normal">'+advisoryMarkedText(raw)+'</div>';
-      }
-    }else if(isIFR){
-      explanation+='<div>Ceiling below 1,000 ft AGL and/or Visibility below 3 SM</div>';
+      if(norm(raw)!==norm(phenomenon)&&norm(raw)!==norm(hazard))
+        extra='<div style="margin-top:5px;white-space:normal">'+advisoryMarkedText(raw)+'</div>';
     }
-    // For MT-OBSC, only expose details explicitly available in the NOAA item.
-    // The raw report (when present) is already displayed above.
-    return '<div class="wx-sigmet-popup" style="max-width:330px;overflow-wrap:anywhere;font:11px/1.5 Arial,sans-serif">'+
-      (hideTitle?'':'<div class="wx-pop-head">'+advisoryEscape(title)+'</div>')+
-      '<div style="border-top:1px solid #cbd5e1;padding-top:5px;margin-top:5px;font-size:10px;color:#475569">'+timeLabel+': '+advisoryEscape(timeText)+'</div>'+
-      expiry+explanation+'</div>';
+    return '<div class="wx-sigmet-popup" style="max-width:330px;overflow-wrap:anywhere;font:12px/1.5 Arial,sans-serif">'+
+      (hideTitle?'':'<div class="wx-pop-head">'+advisoryEscape(kindLabel+' · '+phenomenon)+'</div>')+
+      '<div style="margin-top:5px">'+details.join('')+expiry+extra+'</div></div>';
   }
   // When advisory polygons overlap, show all advisories under the clicked point,
   // like the selectable multi-report popup used by PIREP/AIREP.
