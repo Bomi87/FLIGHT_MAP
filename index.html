@@ -10653,9 +10653,9 @@ createNoaaModelControl().addTo(map);
       if(remain>0){
         const mins=Math.ceil(remain/60000);
         const duration=mins<60?mins+'mins':Math.floor(mins/60)+'hr '+(mins%60)+'mins';
-        expiry='<div style="font-size:13px;line-height:1.35;font-weight:800;margin:2px 0 0;color:'+
+        expiry='<div style="font-size:11px;line-height:1.35;font-weight:800;margin:2px 0 0;color:'+
           (mins<=5?'#dc2626':'#334155')+'">'+(mins<=5?'⚠ ':'')+'EXPIRES IN '+duration+'</div>';
-      }else expiry='<div style="font-size:13px;line-height:1.35;font-weight:800;margin:2px 0 0;color:#dc2626">EXPIRED</div>';
+      }else expiry='<div style="font-size:11px;line-height:1.35;font-weight:800;margin:2px 0 0;color:#dc2626">EXPIRED</div>';
     }
     let extra='';
     if(raw){
@@ -10663,7 +10663,7 @@ createNoaaModelControl().addTo(map);
       if(norm(raw)!==norm(phenomenon)&&norm(raw)!==norm(hazard))
         extra='<div style="margin-top:5px;white-space:normal">'+advisoryMarkedText(raw)+'</div>';
     }
-    return '<div class="wx-sigmet-popup" style="max-width:330px;overflow-wrap:anywhere;font:12px/1.5 Arial,sans-serif">'+
+    return '<div class="wx-sigmet-popup" style="max-width:330px;overflow-wrap:anywhere;font:11px/1.45 Arial,sans-serif">'+
       (hideTitle?'':'<div class="wx-pop-head">'+advisoryEscape(kindLabel+' · '+phenomenon)+'</div>')+
       '<div style="margin-top:5px">'+details.join('')+expiry+extra+'</div></div>';
   }
