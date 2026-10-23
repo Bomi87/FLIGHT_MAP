@@ -10556,9 +10556,12 @@ createNoaaModelControl().addTo(map);
   }
   function advisoryPopup(kind,p,top){
     const raw=String(p.rawSigmet||p.rawAirmet||p.rawAirSigmet||p.rawCwa||p.rawText||p.raw||p.text||'').trim();
-    const hazard=String(p.hazard||p.product||p.airmetType||'ADVISORY').toUpperCase();
-    const place=String(p.zone||p.firName||p.region||p.tag||p.icaoId||'').trim();
-    const title=(kind==='gairmet'?'G-AIRMET':kind.toUpperCase())+' · '+hazard+(place?' — '+place:'');
+    const hazard=String(p.hazard||p.product||p.airmetType||'ADVISORY').trim().toUpperCase();
+    // NOAA tag (e.g. 2E) is an internal identifier, not a displayed location.
+    const place=String(p.zone||p.firName||p.region||'').trim();
+    const kindLabel=kind==='gairmet'?'G-AIRMET':kind.toUpperCase();
+    const isIFR=/^IFR$/.test(hazard);
+    const title=kindLabel+' · '+(isIFR?'IFR CONDITIONS':hazard)+(place?' — '+place:'');
     const begin=p.validTimeFrom||p.validTime||'';
     const end=p.validTimeTo||'';
     const timeLabel=end?'VALID UTC':'FORECAST VALID UTC';
@@ -10570,21 +10573,31 @@ createNoaaModelControl().addTo(map);
       if(remain>0){
         const mins=Math.ceil(remain/60000);
         expiry='<div style="font-weight:900;color:#334155;margin:5px 0">EXPIRES IN '+Math.floor(mins/60)+'hr '+(mins%60)+'mins</div>';
-      } else expiry='<div style="font-weight:800;color:#b91c1c;margin:5px 0">EXPIRED</div>';
+      }else expiry='<div style="font-weight:800;color:#b91c1c;margin:5px 0">EXPIRED</div>';
     }
     const base=advisoryAltitudeFt(p.base,'base');
     const flLabel=ft=>'FL'+String(Math.round(ft/100)).padStart(3,'0');
-    const levelText=base!==null&&top!==null?(flLabel(base)+'/'+flLabel(top)):(top!==null?'TOP '+flLabel(top):'영향 고도 미명시');
+    const levelText=base!==null&&top!==null?(flLabel(base)+'/'+flLabel(top)):(top!==null?'TOP '+flLabel(top):'');
     const severity=String(p.severity||p.qualifier||'').trim();
     const phenomenon=(severity?severity.toUpperCase()+' ':'')+hazard;
-    const explanation=raw?advisoryMarkedText(raw):
-      '<span style="color:#dc2626;font-weight:900">'+advisoryEscape(phenomenon)+'</span> '+
-      '<span style="color:#1d4ed8;font-weight:900">'+advisoryEscape(levelText)+'</span>';
-    const level='<div style="margin:5px 0;color:#1d4ed8;font-weight:900">'+advisoryEscape(levelText)+'</div>';
+    let explanation='';
+    if(raw){
+      explanation='<div style="white-space:normal">'+advisoryMarkedText(raw)+'</div>';
+    }else if(isIFR){
+      explanation='<div style="color:#dc2626;font-weight:900">IFR CONDITIONS EXPECTED</div>'+
+        '<div>Ceiling below 1,000 ft AGL and/or Visibility below 3 SM</div>';
+    }else{
+      const phenomenonDisplay=hazard==='MT-OBSC'?'MOUNTAIN OBSCURATION':
+        hazard==='SFC-WIND'?'STRONG SURFACE WINDS':phenomenon;
+      explanation='<div><span style="color:#dc2626;font-weight:900">'+advisoryEscape(phenomenonDisplay)+'</span>'+
+        (levelText?' <span style="color:#1d4ed8;font-weight:900">'+advisoryEscape(levelText)+'</span>':'')+'</div>';
+    }
+    // Render flight levels in the detail body only, not as repeated standalone metadata.
+    // IFR thresholds describe typical criteria, not measured values for this individual polygon.
     return '<div class="wx-sigmet-popup" style="max-width:330px;overflow-wrap:anywhere;font:11px/1.5 Arial,sans-serif">'+
       '<div class="wx-pop-head">'+advisoryEscape(title)+'</div>'+
       '<div style="border-top:1px solid #cbd5e1;padding-top:5px;margin-top:5px;font-size:10px;color:#475569">'+timeLabel+': '+advisoryEscape(timeText)+'</div>'+
-      expiry+level+'<div style="white-space:normal">'+explanation+'</div></div>';
+      expiry+explanation+'</div>';
   }
   // When advisory polygons overlap, show all advisories under the clicked point,
   // like the selectable multi-report popup used by PIREP/AIREP.
@@ -10665,10 +10678,12 @@ createNoaaModelControl().addTo(map);
           try{
             const g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(geom),properties:{}},{style:{color,weight:2,fillColor:color,fillOpacity:.14}});
             const detail=advisoryPopup(kind,p,top);
+            const hazardName=String(p.hazard||p.product||p.airmetType||'ADVISORY').toUpperCase();
+            const loc=String(p.zone||p.firName||p.region||'').trim();
             const label=(kind==='gairmet'?'G-AIRMET':kind.toUpperCase())+' · '+
-              String(p.hazard||p.product||p.airmetType||'ADVISORY')+
-              (p.zone||p.firName||p.region?' — '+String(p.zone||p.firName||p.region):'')+
-              (top!==null?' · TOP FL'+String(Math.round(top/100)).padStart(3,'0'):' · 고도 미명시');
+              (hazardName==='IFR'?'IFR CONDITIONS':hazardName)+
+              (loc?' — '+loc:'')+
+              (top!==null?' · TOP FL'+String(Math.round(top/100)).padStart(3,'0'):'');
             const key=kind+'|'+String(p.tag||p.seriesId||p.zone||'')+'|'+
               String(p.validTime||p.validTimeFrom||'')+'|'+
               String(p.hazard||'')+'|'+JSON.stringify(geom.coordinates);
