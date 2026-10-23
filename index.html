@@ -10715,7 +10715,7 @@ createNoaaModelControl().addTo(map);
       '<div style="margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere">'+advisoryEscape(sourceText)+'</div></div>':'';
     return '<div class="wx-sigmet-popup" style="max-width:330px;overflow-wrap:anywhere;font:11px/1.45 Arial,sans-serif">'+
       (hideTitle?'':'<div class="wx-pop-head">'+advisoryEscape(kindLabel+' · '+phenomenon)+'</div>')+
-      '<div style="margin-top:5px">'+details.join('')+sourceHtml+'</div></div>';
+      '<div style="margin-top:5px">'+details.join('')+'</div></div>';
   }
   // When advisory polygons overlap, show all advisories under the clicked point,
   // like the selectable multi-report popup used by PIREP/AIREP.
