@@ -10803,6 +10803,16 @@ createNoaaModelControl().addTo(map);
         let count=0,unknown=0;
         const gairmetFiltered={past:0,future:0,invalidTime:0,altitude:0,geometry:0};
         const renderNow=Date.now();
+        // NOAA may serve the next G-AIRMET snapshot before its validTime.
+        // Show exactly one snapshot cycle, closest to the current UTC instant.
+        const gairmetSnapshotTimes=kind==='gairmet'
+          ? [...new Set((response.items||[]).map(f=>Date.parse(String((f.properties||{}).validTime||''))).filter(Number.isFinite))]
+          : [];
+        const nearestGairmetMs=gairmetSnapshotTimes.reduce((best,t)=>{
+          if(!Number.isFinite(best))return t;
+          const diff=Math.abs(t-renderNow),bestDiff=Math.abs(best-renderNow);
+          return diff<bestDiff||(diff===bestDiff&&t<best)?t:best;
+        },NaN);
         (response.items||[]).forEach(feature=>{
           const p=feature.properties||{},top=advisoryTopFt(p);
           const timing=advisoryTiming(kind,p);
@@ -10810,7 +10820,12 @@ createNoaaModelControl().addTo(map);
           // Older or future snapshots may still be included in a fresh NOAA API response.
           if(kind==='gairmet'){
             if(!Number.isFinite(timing.startMs)){gairmetFiltered.invalidTime++;return;}
-            if(timing.startMs>renderNow){gairmetFiltered.future++;return;}
+            if(timing.startMs!==nearestGairmetMs){
+              if(timing.startMs>renderNow)gairmetFiltered.future++;
+              else gairmetFiltered.past++;
+              return;
+            }
+            // Never show a snapshot over 3 hours old when no newer cycle arrived.
             if(renderNow>=timing.expiryMs){gairmetFiltered.past++;return;}
           }else if(Number.isFinite(timing.expiryMs)&&timing.expiryMs<=renderNow)return;
           if(top===null){unknown++;if(threshold>0){if(kind==='gairmet')gairmetFiltered.altitude++;return;}}
@@ -10853,7 +10868,7 @@ createNoaaModelControl().addTo(map);
         if(kind==='gairmet'){
           const features=response.items||[];
           const times=[...new Set(features.map(f=>String((f.properties||{}).validTime||'missing')))];
-          console.info('[Advisory] G-AIRMET NOAA items:',features.length,'drawn:',count,'filtered:',gairmetFiltered,'snapshot times:',times.join(', '),'UTC:',new Date(renderNow).toISOString());
+          console.info('[Advisory] G-AIRMET NOAA items:',features.length,'drawn:',count,'filtered:',gairmetFiltered,'selected snapshot:',Number.isFinite(nearestGairmetMs)?new Date(nearestGairmetMs).toISOString():'missing','snapshot times:',times.join(', '),'UTC:',new Date(renderNow).toISOString());
         }
       }catch(e){errors.push(kind.toUpperCase()+': '+String(e.message||e));}
     }));
