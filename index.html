@@ -10192,7 +10192,7 @@ createNoaaModelControl().addTo(map);
    const finish=(err,data)=>{if(finished)return;finished=true;clearTimeout(timer);script.remove();delete window[callback];err?reject(err):resolve(data)};
    const timer=setTimeout(()=>finish(Error('응답 시간 초과')),25000);
    window[callback]=data=>finish(null,data);
-   script.src=WX_BACKEND_URL+'?'+new URLSearchParams({...params,callback}).toString();
+   script.src=(params.action==='advisorysearch'?TOKYO_VAAC_BACKEND_URL:WX_BACKEND_URL)+'?'+new URLSearchParams({...params,callback}).toString();
    script.onerror=()=>finish(Error('GAS 연결 실패'));document.head.appendChild(script);
  });}
  // V20: preserve raw pilot report, decode only explicitly reported fields.
