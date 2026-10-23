@@ -10669,20 +10669,21 @@ createNoaaModelControl().addTo(map);
     }
     return lines.join(' | ');
   }
-  // Alaska AIRMET/CWA use confirmed expiry when available.
-  // G-AIRMET follows the latest successful NOAA response inventory without 3-hour forced expiry.
+  // G-AIRMET is a forecast snapshot: display only from validTime through the
+  // following three-hour forecast period. Other advisory expiry rules unchanged.
+  const GAIRMET_SNAPSHOT_MS=3*60*60*1000;
   function advisoryExpiryUtc(kind,p){
     if(kind==='airmet')return p.bulletinValidTimeTo||'';
     if(kind==='cwa')return p.validTimeTo||p.validTo||p.expireTime||p.expirationTime||'';
-    // G-AIRMET GeoJSON's validTime is a forecast snapshot, not a hard expiry.
-    // NOAA's refreshed response inventory is authoritative for this layer;
-    // do not expire all geometries when its latest snapshot is delayed.
-    if(kind==='gairmet')return '';
     return '';
   }
   function advisoryTiming(kind,p){
-    const start=kind==='airmet'?p.bulletinValidTimeFrom:
-      kind==='gairmet'?p.validTime:(p.validTimeFrom||p.validTime);
+    if(kind==='gairmet'){
+      const validText=String(p.validTime||'');
+      const validMs=validText?Date.parse(validText):NaN;
+      return {startMs:validMs,expiryMs:Number.isFinite(validMs)?validMs+GAIRMET_SNAPSHOT_MS:NaN};
+    }
+    const start=kind==='airmet'?p.bulletinValidTimeFrom:(p.validTimeFrom||p.validTime);
     const startMs=Date.parse(String(start||''));
     const expiry=Date.parse(String(advisoryExpiryUtc(kind,p)||''));
     return {startMs,expiryMs:expiry};
@@ -10800,17 +10801,25 @@ createNoaaModelControl().addTo(map);
         if(!response.ok)throw Error(response.error||'NOAA error');
         wxResponses['adv_'+kind]=response;
         let count=0,unknown=0;
+        const gairmetFiltered={past:0,future:0,invalidTime:0,altitude:0,geometry:0};
+        const renderNow=Date.now();
         (response.items||[]).forEach(feature=>{
           const p=feature.properties||{},top=advisoryTopFt(p);
           const timing=advisoryTiming(kind,p);
-          // Show G-AIRMET polygons returned by NOAA's latest successful response.
-          // Do not discard the whole layer on a snapshot-clock mismatch.
-          // An available, authoritative expiry always overrides cached GeoJSON.
-          if(Number.isFinite(timing.expiryMs)&&timing.expiryMs<=Date.now())return;
-          if(top===null){unknown++;if(threshold>0)return;}
-          else if(top<threshold)return;
+          // Forecast validity uses UTC instants, not issueTime/receiptTime.
+          // Older or future snapshots may still be included in a fresh NOAA API response.
+          if(kind==='gairmet'){
+            if(!Number.isFinite(timing.startMs)){gairmetFiltered.invalidTime++;return;}
+            if(timing.startMs>renderNow){gairmetFiltered.future++;return;}
+            if(renderNow>=timing.expiryMs){gairmetFiltered.past++;return;}
+          }else if(Number.isFinite(timing.expiryMs)&&timing.expiryMs<=renderNow)return;
+          if(top===null){unknown++;if(threshold>0){if(kind==='gairmet')gairmetFiltered.altitude++;return;}}
+          else if(top<threshold){if(kind==='gairmet')gairmetFiltered.altitude++;return;}
           const geom=feature.geometry;
-          if(!geom||!['Polygon','MultiPolygon'].includes(geom.type))return;
+          if(!geom||!['Polygon','MultiPolygon'].includes(geom.type)){
+            if(kind==='gairmet')gairmetFiltered.geometry++;
+            return;
+          }
           const color=advisoryHazardColor(p);
           try{
             const g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(geom),properties:{}},{style:{color,weight:2,fillColor:color,fillOpacity:.14}});
@@ -10844,7 +10853,7 @@ createNoaaModelControl().addTo(map);
         if(kind==='gairmet'){
           const features=response.items||[];
           const times=[...new Set(features.map(f=>String((f.properties||{}).validTime||'missing')))];
-          console.info('[Advisory] G-AIRMET NOAA items:',features.length,'drawn:',count,'snapshot times:',times.join(', '));
+          console.info('[Advisory] G-AIRMET NOAA items:',features.length,'drawn:',count,'filtered:',gairmetFiltered,'snapshot times:',times.join(', '),'UTC:',new Date(renderNow).toISOString());
         }
       }catch(e){errors.push(kind.toUpperCase()+': '+String(e.message||e));}
     }));
