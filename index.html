@@ -10625,8 +10625,8 @@ createNoaaModelControl().addTo(map);
     const phenomenon=advisoryHazardLabel(kind,p);
     const baseFt=advisoryAltitudeFt(p.base,'base');
     const toFl=ft=>'FL'+String(Math.round(ft/100)).padStart(3,'0');
-    const begin=p.validTimeFrom||p.validTime||p.forecastValidTime||p.forecastTime||'';
-    const end=p.validTimeTo||'';
+    const begin=(kind==='airmet'&&p.bulletinValidTimeFrom)||p.validTimeFrom||p.validTime||p.forecastValidTime||p.forecastTime||'';
+    const end=(kind==='airmet'&&p.bulletinValidTimeTo)||p.validTimeTo||'';
     const beginFormatted=advisoryUtc(begin);
     const endFormatted=advisoryUtc(end);
     const timeText=beginFormatted&&endFormatted?
@@ -10645,9 +10645,9 @@ createNoaaModelControl().addTo(map);
     if(baseFt!==null)line('Base',toFl(baseFt),'#1d4ed8');
     else if(freezingBase)line('Base',freezingBase,'#1d4ed8');
     if(top!==null)line('Top',toFl(top),'#1d4ed8');
-    line('Valid Time',timeText);
+    line(kind==='airmet'&&!p.bulletinValidTimeFrom?'Valid Time (NOAA metadata)':'Valid Time',timeText);
     let expiry='';
-    const endMs=Date.parse(String(end||''));
+    const endMs=Date.parse(String(kind==='airmet'&&!p.bulletinValidTimeTo?'':end||''));
     if(Number.isFinite(endMs)){
       const remain=endMs-Date.now();
       if(remain>0){
