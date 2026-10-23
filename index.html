@@ -10694,6 +10694,19 @@ createNoaaModelControl().addTo(map);
     const expiry=Date.parse(String(advisoryExpiryUtc(kind,p)||''));
     return {startMs,expiryMs:expiry};
   }
+  function advisoryGairmetOriginalFields(p){
+    // G-AIRMET has no NOAA raw text API format. Show unchanged provider fields,
+    // explicitly labeled as data fields rather than a fictitious bulletin.
+    const fields=['product','hazard','tag','issueTime','validTime','forecast',
+      'severity','base','top','fzlbase','fzltop','level','dueTo'];
+    const obj={};
+    for(const k of fields){if(p[k]!==undefined && p[k]!==null && p[k]!=='')obj[k]=p[k];}
+    if(!Object.keys(obj).length)return '';
+    return '<div style="margin-top:7px;border-top:1px solid #94a3b855;padding-top:6px">'+
+      '<div style="font-weight:800">NOAA Original Data</div>'+
+      '<div style="margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere">'+
+      advisoryEscape(JSON.stringify(obj,null,2))+'</div></div>';
+  }
   function advisoryPopup(kind,p,top,hideTitle=false){
     const sourceText=advisorySourceText(p);
     const detailText=advisoryDetailedText(p);
@@ -10743,7 +10756,8 @@ createNoaaModelControl().addTo(map);
     return '<div class="wx-sigmet-popup" style="max-width:330px;overflow-wrap:anywhere;font:11px/1.45 Arial,sans-serif">'+
       (hideTitle?'':'<div class="wx-pop-head">'+advisoryEscape(kindLabel+' · '+phenomenon)+'</div>')+
       '<div style="margin-top:5px">'+details.join('')+'</div>'+
-      (kind==='cwa'?sourceHtml:'')+'</div>';
+      (kind==='cwa'||kind==='airmet'?sourceHtml:'')+
+      (kind==='gairmet'?advisoryGairmetOriginalFields(p):'')+'</div>';
   }
   // When advisory polygons overlap, show all advisories under the clicked point,
   // like the selectable multi-report popup used by PIREP/AIREP.
