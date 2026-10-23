@@ -10435,7 +10435,7 @@ createNoaaModelControl().addTo(map);
   <div class="wx-mobile-status" aria-live="polite">조회할 자료를 선택하세요.</div><div class="wx-undrawn" style="display:none;max-height:135px;overflow:auto;color:#fde68a;font:10px/1.45 Arial;margin-top:5px;white-space:pre-wrap"></div>
 </section>`;
   const $=s=>el.querySelector(s), panel=$('.wx-panel'), chkP=$('.wx-pirep'),chkS=$('.wx-sigmet'),filter=$('.wx-filter'),sf=$('.wx-sig-filter'),mobileStatus=$('.wx-mobile-status'),chkA=$('.wx-advisory'),advFl=$('.wx-advisory-fl'),advStatus=$('.wx-advisory-status');
-  function stamps(){let now=Date.now();$('.wx-report-range').textContent=utc(now-3600000)+' ~\n'+utc(now);$('.wx-sigmet-time').textContent='현재 유효 · '+utc(now);}
+  function stamps(){const now=Date.now(),report=$('.wx-report-range'),sigmet=$('.wx-sigmet-time');if(report)report.textContent=utc(now-3600000)+' ~\n'+utc(now);if(sigmet)sigmet.textContent='현재 유효 · '+utc(now);}
   stamps();setInterval(stamps,60000);
   // V44: On mobile, the ON button opens/closes settings without changing the data layers.
   // Desktop retains the existing ON/OFF behavior.
