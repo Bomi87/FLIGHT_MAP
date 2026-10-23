@@ -10586,16 +10586,49 @@ createNoaaModelControl().addTo(map);
     const other=String(p.severity||p.qualifier||'').trim().toUpperCase();
     return (other?other+' ':'')+hazard;
   }
-  function advisoryPopup(kind,p,top){
-    const raw=String(p.rawSigmet||p.rawAirmet||p.rawAirSigmet||p.rawCwa||p.rawText||p.raw||p.text||'').trim();
+  function advisoryDetailLine(label,value,style){
+    const text=String(value==null?'':value).trim();
+    if(!text||text==='null'||text==='undefined'||text==='[object Object]')return '';
+    return '<div style="margin-top:3px;'+(style||'')+'">'+
+      (label?'<span style="font-weight:800">'+advisoryEscape(label)+': </span>':'')+
+      advisoryEscape(text)+'</div>';
+  }
+  function advisoryBaseDescription(p){
+    // NOAA G-AIRMET base sometimes describes the freezing level rather than a flight level.
+    // Example: "Freezing level 14000/12000". Never discard or reinterpret it as FL.
+    for(const k of ['base','baseAltitude','lowerAltitude','freezingLevel','freezingLevelBase']){
+      const v=p[k];
+      if(typeof v==='string'&&/freez(?:ing)?\s*(?:level|lvl)|\bFZL\b/i.test(v))return v.trim();
+    }
+    return '';
+  }
+  function advisorySupplementaryText(p){
+    // Only show actual descriptive NOAA fields; never manufacture forecast wording.
+    for(const k of ['rawSigmet','rawAirmet','rawAirSigmet','rawCwa','rawText','raw','text','description','remarks','remark','message','forecastText']){
+      const v=p[k];
+      if(typeof v==='string'&&v.trim())return v.trim();
+    }
+    return '';
+  }
+  function advisoryPopup(kind,p,top,hideTitle=false){
+    const raw=advisorySupplementaryText(p);
     const hazard=String(p.hazard||p.product||p.airmetType||'ADVISORY').trim().toUpperCase();
-    // NOAA tag (e.g. 2E) is an internal identifier, not a displayed location.
     const place=String(p.zone||p.firName||p.region||'').trim();
     const kindLabel=kind==='gairmet'?'G-AIRMET':kind.toUpperCase();
-    const isIFR=/^IFR$/.test(hazard);
-    const title=kindLabel+' · '+(isIFR?'IFR CONDITIONS':advisoryHazardLabel(kind,p))+(place?' — '+place:'');
-    const begin=p.validTimeFrom||p.validTime||'';
-    const end=p.validTimeTo||'';
+    const isIFR=hazard==='IFR';
+    const phenomenon=advisoryHazardLabel(kind,p);
+    // Keep hazard in the main detail row. The title identifies advisory and region.
+    const title=kindLabel+' · '+(isIFR?'IFR CONDITIONS':phenomenon)+(place?' — '+place:'');
+    let begin=p.validTimeFrom||p.validTime||'';
+    let end=p.validTimeTo||'';
+    if(kind==='gairmet'){
+      const forecastStart=p.validTime||p.forecastValidTime||p.forecastTime||p.validTimeFrom||'';
+      const startMs=Date.parse(String(forecastStart));
+      if(Number.isFinite(startMs)){
+        begin=new Date(startMs).toISOString();
+        end=new Date(startMs+3*60*60*1000-60*1000).toISOString();
+      }
+    }
     const timeLabel=end?'VALID UTC':'FORECAST VALID UTC';
     const timeText=end&&begin?(advisoryUtc(begin)+' – '+advisoryUtc(end)):(advisoryUtc(begin)||'미확인');
     let expiry='';
@@ -10610,26 +10643,25 @@ createNoaaModelControl().addTo(map);
     const base=advisoryAltitudeFt(p.base,'base');
     const flLabel=ft=>'FL'+String(Math.round(ft/100)).padStart(3,'0');
     const levelText=base!==null&&top!==null?(flLabel(base)+'/'+flLabel(top)):(top!==null?'TOP '+flLabel(top):'');
-    const phenomenon=advisoryHazardLabel(kind,p);
-    let explanation='';
+    const phenomenonDisplay=hazard==='MT-OBSC'?'MOUNTAIN OBSCURATION':
+      hazard==='SFC-WIND'?'STRONG SURFACE WINDS':isIFR?'IFR CONDITIONS EXPECTED':phenomenon;
+    let explanation='<div><span style="color:#dc2626;font-weight:900">'+advisoryEscape(phenomenonDisplay)+'</span>'+
+      (levelText?' <span style="color:#1d4ed8;font-weight:900">'+advisoryEscape(levelText)+'</span>':'')+'</div>';
+    const freezingBase=advisoryBaseDescription(p);
+    if(freezingBase)explanation+=advisoryDetailLine('BASE',freezingBase,'color:#1d4ed8');
     if(raw){
-      const inferred=advisoryTurbSeverity(kind,p);
-      const explicitRaw=/\b(?:LGT|LIGHT|MOD|MODERATE|SEV|SEVERE|EXTRM|EXTREME)\s+(?:TURB(?:ULENCE)?|CAT)\b/i.test(raw);
-      explanation=(inferred&&!explicitRaw?'<div style="color:#dc2626;font-weight:900">'+advisoryEscape(inferred+' TURB')+'</div>':'')+
-        '<div style="white-space:normal">'+advisoryMarkedText(raw)+'</div>';
+      // Avoid repeating a short text that contains only the phenomenon already shown.
+      const norm=v=>String(v).toUpperCase().replace(/[^A-Z0-9]/g,'');
+      if(norm(raw)!==norm(phenomenonDisplay)&&norm(raw)!==norm(phenomenon)){
+        explanation+='<div style="margin-top:4px;white-space:normal">'+advisoryMarkedText(raw)+'</div>';
+      }
     }else if(isIFR){
-      explanation='<div style="color:#dc2626;font-weight:900">IFR CONDITIONS EXPECTED</div>'+
-        '<div>Ceiling below 1,000 ft AGL and/or Visibility below 3 SM</div>';
-    }else{
-      const phenomenonDisplay=hazard==='MT-OBSC'?'MOUNTAIN OBSCURATION':
-        hazard==='SFC-WIND'?'STRONG SURFACE WINDS':phenomenon;
-      explanation='<div><span style="color:#dc2626;font-weight:900">'+advisoryEscape(phenomenonDisplay)+'</span>'+
-        (levelText?' <span style="color:#1d4ed8;font-weight:900">'+advisoryEscape(levelText)+'</span>':'')+'</div>';
+      explanation+='<div>Ceiling below 1,000 ft AGL and/or Visibility below 3 SM</div>';
     }
-    // Render flight levels in the detail body only, not as repeated standalone metadata.
-    // IFR thresholds describe typical criteria, not measured values for this individual polygon.
+    // For MT-OBSC, only expose details explicitly available in the NOAA item.
+    // The raw report (when present) is already displayed above.
     return '<div class="wx-sigmet-popup" style="max-width:330px;overflow-wrap:anywhere;font:11px/1.5 Arial,sans-serif">'+
-      '<div class="wx-pop-head">'+advisoryEscape(title)+'</div>'+
+      (hideTitle?'':'<div class="wx-pop-head">'+advisoryEscape(title)+'</div>')+
       '<div style="border-top:1px solid #cbd5e1;padding-top:5px;margin-top:5px;font-size:10px;color:#475569">'+timeLabel+': '+advisoryEscape(timeText)+'</div>'+
       expiry+explanation+'</div>';
   }
@@ -10679,7 +10711,7 @@ createNoaaModelControl().addTo(map);
       const html=choices.length===1?choices[0].detail:
         '<div class="wx-advisory-group wx-pirep-group">'+
         '<div class="wx-group-header">'+choices.length+' AIRMET / CWA · 이 위치의 기상정보</div>'+
-        choices.map(entry=>'<details><summary>'+advisoryEscape(entry.label)+'</summary>'+entry.detail+'</details>').join('')+
+        choices.map(entry=>'<details><summary>'+advisoryEscape(entry.label)+'</summary>'+entry.detailNoTitle+'</details>').join('')+
         '</div>';
       L.popup({maxWidth:390,maxHeight:490,autoPan:true})
         .setLatLng(event.latlng).setContent(html).openOn(map);
@@ -10712,17 +10744,18 @@ createNoaaModelControl().addTo(map);
           try{
             const g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(geom),properties:{}},{style:{color,weight:2,fillColor:color,fillOpacity:.14}});
             const detail=advisoryPopup(kind,p,top);
+            const detailNoTitle=advisoryPopup(kind,p,top,true);
             const hazardName=String(p.hazard||p.product||p.airmetType||'ADVISORY').toUpperCase();
             const loc=String(p.zone||p.firName||p.region||'').trim();
             const label=(kind==='gairmet'?'G-AIRMET':kind.toUpperCase())+' · '+
               (hazardName==='IFR'?'IFR CONDITIONS':advisoryHazardLabel(kind,p))+
               (loc?' — '+loc:'')+
-              (top!==null?' · TOP FL'+String(Math.round(top/100)).padStart(3,'0'):'');
+              ''; // No repeated TOP in the overlap summary; details contain full altitude.
             const key=kind+'|'+String(p.tag||p.seriesId||p.zone||'')+'|'+
               String(p.validTime||p.validTimeFrom||'')+'|'+
               String(p.hazard||'')+'|'+JSON.stringify(geom.coordinates);
             g.eachLayer(shape=>{
-              const entry={layer:shape,key,label,detail};
+              const entry={layer:shape,key,label,detail,detailNoTitle};
               hitLayers.push(entry);
               // A built-in fallback popup avoids a blank click on any overlap error.
               shape.bindPopup(detail,{maxWidth:390});
