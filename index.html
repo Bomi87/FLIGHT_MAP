@@ -10845,8 +10845,8 @@ createNoaaModelControl().addTo(map);
     }));
     if(id!==aSeq||!chkA.checked)return;
     advisoryLayer.clearLayers();advisoryHitLayers=hitLayers;advisoryExpiryGroups=expiryGroups;layer.eachLayer(g=>advisoryLayer.addLayer(g));advisoryLayer.addTo(map);pruneExpiredAdvisories();
-    if(advStatus)advStatus.textContent='';
-    console.info('[Advisory] displayed:',stats.join(' · '),'selected:',selected.join(','),'minFL:',advFl.value);
+    if(advStatus)advStatus.textContent=errors.length ? 'AIRMET/CWA 조회 오류 · Console 확인' : '';
+    console.info('[Advisory] displayed:',stats.join(' · '),'selected:',selected.join(','),'minFL:',advFl.value,'UTC:',new Date().toISOString());
     if(errors.length)console.error('[Advisory] fetch errors:',errors.join(' · '));
   }
   async function draw(part='all'){
