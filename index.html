@@ -10589,32 +10589,57 @@ createNoaaModelControl().addTo(map);
   // When advisory polygons overlap, show all advisories under the clicked point,
   // like the selectable multi-report popup used by PIREP/AIREP.
   let advisoryHitLayers=[];
-  function advisoryPolygonContains(layer, latlng){
-    // Leaflet checks the actual rendered polygon, including holes and map wrapping.
-    if(!layer || typeof layer._containsPoint!=='function')return false;
-    const point=map.latLngToLayerPoint(latlng);
-    for(const dx of [0,-360,360]){
-      const candidate=dx===0?point:map.latLngToLayerPoint(L.latLng(latlng.lat,latlng.lng+dx));
-      if(layer._containsPoint(candidate))return true;
-    }
-    return false;
-  }
-  function showAdvisoryChoices(event){
-    const hit=advisoryHitLayers.filter(entry=>advisoryPolygonContains(entry.layer,event.latlng));
-    if(!hit.length)return;
-    // One popup for every click, rather than whichever overlapping polygon is on top.
-    const seen=new Set();
-    const choices=hit.filter(entry=>{
-      if(seen.has(entry.key))return false;
-      seen.add(entry.key);return true;
+  // Reliable point-in-polygon check independent of Leaflet private renderer methods.
+  // The longitude is unwrapped around the click point for polygons crossing 180E/W.
+  function advisoryRingContains(ring, latlng){
+    if(!Array.isArray(ring)||ring.length<3)return false;
+    const lat=latlng.lat, lng=latlng.lng;
+    const pts=ring.map(pt=>{
+      const la=Array.isArray(pt)?pt[0]:pt.lat;
+      let lo=Array.isArray(pt)?pt[1]:pt.lng;
+      lo+=360*Math.round((lng-lo)/360);
+      return [la,lo];
     });
-    const html=choices.length===1?choices[0].detail:
-      '<div class="wx-advisory-group wx-pirep-group">'+
-      '<div class="wx-group-header">'+choices.length+' AIRMET / CWA · 이 위치의 기상정보</div>'+
-      choices.map((entry,i)=>'<details'+(i===0?'':'')+'><summary>'+advisoryEscape(entry.label)+'</summary>'+entry.detail+'</details>').join('')+
-      '</div>';
-    L.popup({maxWidth:390,maxHeight:490,autoPan:true})
-      .setLatLng(event.latlng).setContent(html).openOn(map);
+    let inside=false;
+    for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+      const a=pts[i],b=pts[j];
+      if((a[0]>lat)!==(b[0]>lat) &&
+         lng<(b[1]-a[1])*(lat-a[0])/(b[0]-a[0])+a[1])inside=!inside;
+    }
+    return inside;
+  }
+  function advisoryPolygonContains(layer, latlng){
+    if(!layer||typeof layer.getLatLngs!=='function')return false;
+    const rings=layer.getLatLngs();
+    if(!rings.length)return false;
+    const polygons=Array.isArray(rings[0])&&rings[0][0]&&
+      typeof rings[0][0].lat==='number'?[rings]:rings;
+    return polygons.some(poly=>{
+      if(!Array.isArray(poly)||!poly.length||!advisoryRingContains(poly[0],latlng))return false;
+      return !poly.slice(1).some(hole=>advisoryRingContains(hole,latlng));
+    });
+  }
+  function showAdvisoryChoices(event,clicked){
+    try{
+      const hit=advisoryHitLayers.filter(entry=>advisoryPolygonContains(entry.layer,event.latlng));
+      if(clicked&&!hit.includes(clicked))hit.unshift(clicked);
+      if(!hit.length)return;
+      const seen=new Set();
+      const choices=hit.filter(entry=>{
+        if(seen.has(entry.key))return false;
+        seen.add(entry.key);return true;
+      });
+      const html=choices.length===1?choices[0].detail:
+        '<div class="wx-advisory-group wx-pirep-group">'+
+        '<div class="wx-group-header">'+choices.length+' AIRMET / CWA · 이 위치의 기상정보</div>'+
+        choices.map(entry=>'<details><summary>'+advisoryEscape(entry.label)+'</summary>'+entry.detail+'</details>').join('')+
+        '</div>';
+      L.popup({maxWidth:390,maxHeight:490,autoPan:true})
+        .setLatLng(event.latlng).setContent(html).openOn(map);
+    }catch(err){
+      console.error('[Advisory] click error',err);
+      if(clicked)L.popup({maxWidth:390}).setLatLng(event.latlng).setContent(clicked.detail).openOn(map);
+    }
   }
   async function drawAdvisories(useCache=false){
     const id=++aSeq;
@@ -10648,10 +10673,13 @@ createNoaaModelControl().addTo(map);
               String(p.validTime||p.validTimeFrom||'')+'|'+
               String(p.hazard||'')+'|'+JSON.stringify(geom.coordinates);
             g.eachLayer(shape=>{
-              hitLayers.push({layer:shape,key,label,detail});
+              const entry={layer:shape,key,label,detail};
+              hitLayers.push(entry);
+              // A built-in fallback popup avoids a blank click on any overlap error.
+              shape.bindPopup(detail,{maxWidth:390});
               shape.on('click',e=>{
-                L.DomEvent.stopPropagation(e);
-                showAdvisoryChoices(e);
+                if(e.originalEvent)L.DomEvent.stopPropagation(e.originalEvent);
+                showAdvisoryChoices(e,entry);
               });
             });
             g.addTo(layer);count++;
@@ -10663,7 +10691,8 @@ createNoaaModelControl().addTo(map);
     if(id!==aSeq||!chkA.checked)return;
     advisoryLayer.clearLayers();advisoryHitLayers=hitLayers;layer.eachLayer(g=>advisoryLayer.addLayer(g));advisoryLayer.addTo(map);
     advStatus.textContent='';
-    if(errors.length)console.warn('Advisory fetch:',errors.join(' · '));
+    console.info('[Advisory] displayed:',stats.join(' · '),'selected:',selected.join(','),'minFL:',advFl.value);
+    if(errors.length)console.error('[Advisory] fetch errors:',errors.join(' · '));
   }
   async function draw(part='all'){
    if(!chkP.checked){++pSeq;pirepLayer.clearLayers();map.removeLayer(pirepLayer)}
