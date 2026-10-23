@@ -10587,12 +10587,44 @@ createNoaaModelControl().addTo(map);
          (String(p.airmetType||'').toUpperCase()==='AIRMET'&&/^(TURB(?:ULENCE)?(?:-HI|-LO)?|CAT)$/.test(hazard)))))return 'MOD';
     return '';
   }
+  // Human-readable display labels only: preserve NOAA hazard codes for filtering,
+  // color selection, and geometry processing. Never rewrite original Source Text.
+  function advisoryReadableHazard(code){
+    const raw=String(code||'').trim().toUpperCase().replace(/[\s_]+/g,'_');
+    const names={
+      'M_FZLVL':'Multiple Freezing Levels',
+      'FZLVL':'Freezing Level',
+      'MT_OBSC':'Mountain Obscuration',
+      'MT-OBSC':'Mountain Obscuration',
+      'SFC_WND':'Strong Surface Winds',
+      'SFC-WIND':'Strong Surface Winds',
+      'SFC_WIND':'Strong Surface Winds',
+      'TURB-HI':'High-Altitude Turbulence',
+      'TURB-LO':'Low-Altitude Turbulence',
+      'TURB':'Turbulence',
+      'TURBULENCE':'Turbulence',
+      'ICE':'Icing',
+      'ICING':'Icing',
+      'IFR':'IFR Conditions',
+      'LLWS':'Low-Level Wind Shear',
+      'CAT':'Clear-Air Turbulence',
+      'MTW':'Mountain Wave Turbulence',
+      'TS':'Thunderstorms',
+      'TSRA':'Thunderstorms with Rain',
+      'SFC-WIND':'Strong Surface Winds'
+    };
+    return names[raw]||String(code||'ADVISORY').replace(/_/g,' ');
+  }
+  function advisoryReadableSeverity(code){
+    const names={LGT:'Light',MOD:'Moderate',SEV:'Severe',EXTRM:'Extreme',
+      LIGHT:'Light',MODERATE:'Moderate',SEVERE:'Severe',EXTREME:'Extreme'};
+    return names[String(code||'').trim().toUpperCase()]||String(code||'').trim();
+  }
   function advisoryHazardLabel(kind,p){
     const hazard=String(p.hazard||p.product||p.airmetType||'ADVISORY').trim().toUpperCase();
-    const severity=advisoryTurbSeverity(kind,p);
-    if(severity)return severity+' '+hazard;
-    const other=String(p.severity||p.qualifier||'').trim().toUpperCase();
-    return (other?other+' ':'')+hazard;
+    const severity=advisoryTurbSeverity(kind,p)||String(p.severity||p.qualifier||'').trim();
+    const label=advisoryReadableHazard(hazard);
+    return severity?advisoryReadableSeverity(severity)+' '+label:label;
   }
   function advisoryDetailLine(label,value,style){
     const text=String(value==null?'':value).trim();
