@@ -10644,7 +10644,7 @@ createNoaaModelControl().addTo(map);
   async function drawAdvisories(useCache=false){
     const id=++aSeq;
     if(!chkA.checked){advisoryHitLayers=[];advisoryLayer.clearLayers();map.removeLayer(advisoryLayer);return;}
-    advStatus.textContent='';
+    if(advStatus)advStatus.textContent='';
     const selected=advisoryTypes.filter(k=>$('.wx-'+k).checked);
     const threshold=Number(advFl.value)*100;
     const layer=L.layerGroup(),stats=[],errors=[],hitLayers=[];
@@ -10690,13 +10690,13 @@ createNoaaModelControl().addTo(map);
     }));
     if(id!==aSeq||!chkA.checked)return;
     advisoryLayer.clearLayers();advisoryHitLayers=hitLayers;layer.eachLayer(g=>advisoryLayer.addLayer(g));advisoryLayer.addTo(map);
-    advStatus.textContent='';
+    if(advStatus)advStatus.textContent='';
     console.info('[Advisory] displayed:',stats.join(' · '),'selected:',selected.join(','),'minFL:',advFl.value);
     if(errors.length)console.error('[Advisory] fetch errors:',errors.join(' · '));
   }
   async function draw(part='all'){
    if(!chkP.checked){++pSeq;pirepLayer.clearLayers();map.removeLayer(pirepLayer)}
-   if(!chkA.checked){++aSeq;advisoryHitLayers=[];advisoryLayer.clearLayers();map.removeLayer(advisoryLayer);advStatus.textContent=''}
+   if(!chkA.checked){++aSeq;advisoryHitLayers=[];advisoryLayer.clearLayers();map.removeLayer(advisoryLayer);if(advStatus)advStatus.textContent=''}
    if(!chkS.checked){++sSeq;sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;map.removeLayer(sigmetLayer)}
    if(!chkP.checked&&!chkS.checked&&!chkA.checked){mobileStatus.textContent='모두 OFF';return}
    mobileStatus.textContent='NOAA 데이터 조회 중…';const lines=[];
