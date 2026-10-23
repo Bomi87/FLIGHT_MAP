@@ -10618,6 +10618,24 @@ createNoaaModelControl().addTo(map);
     }
     return '';
   }
+  // Distinguish original AIRMET bulletin expiry, G-AIRMET 3-hour snapshot
+  // DISPLAY interval (not an official expiration), and individual CWA expiry.
+  function advisoryExpiryUtc(kind,p){
+    if(kind==='airmet')return p.bulletinValidTimeTo||'';
+    if(kind==='cwa')return p.validTimeTo||p.validTo||p.expireTime||p.expirationTime||'';
+    if(kind==='gairmet'){
+      const base=Date.parse(String(p.validTime||''));
+      return Number.isFinite(base)?new Date(base+3*3600000).toISOString():'';
+    }
+    return '';
+  }
+  function advisoryTiming(kind,p){
+    const start=kind==='airmet'?p.bulletinValidTimeFrom:
+      kind==='gairmet'?p.validTime:(p.validTimeFrom||p.validTime);
+    const startMs=Date.parse(String(start||''));
+    const expiry=Date.parse(String(advisoryExpiryUtc(kind,p)||''));
+    return {startMs,expiryMs:expiry};
+  }
   function advisoryPopup(kind,p,top,hideTitle=false){
     const raw=advisorySupplementaryText(p);
     const hazard=String(p.hazard||p.product||p.airmetType||'ADVISORY').trim().toUpperCase();
@@ -10625,13 +10643,6 @@ createNoaaModelControl().addTo(map);
     const phenomenon=advisoryHazardLabel(kind,p);
     const baseFt=advisoryAltitudeFt(p.base,'base');
     const toFl=ft=>'FL'+String(Math.round(ft/100)).padStart(3,'0');
-    const begin=kind==='airmet'?(p.bulletinValidTimeFrom||''):(p.validTimeFrom||p.validTime||p.forecastValidTime||p.forecastTime||'');
-    const end=kind==='airmet'?(p.bulletinValidTimeTo||''):(p.validTimeTo||'');
-    const beginFormatted=advisoryUtc(begin);
-    const endFormatted=advisoryUtc(end);
-    const timeText=beginFormatted&&endFormatted?
-      beginFormatted.replace(/ UTC$/,'')+' – '+endFormatted:
-      (beginFormatted||endFormatted||'미확인');
     const details=[];
     const line=(label,value,color)=>{
       if(value===null||value===undefined||String(value).trim()==='')return;
@@ -10645,18 +10656,6 @@ createNoaaModelControl().addTo(map);
     if(baseFt!==null)line('Base',toFl(baseFt),'#1d4ed8');
     else if(freezingBase)line('Base',freezingBase,'#1d4ed8');
     if(top!==null)line('Top',toFl(top),'#1d4ed8');
-    line('Valid Time',kind==='airmet'&&!p.bulletinValidTimeFrom?'원문 시간 미확인':timeText);
-    let expiry='';
-    const endMs=Date.parse(String(end||''));
-    if(Number.isFinite(endMs)){
-      const remain=endMs-Date.now();
-      if(remain>0){
-        const mins=Math.ceil(remain/60000);
-        const duration=mins<60?mins+'mins':Math.floor(mins/60)+'hr '+(mins%60)+'mins';
-        expiry='<div style="font-size:11px;line-height:1.35;font-weight:800;margin:2px 0 0;color:'+
-          (mins<=5?'#dc2626':'#334155')+'">'+(mins<=5?'⚠ ':'')+'EXPIRES IN '+duration+'</div>';
-      }else expiry='<div style="font-size:11px;line-height:1.35;font-weight:800;margin:2px 0 0;color:#dc2626">EXPIRED</div>';
-    }
     let extra='';
     if(raw){
       const norm=v=>String(v).toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -10665,11 +10664,25 @@ createNoaaModelControl().addTo(map);
     }
     return '<div class="wx-sigmet-popup" style="max-width:330px;overflow-wrap:anywhere;font:11px/1.45 Arial,sans-serif">'+
       (hideTitle?'':'<div class="wx-pop-head">'+advisoryEscape(kindLabel+' · '+phenomenon)+'</div>')+
-      '<div style="margin-top:5px">'+details.join('')+expiry+extra+'</div></div>';
+      '<div style="margin-top:5px">'+details.join('')+extra+'</div></div>';
   }
   // When advisory polygons overlap, show all advisories under the clicked point,
   // like the selectable multi-report popup used by PIREP/AIREP.
   let advisoryHitLayers=[];
+  let advisoryExpiryGroups=[];
+  // Remove already-rendered advisory polygons without waiting for a manual refresh.
+  function pruneExpiredAdvisories(){
+    const now=Date.now();
+    for(let i=advisoryExpiryGroups.length-1;i>=0;i--){
+      const entry=advisoryExpiryGroups[i];
+      if(entry.expiryMs>now)continue;
+      advisoryLayer.removeLayer(entry.group);
+      const shapes=new Set(entry.group.getLayers());
+      advisoryHitLayers=advisoryHitLayers.filter(hit=>!shapes.has(hit.layer));
+      advisoryExpiryGroups.splice(i,1);
+    }
+  }
+  setInterval(pruneExpiredAdvisories,15000);
   // Reliable point-in-polygon check independent of Leaflet private renderer methods.
   // The longitude is unwrapped around the click point for polygons crossing 180E/W.
   function advisoryRingContains(ring, latlng){
@@ -10724,11 +10737,11 @@ createNoaaModelControl().addTo(map);
   }
   async function drawAdvisories(useCache=false){
     const id=++aSeq;
-    if(!chkA.checked){advisoryHitLayers=[];advisoryLayer.clearLayers();map.removeLayer(advisoryLayer);return;}
+    if(!chkA.checked){advisoryHitLayers=[];advisoryExpiryGroups=[];advisoryLayer.clearLayers();map.removeLayer(advisoryLayer);return;}
     if(advStatus)advStatus.textContent='';
     const selected=advisoryTypes.filter(k=>$('.wx-'+k).checked);
     const threshold=Number(advFl.value)*100;
-    const layer=L.layerGroup(),stats=[],errors=[],hitLayers=[];
+    const layer=L.layerGroup(),stats=[],errors=[],hitLayers=[],expiryGroups=[];
     await Promise.all(selected.map(async kind=>{
       try{
         const response=(useCache&&wxResponses['adv_'+kind])||await jsonp({action:'advisorysearch',kind});
@@ -10738,12 +10751,11 @@ createNoaaModelControl().addTo(map);
         let count=0,unknown=0;
         (response.items||[]).forEach(feature=>{
           const p=feature.properties||{},top=advisoryTopFt(p);
-          // Never plot already expired CWA/AIRMET advisories. G-AIRMET validTime
-          // represents a forecast snapshot, not a bulletin expiry.
-          const authoritativeEnd=kind==='airmet'?p.bulletinValidTimeTo:
-            kind==='cwa'?(p.validTimeTo||p.validTo||p.expireTime||p.expirationTime):null;
-          const authoritativeEndMs=Date.parse(String(authoritativeEnd||''));
-          if(Number.isFinite(authoritativeEndMs)&&authoritativeEndMs<=Date.now())return;
+          const timing=advisoryTiming(kind,p);
+          // Only currently effective G-AIRMET snapshot polygons, never stale/future.
+          if(kind==='gairmet'&&(!Number.isFinite(timing.startMs)||timing.startMs>Date.now()))return;
+          // An available, authoritative expiry always overrides cached GeoJSON.
+          if(Number.isFinite(timing.expiryMs)&&timing.expiryMs<=Date.now())return;
           if(top===null){unknown++;if(threshold>0)return;}
           else if(top<threshold)return;
           const geom=feature.geometry;
@@ -10772,21 +10784,23 @@ createNoaaModelControl().addTo(map);
                 showAdvisoryChoices(e,entry);
               });
             });
-            g.addTo(layer);count++;
+            g.addTo(layer);
+            if(Number.isFinite(timing.expiryMs))expiryGroups.push({group:g,expiryMs:timing.expiryMs});
+            count++;
           }catch(e){console.warn('Advisory polygon',kind,e)}
         });
         stats.push(kind.toUpperCase()+' '+count+'건'+(unknown?' (고도 미확인 '+unknown+')':''));
       }catch(e){errors.push(kind.toUpperCase()+': '+String(e.message||e));}
     }));
     if(id!==aSeq||!chkA.checked)return;
-    advisoryLayer.clearLayers();advisoryHitLayers=hitLayers;layer.eachLayer(g=>advisoryLayer.addLayer(g));advisoryLayer.addTo(map);
+    advisoryLayer.clearLayers();advisoryHitLayers=hitLayers;advisoryExpiryGroups=expiryGroups;layer.eachLayer(g=>advisoryLayer.addLayer(g));advisoryLayer.addTo(map);pruneExpiredAdvisories();
     if(advStatus)advStatus.textContent='';
     console.info('[Advisory] displayed:',stats.join(' · '),'selected:',selected.join(','),'minFL:',advFl.value);
     if(errors.length)console.error('[Advisory] fetch errors:',errors.join(' · '));
   }
   async function draw(part='all'){
    if(!chkP.checked){++pSeq;pirepLayer.clearLayers();map.removeLayer(pirepLayer)}
-   if(!chkA.checked){++aSeq;advisoryHitLayers=[];advisoryLayer.clearLayers();map.removeLayer(advisoryLayer);if(advStatus)advStatus.textContent=''}
+   if(!chkA.checked){++aSeq;advisoryHitLayers=[];advisoryExpiryGroups=[];advisoryLayer.clearLayers();map.removeLayer(advisoryLayer);if(advStatus)advStatus.textContent=''}
    if(!chkS.checked){++sSeq;sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;map.removeLayer(sigmetLayer)}
    if(!chkP.checked&&!chkS.checked&&!chkA.checked){mobileStatus.textContent='모두 OFF';return}
    mobileStatus.textContent='NOAA 데이터 조회 중…';const lines=[];
