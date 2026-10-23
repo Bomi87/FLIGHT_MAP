@@ -10625,8 +10625,8 @@ createNoaaModelControl().addTo(map);
     const phenomenon=advisoryHazardLabel(kind,p);
     const baseFt=advisoryAltitudeFt(p.base,'base');
     const toFl=ft=>'FL'+String(Math.round(ft/100)).padStart(3,'0');
-    const begin=(kind==='airmet'&&p.bulletinValidTimeFrom)||p.validTimeFrom||p.validTime||p.forecastValidTime||p.forecastTime||'';
-    const end=(kind==='airmet'&&p.bulletinValidTimeTo)||p.validTimeTo||'';
+    const begin=kind==='airmet'?(p.bulletinValidTimeFrom||''):(p.validTimeFrom||p.validTime||p.forecastValidTime||p.forecastTime||'');
+    const end=kind==='airmet'?(p.bulletinValidTimeTo||''):(p.validTimeTo||'');
     const beginFormatted=advisoryUtc(begin);
     const endFormatted=advisoryUtc(end);
     const timeText=beginFormatted&&endFormatted?
@@ -10645,9 +10645,9 @@ createNoaaModelControl().addTo(map);
     if(baseFt!==null)line('Base',toFl(baseFt),'#1d4ed8');
     else if(freezingBase)line('Base',freezingBase,'#1d4ed8');
     if(top!==null)line('Top',toFl(top),'#1d4ed8');
-    line(kind==='airmet'&&!p.bulletinValidTimeFrom?'Valid Time (NOAA metadata)':'Valid Time',timeText);
+    line('Valid Time',kind==='airmet'&&!p.bulletinValidTimeFrom?'원문 시간 미확인':timeText);
     let expiry='';
-    const endMs=Date.parse(String(kind==='airmet'&&!p.bulletinValidTimeTo?'':end||''));
+    const endMs=Date.parse(String(end||''));
     if(Number.isFinite(endMs)){
       const remain=endMs-Date.now();
       if(remain>0){
@@ -10738,6 +10738,12 @@ createNoaaModelControl().addTo(map);
         let count=0,unknown=0;
         (response.items||[]).forEach(feature=>{
           const p=feature.properties||{},top=advisoryTopFt(p);
+          // Never plot already expired CWA/AIRMET advisories. G-AIRMET validTime
+          // represents a forecast snapshot, not a bulletin expiry.
+          const authoritativeEnd=kind==='airmet'?p.bulletinValidTimeTo:
+            kind==='cwa'?(p.validTimeTo||p.validTo||p.expireTime||p.expirationTime):null;
+          const authoritativeEndMs=Date.parse(String(authoritativeEnd||''));
+          if(Number.isFinite(authoritativeEndMs)&&authoritativeEndMs<=Date.now())return;
           if(top===null){unknown++;if(threshold>0)return;}
           else if(top<threshold)return;
           const geom=feature.geometry;
