@@ -10705,7 +10705,7 @@ createNoaaModelControl().addTo(map);
     return '<div style="margin-top:7px;border-top:1px solid #94a3b855;padding-top:6px">'+
       '<div style="font-weight:800">NOAA Original Data</div>'+
       '<div style="margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere">'+
-      advisoryEscape(JSON.stringify(obj,null,2))+'</div></div>';
+      advisoryEscape(JSON.stringify(obj,null,2).split('\n').slice(1,-1).join('\n'))+'</div></div>';
   }
   function advisoryPopup(kind,p,top,hideTitle=false){
     const sourceText=advisorySourceText(p);
