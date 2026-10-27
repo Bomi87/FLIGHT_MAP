@@ -3034,8 +3034,13 @@ const positioningLayer = L.featureGroup().addTo(map);
 /* ===== Actual Takeoff adjustment (shared Apps Script state) ===== */
 let actualTakeoff = null;
 const routeContentFingerprints = new Map();
+const recentRouteText = new Map();
 let plannedTakeoff = null;
 let activeTakeoffRouteInfo = null;
+let sharedTakeoffLastSync = 0;
+let sharedTakeoffInFlightKey = '';
+let takeoffChangeVersion = 0;
+const SHARED_TAKEOFF_SYNC_MS = 120000;
 
 function routeTextFingerprint(input) {
   // Deterministic content signature: identical one-minute downloads do not reset T/O.
@@ -3082,6 +3087,7 @@ function updateTakeoffStatus(message) {
   document.getElementById('takeoffFloatingBtn')?.classList.toggle('active', !!actualTakeoff);
 }
 function clearActualTakeoff(reason) {
+  takeoffChangeVersion++;
   actualTakeoff = null;
   const fuel = document.getElementById('takeoffFuel');
   const time = document.getElementById('takeoffTime');
@@ -3138,19 +3144,34 @@ async function saveSharedTakeoff(info, state) {
       (state && (!result.state || result.state.fuel !== state.fuel || result.state.time !== state.time)) ||
       (!state && result.state)) throw new Error('서버 저장을 확인할 수 없습니다. Apps Script 권한/배포 설정을 확인해 주세요.');
 }
-async function loadSharedTakeoff(info) {
+function scheduleSharedTakeoffSync(info, force = false) {
   if (!info) return;
-  try {
-    const result = await sharedTakeoffRequest(info, 'TAKEOFF_STATE_GET');
-    if (!result.ok || result.fingerprint !== info.fingerprint) {
-      updateTakeoffStatus('공유 T/O 조회 실패 — KML 또는 백엔드 연결 확인');
-      return;
-    }
-    actualTakeoff = result.state ? { fuel: result.state.fuel, time: result.state.time } : null;
-    updateTakeoffStatus(actualTakeoff
-      ? '공유 적용 중: T/O ' + actualTakeoff.fuel.toLocaleString('en-US') + ' lbs / ' + actualTakeoff.time + 'Z'
-      : '비행계획서 원본값 표시 중');
-  } catch (err) { console.warn('Shared T/O read failed', err); updateTakeoffStatus('공유 T/O 서버 연결 실패'); }
+  const key = info.kmlUrl + '|' + info.fingerprint;
+  if (sharedTakeoffInFlightKey === key) return;
+  if (!force && Date.now() - sharedTakeoffLastSync < SHARED_TAKEOFF_SYNC_MS) return;
+  sharedTakeoffLastSync = Date.now();
+  sharedTakeoffInFlightKey = key;
+  const versionAtRequest = takeoffChangeVersion;
+  // Yield to the browser so the KML route becomes visible before network I/O.
+  setTimeout(async () => {
+    try {
+      const result = await sharedTakeoffRequest(info, 'TAKEOFF_STATE_GET');
+      if (!result.ok || result.fingerprint !== info.fingerprint) return;
+      if (!activeTakeoffRouteInfo || activeTakeoffRouteInfo.fingerprint !== info.fingerprint ||
+          activeTakeoffRouteInfo.kmlUrl !== info.kmlUrl || versionAtRequest !== takeoffChangeVersion) return;
+      const next = result.state ? { fuel: result.state.fuel, time: result.state.time } : null;
+      const same = (!next && !actualTakeoff) || (next && actualTakeoff &&
+        next.fuel === actualTakeoff.fuel && next.time === actualTakeoff.time);
+      if (same) return;
+      actualTakeoff = next;
+      takeoffChangeVersion++;
+      updateTakeoffStatus(next
+        ? '공유 적용 중: T/O ' + next.fuel.toLocaleString('en-US') + ' lbs / ' + next.time + 'Z'
+        : '비행계획서 원본값 표시 중');
+      await refreshRouteOnly({ force: true, useCached: true, skipSharedFetch: true });
+    } catch (err) { console.warn('Background shared T/O sync failed', err); }
+    finally { if (sharedTakeoffInFlightKey === key) sharedTakeoffInFlightKey = ''; }
+  }, 0);
 }
 function applyTakeoffToFeatures(features) {
   plannedTakeoff = getPlannedTakeoff(features);
@@ -3211,8 +3232,10 @@ function initTakeoffControl() {
       updateTakeoffStatus('공유 T/O 서버에 저장 중…');
       await saveSharedTakeoff(activeTakeoffRouteInfo, { fuel, time });
       actualTakeoff = { fuel, time };
+      takeoffChangeVersion++;
+      sharedTakeoffLastSync = Date.now();
       document.getElementById('takeoffTime').value = time;
-      await refreshRouteOnly({ force: true });
+      await refreshRouteOnly({ force: true, useCached: true, skipSharedFetch: true });
       updateTakeoffStatus('공유 적용 중: T/O ' + fuel.toLocaleString('en-US') + ' lbs / ' + time + 'Z');
       panel.hidden = true;
     } catch (err) { updateTakeoffStatus('서버 저장 실패'); alert('공유 T/O 저장 실패: ' + err.message); }
@@ -3222,7 +3245,8 @@ function initTakeoffControl() {
     try {
       await saveSharedTakeoff(activeTakeoffRouteInfo, null);
       clearActualTakeoff();
-      await refreshRouteOnly({ force: true });
+      sharedTakeoffLastSync = Date.now();
+      await refreshRouteOnly({ force: true, useCached: true, skipSharedFetch: true });
     } catch (err) { alert('공유 T/O 초기화 실패: ' + err.message); }
   });
 }
@@ -11641,17 +11665,21 @@ async function loadByFilename(filename, options = {}) {
   }
 
   const targetLayer = getTargetLayer(filename);
-  const text = await fetchTextFile(filename, options);
+  const text = options.useCached && recentRouteText.has(filename)
+    ? recentRouteText.get(filename)
+    : await fetchTextFile(filename, options);
+  if (!isNdbFile(filename)) recentRouteText.set(filename, text);
+  let changedKml = false;
   if (!isNdbFile(filename)) {
     const fp = routeTextFingerprint(text);
     const oldFp = routeContentFingerprints.get(filename);
     if (oldFp !== undefined && oldFp !== fp) {
       clearActualTakeoff('새 KML 감지 — 실제 T/O 설정 초기화됨');
+      changedKml = true;
     }
     routeContentFingerprints.set(filename, fp);
     if (getExtension(filename) === 'kml') {
       activeTakeoffRouteInfo = getTakeoffRouteInfo(filename, fp);
-      await loadSharedTakeoff(activeTakeoffRouteInfo);
     }
   }
 
@@ -11681,6 +11709,9 @@ async function loadByFilename(filename, options = {}) {
     }
 
     drawKMLFeatures(features, filename, targetLayer);
+    if (!isNdbFile(filename) && !options.skipSharedFetch) {
+      scheduleSharedTakeoffSync(activeTakeoffRouteInfo, changedKml);
+    }
   }
 }
 
@@ -11725,7 +11756,7 @@ async function refreshRouteOnly(options = {}) {
     if (requestedFiles.length) {
       for (const file of [...new Set(requestedFiles)]) {
         try {
-          await loadByFilename(file);
+          await loadByFilename(file, options);
         } catch (err) {
           console.error("Route file load failed:", file, err);
           throw err;
@@ -11755,32 +11786,20 @@ async function refreshRouteOnly(options = {}) {
 
 async function init() {
   try {
-    // NDB/FIR/ARTCC는 같은 브라우저에서 하루 한 번만 다운로드한다.
-    // 단, 사용자가 브라우저 새로고침(F5/Reload)을 하면 즉시 다시 받아 캐시를 갱신한다.
-    // 토글이 Off 상태라면 데이터만 준비하고 지도에는 표시하지 않는다.
-
-    try {
-      await loadByFilename("ACJ_NDB.kml", { staticDaily: true });
-    } catch (err) {
-      console.error("Initial NDB load failed:", err);
-    }
-
-    try {
-      await loadFirGeojson();
-    } catch (err) {
-      console.error("Initial FIR load failed:", err);
-    }
-
-    try {
-      await loadArtccGeojson();
-    } catch (err) {
-      console.error("Initial ARTCC load failed:", err);
-    }
-
-    // 실제 항로만 로드하며 이후 1분마다 이 항로만 갱신한다.
+    // Draw the actual flight route first; static layers load independently.
+    // They retain their existing daily caches and visibility controls.
     await refreshRouteOnly();
     fitInitialRouteAfterLayout();
     restoreSearchedAirspacesFromSession();
+
+    const staticTasks = [
+      ['NDB', () => loadByFilename('ACJ_NDB.kml', { staticDaily: true })],
+      ['FIR', () => loadFirGeojson()],
+      ['ARTCC', () => loadArtccGeojson()]
+    ];
+    staticTasks.forEach(([name, task]) => {
+      Promise.resolve().then(task).catch(err => console.error('Initial ' + name + ' load failed:', err));
+    });
 
   } catch (err) {
     console.error(err);
