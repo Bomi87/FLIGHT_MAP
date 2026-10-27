@@ -2908,9 +2908,7 @@
     <label for="takeoffFuel">이륙 시 연료 (lbs)</label>
     <input id="takeoffFuel" type="number" min="0" step="1" placeholder="17,300" inputmode="numeric" />
     <label for="takeoffTime">실제 이륙시각 (UTC)</label>
-    <input id="takeoffTime" type="time" step="60" />
-    <label for="takeoffDate">이륙일 (UTC)</label>
-    <input id="takeoffDate" type="date" />
+    <input id="takeoffTime" type="text" inputmode="numeric" maxlength="5" placeholder="12:20" autocomplete="off" />
     <div class="takeoff-actions"><button id="takeoffApply" type="button">적용</button><button id="takeoffReset" type="button">원본 복원</button></div>
     <div id="takeoffStatus" aria-live="polite">비행계획서 원본값 표시 중</div>
   </div>
@@ -3090,15 +3088,36 @@ function clearActualTakeoff(reason) {
   if (time) time.value = '';
   updateTakeoffStatus(reason || '비행계획서 원본값 표시 중');
 }
+function nearestActualTakeoffUtc(actualHHMM, plannedTime2) {
+  const m = String(plannedTime2 || '').match(/(\d{1,2}):(\d{2})\s*Z\s*,\s*(\d{1,2})/i);
+  if (!m) return null;
+  const planHour = +m[1], planMin = +m[2], planDay = +m[3];
+  const actualHour = +actualHHMM.slice(0, 2), actualMin = +actualHHMM.slice(3);
+  if (planHour > 23 || planMin > 59 || planDay < 1 || planDay > 31) return null;
+  // KML stores a day-of-month but not a month. Choose the calendar month
+  // closest to today, then choose the nearest occurrence of the actual HH:MM.
+  const now = new Date();
+  let plannedStart = null;
+  for (let offset = -1; offset <= 1; offset++) {
+    const candidate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, planDay, planHour, planMin));
+    if (candidate.getUTCDate() !== planDay) continue;
+    if (!plannedStart || Math.abs(candidate.getTime() - now.getTime()) < Math.abs(plannedStart.getTime() - now.getTime())) plannedStart = candidate;
+  }
+  if (!plannedStart) return null;
+  let deltaMinutes = (actualHour * 60 + actualMin) - (planHour * 60 + planMin);
+  if (deltaMinutes > 720) deltaMinutes -= 1440;
+  if (deltaMinutes < -720) deltaMinutes += 1440;
+  return plannedStart.getTime() + deltaMinutes * 60000;
+}
 function applyTakeoffToFeatures(features) {
   plannedTakeoff = getPlannedTakeoff(features);
   if (!actualTakeoff || !plannedTakeoff) return;
-  const start = Date.parse(actualTakeoff.date + 'T' + actualTakeoff.time + ':00Z');
-  if (!Number.isFinite(start)) return;
   for (const f of features) {
     if (f.type !== 'Point') continue;
     const baseline = plannedTakeoff.get(f.routeGroup || 'default');
     if (!baseline) continue;
+    const start = nearestActualTakeoffUtc(actualTakeoff.time, baseline.time);
+    if (start === null) continue;
     const deltaFuel = actualTakeoff.fuel - baseline.fuel;
     const elapsed = parseTakeoffElapsed(takeoffField(f.description, 'Time 1'));
     const originalFuel = Number(String(takeoffField(f.description, 'Fuel') || '').replace(/[,\s]/g, '').replace(/lbs$/i, ''));
@@ -3133,16 +3152,17 @@ function initTakeoffControl() {
   new MutationObserver(hideGpsControl).observe(document.body, { childList: true, subtree: true });
   btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
   document.getElementById('takeoffClose').addEventListener('click', () => { panel.hidden = true; });
-  document.getElementById('takeoffDate').value = new Date().toISOString().slice(0, 10);
   document.getElementById('takeoffApply').addEventListener('click', async () => {
     const fuel = Number(document.getElementById('takeoffFuel').value);
-    const time = document.getElementById('takeoffTime').value;
-    const date = document.getElementById('takeoffDate').value;
+    const time = document.getElementById('takeoffTime').value.trim();
     if (!plannedTakeoff) { alert('KML에서 T/O + 00.00 기준점을 찾을 수 없습니다.'); return; }
-    if (!Number.isFinite(fuel) || fuel <= 0 || !/^\d{2}:\d{2}$/.test(time) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      alert('이륙 연료(lbs), 실제 이륙시각(UTC), 이륙일(UTC)을 입력해 주세요.'); return;
+    if (!Number.isFinite(fuel) || fuel <= 0 || !/^\d{2}:\d{2}$/.test(time) || +time.slice(0, 2) > 23 || +time.slice(3) > 59) {
+      alert('이륙 연료(lbs)와 24시간제 이륙시각(예: 12:20)을 입력해 주세요.'); return;
     }
-    actualTakeoff = { fuel, time, date };
+    if ([...plannedTakeoff.values()].some(base => nearestActualTakeoffUtc(time, base.time) === null)) {
+      alert('KML의 원래 T/O 날짜/시각을 확인할 수 없습니다.'); return;
+    }
+    actualTakeoff = { fuel, time };
     updateTakeoffStatus('적용 중: T/O ' + fuel.toLocaleString('en-US') + ' lbs / ' + time + 'Z');
     await refreshRouteOnly({ force: true });
     if (actualTakeoff) updateTakeoffStatus('적용됨: T/O ' + fuel.toLocaleString('en-US') + ' lbs / ' + time + 'Z');
