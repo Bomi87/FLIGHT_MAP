@@ -3115,14 +3115,22 @@ function applyTakeoffToFeatures(features) {
 function initTakeoffControl() {
   const btn = document.getElementById('takeoffFloatingBtn');
   const panel = document.getElementById('takeoffPanel');
-  // GPS may be inserted later by aircraft.js; replace only its visible button.
+  // aircraft.js can insert its GPS button after this app initializes.
+  // Hide that control even when it is mounted outside #appRoot.
   const hideGpsControl = () => {
-    document.querySelectorAll('#appRoot button, #appRoot a').forEach(el => {
-      if (el !== btn && el.textContent.trim().toUpperCase() === 'GPS') el.style.display = 'none';
+    document.querySelectorAll('button, a, input[type="button"], [role="button"]').forEach(el => {
+      if (el === btn) return;
+      const label = (el.tagName === 'INPUT' ? el.value : el.textContent).trim().toUpperCase();
+      const aria = String(el.getAttribute('aria-label') || '').trim().toUpperCase();
+      const title = String(el.getAttribute('title') || '').trim().toUpperCase();
+      const identifier = String(el.id || '') + ' ' + String(el.className || '');
+      if (label === 'GPS' || aria === 'GPS' || title === 'GPS' || /(?:^|[\s_-])gps(?:[\s_-]|$)/i.test(identifier)) {
+        el.style.setProperty('display', 'none', 'important');
+      }
     });
   };
   hideGpsControl();
-  new MutationObserver(hideGpsControl).observe(document.getElementById('appRoot'), { childList: true, subtree: true });
+  new MutationObserver(hideGpsControl).observe(document.body, { childList: true, subtree: true });
   btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
   document.getElementById('takeoffClose').addEventListener('click', () => { panel.hidden = true; });
   document.getElementById('takeoffDate').value = new Date().toISOString().slice(0, 10);
