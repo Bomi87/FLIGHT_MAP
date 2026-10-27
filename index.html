@@ -2860,6 +2860,21 @@
 .wx-pirep-popup .wx-pr-raw{font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #e2e8f0;background:#fff;border-radius:4px;padding:7px;margin:0;}
 .leaflet-popup-content:has(.wx-pirep-popup){margin:12px 12px 11px;width:auto!important;max-width:calc(100vw - 65px);}
 
+/* Actual T/O adjustment: never affects POS, route geometry or weather layers. */
+.takeoff-floating-btn{position:absolute;top:10px;left:8px;z-index:1002;height:28px;min-width:48px;padding:0 10px;border:0;border-radius:6px;background:#fff;color:#333;font:800 11px Arial;box-shadow:0 1px 5px #0004;cursor:pointer}
+.takeoff-floating-btn.active{background:#1769aa;color:#fff}
+.takeoff-floating-btn.active::after{content:'!';position:absolute;top:-6px;right:-8px;display:flex;align-items:center;justify-content:center;width:15px;height:15px;border:2px solid #fff;border-radius:50%;background:#dc2626;color:#fff;font:800 11px/1 Arial;box-shadow:0 1px 3px #0005;pointer-events:none}
+.takeoff-panel[hidden]{display:none!important}
+.takeoff-panel{position:absolute;top:45px;left:8px;z-index:1100;width:218px;max-width:calc(100vw - 16px);padding:13px;background:white;border-radius:10px;box-shadow:0 3px 15px #0004;font:12px Arial;box-sizing:border-box}
+.takeoff-title{font-weight:800;font-size:14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+#takeoffClose{font-size:19px;background:none;border:0;cursor:pointer}
+.takeoff-panel label{display:block;font-weight:700;margin:9px 0 4px}
+.takeoff-panel input{display:block;width:100%;box-sizing:border-box;height:34px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:5px;font-size:16px}
+.takeoff-actions{display:flex;gap:6px;margin-top:12px}
+.takeoff-actions button{flex:1;background:#1769aa;border:0;border-radius:5px;color:#fff;font-weight:700;padding:8px 2px;cursor:pointer}
+.takeoff-actions #takeoffReset{background:#64748b}
+#takeoffStatus{font-size:11px;color:#475569;line-height:1.5;margin-top:10px}
+
 
 
 /* Advisory integration: compact control, hide crossed-out metadata and legend */
@@ -2887,6 +2902,18 @@
     <div id="map"></div>
 
   <button id="posFloatingBtn" class="pos-floating-btn" type="button">POS</button>
+  <button id="takeoffFloatingBtn" class="takeoff-floating-btn" type="button">T/O</button>
+  <div id="takeoffPanel" class="takeoff-panel" hidden>
+    <div class="takeoff-title">Actual Takeoff <button id="takeoffClose" type="button" aria-label="Close">×</button></div>
+    <label for="takeoffFuel">이륙 시 연료 (lbs)</label>
+    <input id="takeoffFuel" type="number" min="0" step="1" placeholder="17,300" inputmode="numeric" />
+    <label for="takeoffTime">실제 이륙시각 (UTC)</label>
+    <input id="takeoffTime" type="time" step="60" />
+    <label for="takeoffDate">이륙일 (UTC)</label>
+    <input id="takeoffDate" type="date" />
+    <div class="takeoff-actions"><button id="takeoffApply" type="button">적용</button><button id="takeoffReset" type="button">원본 복원</button></div>
+    <div id="takeoffStatus" aria-live="polite">비행계획서 원본값 표시 중</div>
+  </div>
 
   <div id="positioningPanel" class="positioning-panel">
     <div class="positioning-title">Aircraft Positioning</div>
@@ -3005,6 +3032,119 @@ let isRouteRefreshing = false;
 
 const positioningLayer = L.featureGroup().addTo(map);
 /* ===== Aircraft Positioning 설정 끝 ===== */
+
+/* ===== Actual Takeoff adjustment (current route, memory only) ===== */
+let actualTakeoff = null;
+const routeContentFingerprints = new Map();
+let plannedTakeoff = null;
+
+function routeTextFingerprint(input) {
+  // Deterministic content signature: identical one-minute downloads do not reset T/O.
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return input.length + ':' + (h >>> 0).toString(16);
+}
+function takeoffField(description, field) {
+  const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(<b>\\s*' + escaped + '\\s*:\\s*<\\/b>\\s*<font\\b[^>]*>)([^<]*)(<\\/font>)', 'i');
+  const match = String(description || '').match(re);
+  return match ? match[2].trim() : null;
+}
+function takeoffReplaceField(description, field, value) {
+  const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(<b>\\s*' + escaped + '\\s*:\\s*<\\/b>\\s*<font\\b[^>]*>)([^<]*)(<\\/font>)', 'i');
+  return description.replace(re, (_whole, before, _old, after) => before + value + after);
+}
+function parseTakeoffElapsed(value) {
+  const m = String(value || '').match(/T\s*\/\s*O\s*\+\s*(\d+)\s*([:.])\s*(\d{2})/i);
+  if (!m) return null;
+  const hours = +m[1], minutes = +m[3];
+  return minutes < 60 ? hours * 60 + minutes : null;
+}
+function getPlannedTakeoff(features) {
+  const baselines = new Map();
+  for (const f of features) {
+    if (f.type !== 'Point') continue;
+    const elapsed = parseTakeoffElapsed(takeoffField(f.description, 'Time 1'));
+    const fuel = Number(String(takeoffField(f.description, 'Fuel') || '').replace(/[,\s]/g, '').replace(/lbs$/i, ''));
+    if (elapsed === 0 && Number.isFinite(fuel) && fuel > 0) {
+      const time = takeoffField(f.description, 'Time 2');
+      if (!baselines.has(f.routeGroup || 'default')) baselines.set(f.routeGroup || 'default', { fuel, time, name: f.name });
+    }
+  }
+  return baselines.size ? baselines : null;
+}
+function updateTakeoffStatus(message) {
+  const el = document.getElementById('takeoffStatus');
+  if (el) el.textContent = message;
+  document.getElementById('takeoffFloatingBtn')?.classList.toggle('active', !!actualTakeoff);
+}
+function clearActualTakeoff(reason) {
+  actualTakeoff = null;
+  const fuel = document.getElementById('takeoffFuel');
+  const time = document.getElementById('takeoffTime');
+  if (fuel) fuel.value = '';
+  if (time) time.value = '';
+  updateTakeoffStatus(reason || '비행계획서 원본값 표시 중');
+}
+function applyTakeoffToFeatures(features) {
+  plannedTakeoff = getPlannedTakeoff(features);
+  if (!actualTakeoff || !plannedTakeoff) return;
+  const start = Date.parse(actualTakeoff.date + 'T' + actualTakeoff.time + ':00Z');
+  if (!Number.isFinite(start)) return;
+  for (const f of features) {
+    if (f.type !== 'Point') continue;
+    const baseline = plannedTakeoff.get(f.routeGroup || 'default');
+    if (!baseline) continue;
+    const deltaFuel = actualTakeoff.fuel - baseline.fuel;
+    const elapsed = parseTakeoffElapsed(takeoffField(f.description, 'Time 1'));
+    const originalFuel = Number(String(takeoffField(f.description, 'Fuel') || '').replace(/[,\s]/g, '').replace(/lbs$/i, ''));
+    if (elapsed === null || !Number.isFinite(originalFuel) || originalFuel <= 0) continue;
+    const computed = new Date(start + elapsed * 60000);
+    const hh = String(computed.getUTCHours()).padStart(2, '0');
+    const mm = String(computed.getUTCMinutes()).padStart(2, '0');
+    const dd = String(computed.getUTCDate()).padStart(2, '0');
+    f.description = takeoffReplaceField(f.description, 'Fuel', Math.round(originalFuel + deltaFuel).toLocaleString('en-US').replace(/,/g, '') + ' lbs');
+    f.description = takeoffReplaceField(f.description, 'Time 2', hh + ':' + mm + 'Z, ' + dd);
+    // Time 1 is elapsed flight time, so it remains unchanged.
+  }
+}
+function initTakeoffControl() {
+  const btn = document.getElementById('takeoffFloatingBtn');
+  const panel = document.getElementById('takeoffPanel');
+  // GPS may be inserted later by aircraft.js; replace only its visible button.
+  const hideGpsControl = () => {
+    document.querySelectorAll('#appRoot button, #appRoot a').forEach(el => {
+      if (el !== btn && el.textContent.trim().toUpperCase() === 'GPS') el.style.display = 'none';
+    });
+  };
+  hideGpsControl();
+  new MutationObserver(hideGpsControl).observe(document.getElementById('appRoot'), { childList: true, subtree: true });
+  btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+  document.getElementById('takeoffClose').addEventListener('click', () => { panel.hidden = true; });
+  document.getElementById('takeoffDate').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('takeoffApply').addEventListener('click', async () => {
+    const fuel = Number(document.getElementById('takeoffFuel').value);
+    const time = document.getElementById('takeoffTime').value;
+    const date = document.getElementById('takeoffDate').value;
+    if (!plannedTakeoff) { alert('KML에서 T/O + 00.00 기준점을 찾을 수 없습니다.'); return; }
+    if (!Number.isFinite(fuel) || fuel <= 0 || !/^\d{2}:\d{2}$/.test(time) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      alert('이륙 연료(lbs), 실제 이륙시각(UTC), 이륙일(UTC)을 입력해 주세요.'); return;
+    }
+    actualTakeoff = { fuel, time, date };
+    updateTakeoffStatus('적용 중: T/O ' + fuel.toLocaleString('en-US') + ' lbs / ' + time + 'Z');
+    await refreshRouteOnly({ force: true });
+    if (actualTakeoff) updateTakeoffStatus('적용됨: T/O ' + fuel.toLocaleString('en-US') + ' lbs / ' + time + 'Z');
+    panel.hidden = true;
+  });
+  document.getElementById('takeoffReset').addEventListener('click', async () => {
+    clearActualTakeoff();
+    await refreshRouteOnly({ force: true });
+  });
+}
 
 /* ===== openAIP 공역 검색 설정 시작 ===== */
 const AIRSPACE_SEARCH_BACKEND_URL = "https://script.google.com/macros/s/AKfycbza0ZkypGKes-TkOFJDk4lOScMzJ1NzzLrCGRpekQvS4QaGlBG7rjD46XswYQkVJEMPhg/exec";
@@ -4296,6 +4436,11 @@ function getShapeCodeLabel(name) {
       placemarks.forEach(pm => {
         const name = textOfFirst(pm, "name");
         const description = textOfFirst(pm, "description");
+        // A single KML can contain multiple independent flight-plan Documents.
+        // Use each nearest Document as a separate T/O fuel baseline.
+        let owningDocument = pm.parentElement;
+        while (owningDocument && owningDocument.localName !== 'Document') owningDocument = owningDocument.parentElement;
+        const routeGroup = owningDocument ? (getDirectChild(owningDocument, 'name')?.textContent.trim() || 'default') : 'default';
 
         let styleUrl = textOfFirst(pm, "styleUrl");
         if (styleMapIndex[styleUrl]) {
@@ -4318,6 +4463,7 @@ function getShapeCodeLabel(name) {
           if (coords.length) {
             features.push({
               type: "Point",
+              routeGroup,
               name,
               description,
               extraRows,
@@ -4332,6 +4478,7 @@ function getShapeCodeLabel(name) {
           if (coords.length >= 2) {
             features.push({
               type: "LineString",
+              routeGroup,
               name,
               description,
               extraRows,
@@ -4359,6 +4506,7 @@ function getShapeCodeLabel(name) {
           if (rings.length) {
             features.push({
               type: "Polygon",
+              routeGroup,
               name,
               description,
               extraRows,
@@ -11413,6 +11561,14 @@ async function loadByFilename(filename, options = {}) {
 
   const targetLayer = getTargetLayer(filename);
   const text = await fetchTextFile(filename, options);
+  if (!isNdbFile(filename)) {
+    const fp = routeTextFingerprint(text);
+    const oldFp = routeContentFingerprints.get(filename);
+    if (oldFp !== undefined && oldFp !== fp) {
+      clearActualTakeoff('새 KML 감지 — 실제 T/O 설정 초기화됨');
+    }
+    routeContentFingerprints.set(filename, fp);
+  }
 
   console.log("▶ Response:", filename, {
     length: text.length,
@@ -11430,6 +11586,7 @@ async function loadByFilename(filename, options = {}) {
 
   if (ext === "kml") {
     const features = extractKMLFeatures(text);
+    if (!isNdbFile(filename)) applyTakeoffToFeatures(features);
 
     console.log("▶ KML features:", filename, features.length);
 
@@ -11468,9 +11625,9 @@ function clearRouteOnly() {
   clearAllAirspaceLabels();
 }
 
-async function refreshRouteOnly() {
+async function refreshRouteOnly(options = {}) {
   try {
-    if (map && map._popup && map._popup.isOpen && map._popup.isOpen()) {
+    if (!options.force && map && map._popup && map._popup.isOpen && map._popup.isOpen()) {
       return;
     }
 
@@ -11725,6 +11882,7 @@ setInterval(async () => {
   }
 }, ROUTE_REFRESH_MS);
 
+initTakeoffControl();
 initPositioningControl();
 init();
   </script>
