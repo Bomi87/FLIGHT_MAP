@@ -3037,10 +3037,10 @@ const routeContentFingerprints = new Map();
 const recentRouteText = new Map();
 let plannedTakeoff = null;
 let activeTakeoffRouteInfo = null;
-let sharedTakeoffLastSync = 0;
+let sharedTakeoffInitialRequested = false;
 let sharedTakeoffInFlightKey = '';
 let takeoffChangeVersion = 0;
-const SHARED_TAKEOFF_SYNC_MS = 120000;
+let takeoffFormDirty = false;
 
 function routeTextFingerprint(input) {
   // Deterministic content signature: identical one-minute downloads do not reset T/O.
@@ -3086,13 +3086,19 @@ function updateTakeoffStatus(message) {
   if (el) el.textContent = message;
   document.getElementById('takeoffFloatingBtn')?.classList.toggle('active', !!actualTakeoff);
 }
+function syncTakeoffForm(state, force = false) {
+  const panel = document.getElementById('takeoffPanel');
+  if (!force && panel && !panel.hidden && takeoffFormDirty) return;
+  const fuel = document.getElementById('takeoffFuel');
+  const time = document.getElementById('takeoffTime');
+  if (fuel) fuel.value = state ? String(state.fuel) : '';
+  if (time) time.value = state ? state.time : '';
+}
 function clearActualTakeoff(reason) {
   takeoffChangeVersion++;
   actualTakeoff = null;
-  const fuel = document.getElementById('takeoffFuel');
-  const time = document.getElementById('takeoffTime');
-  if (fuel) fuel.value = '';
-  if (time) time.value = '';
+  takeoffFormDirty = false;
+  syncTakeoffForm(null, true);
   updateTakeoffStatus(reason || '비행계획서 원본값 표시 중');
 }
 function nearestActualTakeoffUtc(actualHHMM, plannedTime2) {
@@ -3148,8 +3154,10 @@ function scheduleSharedTakeoffSync(info, force = false) {
   if (!info) return;
   const key = info.kmlUrl + '|' + info.fingerprint;
   if (sharedTakeoffInFlightKey === key) return;
-  if (!force && Date.now() - sharedTakeoffLastSync < SHARED_TAKEOFF_SYNC_MS) return;
-  sharedTakeoffLastSync = Date.now();
+  // Only initial page load and explicit T/O-button opens request shared state.
+  // Periodic KML refreshes must never poll Apps Script for T/O data.
+  if (!force && sharedTakeoffInitialRequested) return;
+  sharedTakeoffInitialRequested = true;
   sharedTakeoffInFlightKey = key;
   const versionAtRequest = takeoffChangeVersion;
   // Yield to the browser so the KML route becomes visible before network I/O.
@@ -3165,6 +3173,7 @@ function scheduleSharedTakeoffSync(info, force = false) {
       if (same) return;
       actualTakeoff = next;
       takeoffChangeVersion++;
+      syncTakeoffForm(next);
       updateTakeoffStatus(next
         ? '공유 적용 중: T/O ' + next.fuel.toLocaleString('en-US') + ' lbs / ' + next.time + 'Z'
         : '비행계획서 원본값 표시 중');
@@ -3214,8 +3223,18 @@ function initTakeoffControl() {
   };
   hideGpsControl();
   new MutationObserver(hideGpsControl).observe(document.body, { childList: true, subtree: true });
-  btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+  btn.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      takeoffFormDirty = false;
+      syncTakeoffForm(actualTakeoff, true);
+      scheduleSharedTakeoffSync(activeTakeoffRouteInfo, true);
+    }
+  });
   document.getElementById('takeoffClose').addEventListener('click', () => { panel.hidden = true; });
+  ['takeoffFuel', 'takeoffTime'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => { takeoffFormDirty = true; });
+  });
   document.getElementById('takeoffApply').addEventListener('click', async () => {
     const fuel = Number(document.getElementById('takeoffFuel').value);
     const time = normalizeTakeoffTime(document.getElementById('takeoffTime').value);
@@ -3233,7 +3252,8 @@ function initTakeoffControl() {
       await saveSharedTakeoff(activeTakeoffRouteInfo, { fuel, time });
       actualTakeoff = { fuel, time };
       takeoffChangeVersion++;
-      sharedTakeoffLastSync = Date.now();
+      takeoffFormDirty = false;
+      syncTakeoffForm(actualTakeoff, true);
       document.getElementById('takeoffTime').value = time;
       await refreshRouteOnly({ force: true, useCached: true, skipSharedFetch: true });
       updateTakeoffStatus('공유 적용 중: T/O ' + fuel.toLocaleString('en-US') + ' lbs / ' + time + 'Z');
@@ -3245,7 +3265,6 @@ function initTakeoffControl() {
     try {
       await saveSharedTakeoff(activeTakeoffRouteInfo, null);
       clearActualTakeoff();
-      sharedTakeoffLastSync = Date.now();
       await refreshRouteOnly({ force: true, useCached: true, skipSharedFetch: true });
     } catch (err) { alert('공유 T/O 초기화 실패: ' + err.message); }
   });
@@ -11669,13 +11688,11 @@ async function loadByFilename(filename, options = {}) {
     ? recentRouteText.get(filename)
     : await fetchTextFile(filename, options);
   if (!isNdbFile(filename)) recentRouteText.set(filename, text);
-  let changedKml = false;
   if (!isNdbFile(filename)) {
     const fp = routeTextFingerprint(text);
     const oldFp = routeContentFingerprints.get(filename);
     if (oldFp !== undefined && oldFp !== fp) {
       clearActualTakeoff('새 KML 감지 — 실제 T/O 설정 초기화됨');
-      changedKml = true;
     }
     routeContentFingerprints.set(filename, fp);
     if (getExtension(filename) === 'kml') {
@@ -11710,7 +11727,7 @@ async function loadByFilename(filename, options = {}) {
 
     drawKMLFeatures(features, filename, targetLayer);
     if (!isNdbFile(filename) && !options.skipSharedFetch) {
-      scheduleSharedTakeoffSync(activeTakeoffRouteInfo, changedKml);
+      scheduleSharedTakeoffSync(activeTakeoffRouteInfo);
     }
   }
 }
