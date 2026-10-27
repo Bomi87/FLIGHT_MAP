@@ -3031,10 +3031,11 @@ let isRouteRefreshing = false;
 const positioningLayer = L.featureGroup().addTo(map);
 /* ===== Aircraft Positioning 설정 끝 ===== */
 
-/* ===== Actual Takeoff adjustment (current route, memory only) ===== */
+/* ===== Actual Takeoff adjustment (shared Apps Script state) ===== */
 let actualTakeoff = null;
 const routeContentFingerprints = new Map();
 let plannedTakeoff = null;
+let activeTakeoffRouteInfo = null;
 
 function routeTextFingerprint(input) {
   // Deterministic content signature: identical one-minute downloads do not reset T/O.
@@ -3109,6 +3110,48 @@ function nearestActualTakeoffUtc(actualHHMM, plannedTime2) {
   if (deltaMinutes < -720) deltaMinutes += 1440;
   return plannedStart.getTime() + deltaMinutes * 60000;
 }
+function normalizeTakeoffTime(value) {
+  const compact = String(value || '').trim();
+  const m = compact.match(/^(\d{1,2}):(\d{2})$/) || compact.match(/^(\d{2})(\d{2})$/);
+  if (!m || +m[1] > 23 || +m[2] > 59) return null;
+  return m[1].padStart(2, '0') + ':' + m[2];
+}
+function getTakeoffRouteInfo(filename, fingerprint) {
+  const aircraft = String(filename).match(/(?:^|\/)(HL\d{4})\.kml$/i)?.[1];
+  if (!aircraft) return null;
+  return { aircraft: aircraft.toUpperCase(), fingerprint, kmlUrl: new URL(filename, location.href).href };
+}
+async function sharedTakeoffRequest(info, mode, state) {
+  if (!info || typeof window.portalTakeoffRequest !== 'function') {
+    throw new Error('포털 인증 연결이 준비되지 않았습니다.');
+  }
+  return window.portalTakeoffRequest({ mode, aircraft: info.aircraft,
+    kmlUrl: info.kmlUrl, fingerprint: info.fingerprint,
+    ...(mode === 'TAKEOFF_STATE_SET' ? (state ? { fuel: state.fuel, time: state.time } : { clear: true }) : {}) });
+}
+async function saveSharedTakeoff(info, state) {
+  if (!info) throw new Error('KML route is not ready');
+  const saved = await sharedTakeoffRequest(info, 'TAKEOFF_STATE_SET', state);
+  if (!saved.ok || saved.fingerprint !== info.fingerprint) throw new Error('포털 T/O 저장 실패');
+  const result = await sharedTakeoffRequest(info, 'TAKEOFF_STATE_GET');
+  if (!result.ok || result.fingerprint !== info.fingerprint ||
+      (state && (!result.state || result.state.fuel !== state.fuel || result.state.time !== state.time)) ||
+      (!state && result.state)) throw new Error('서버 저장을 확인할 수 없습니다. Apps Script 권한/배포 설정을 확인해 주세요.');
+}
+async function loadSharedTakeoff(info) {
+  if (!info) return;
+  try {
+    const result = await sharedTakeoffRequest(info, 'TAKEOFF_STATE_GET');
+    if (!result.ok || result.fingerprint !== info.fingerprint) {
+      updateTakeoffStatus('공유 T/O 조회 실패 — KML 또는 백엔드 연결 확인');
+      return;
+    }
+    actualTakeoff = result.state ? { fuel: result.state.fuel, time: result.state.time } : null;
+    updateTakeoffStatus(actualTakeoff
+      ? '공유 적용 중: T/O ' + actualTakeoff.fuel.toLocaleString('en-US') + ' lbs / ' + actualTakeoff.time + 'Z'
+      : '비행계획서 원본값 표시 중');
+  } catch (err) { console.warn('Shared T/O read failed', err); updateTakeoffStatus('공유 T/O 서버 연결 실패'); }
+}
 function applyTakeoffToFeatures(features) {
   plannedTakeoff = getPlannedTakeoff(features);
   if (!actualTakeoff || !plannedTakeoff) return;
@@ -3154,23 +3197,33 @@ function initTakeoffControl() {
   document.getElementById('takeoffClose').addEventListener('click', () => { panel.hidden = true; });
   document.getElementById('takeoffApply').addEventListener('click', async () => {
     const fuel = Number(document.getElementById('takeoffFuel').value);
-    const time = document.getElementById('takeoffTime').value.trim();
+    const time = normalizeTakeoffTime(document.getElementById('takeoffTime').value);
     if (!plannedTakeoff) { alert('KML에서 T/O + 00.00 기준점을 찾을 수 없습니다.'); return; }
-    if (!Number.isFinite(fuel) || fuel <= 0 || !/^\d{2}:\d{2}$/.test(time) || +time.slice(0, 2) > 23 || +time.slice(3) > 59) {
-      alert('이륙 연료(lbs)와 24시간제 이륙시각(예: 12:20)을 입력해 주세요.'); return;
+    if (!Number.isInteger(fuel) || fuel <= 0 || !time) {
+      alert('이륙 연료(lbs)와 이륙시각(예: 10:00 또는 1000)을 입력해 주세요.'); return;
     }
     if ([...plannedTakeoff.values()].some(base => nearestActualTakeoffUtc(time, base.time) === null)) {
       alert('KML의 원래 T/O 날짜/시각을 확인할 수 없습니다.'); return;
     }
-    actualTakeoff = { fuel, time };
-    updateTakeoffStatus('적용 중: T/O ' + fuel.toLocaleString('en-US') + ' lbs / ' + time + 'Z');
-    await refreshRouteOnly({ force: true });
-    if (actualTakeoff) updateTakeoffStatus('적용됨: T/O ' + fuel.toLocaleString('en-US') + ' lbs / ' + time + 'Z');
-    panel.hidden = true;
+    const applyBtn = document.getElementById('takeoffApply');
+    applyBtn.disabled = true;
+    try {
+      updateTakeoffStatus('공유 T/O 서버에 저장 중…');
+      await saveSharedTakeoff(activeTakeoffRouteInfo, { fuel, time });
+      actualTakeoff = { fuel, time };
+      document.getElementById('takeoffTime').value = time;
+      await refreshRouteOnly({ force: true });
+      updateTakeoffStatus('공유 적용 중: T/O ' + fuel.toLocaleString('en-US') + ' lbs / ' + time + 'Z');
+      panel.hidden = true;
+    } catch (err) { updateTakeoffStatus('서버 저장 실패'); alert('공유 T/O 저장 실패: ' + err.message); }
+    finally { applyBtn.disabled = false; }
   });
   document.getElementById('takeoffReset').addEventListener('click', async () => {
-    clearActualTakeoff();
-    await refreshRouteOnly({ force: true });
+    try {
+      await saveSharedTakeoff(activeTakeoffRouteInfo, null);
+      clearActualTakeoff();
+      await refreshRouteOnly({ force: true });
+    } catch (err) { alert('공유 T/O 초기화 실패: ' + err.message); }
   });
 }
 
@@ -11596,6 +11649,10 @@ async function loadByFilename(filename, options = {}) {
       clearActualTakeoff('새 KML 감지 — 실제 T/O 설정 초기화됨');
     }
     routeContentFingerprints.set(filename, fp);
+    if (getExtension(filename) === 'kml') {
+      activeTakeoffRouteInfo = getTakeoffRouteInfo(filename, fp);
+      await loadSharedTakeoff(activeTakeoffRouteInfo);
+    }
   }
 
   console.log("▶ Response:", filename, {
