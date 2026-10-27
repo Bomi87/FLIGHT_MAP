@@ -3035,6 +3035,7 @@ const positioningLayer = L.featureGroup().addTo(map);
 let actualTakeoff = null;
 const routeContentFingerprints = new Map();
 const recentRouteText = new Map();
+const routeRemoteValidators = new Map();
 let plannedTakeoff = null;
 let activeTakeoffRouteInfo = null;
 let sharedTakeoffInitialRequested = false;
@@ -3536,7 +3537,29 @@ let artccLoaded = false;
 
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error(filename + " not found");
+      if (!isNdbFile(filename)) {
+        const etag = res.headers.get('ETag');
+        if (etag) routeRemoteValidators.set(filename, etag);
+        else routeRemoteValidators.delete(filename);
+      }
       return await res.text();
+    }
+
+    async function isRouteUnchangedOnGitHub(filename) {
+      const etag = routeRemoteValidators.get(filename);
+      if (!etag || !recentRouteText.has(filename)) return false;
+      const url = filename + (filename.includes('?') ? '&' : '?') +
+        'v=' + encodeURIComponent(getVersionParam());
+      try {
+        // HEAD transfers only response headers, not the full KML/GPX body.
+        const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+        if (!response.ok) return false;
+        const remoteEtag = response.headers.get('ETag');
+        return !!remoteEtag && remoteEtag === etag;
+      } catch (err) {
+        console.warn('Route HEAD check failed; use full download:', filename, err);
+        return false;
+      }
     }
 
     /* -----------------------------
@@ -11764,14 +11787,24 @@ async function refreshRouteOnly(options = {}) {
       return;
     }
 
+    const requestedFiles = getRequestedFiles();
+    const uniqueFiles = [...new Set(requestedFiles)];
+    if (!options.force && !options.useCached && uniqueFiles.length &&
+        uniqueFiles.every(file => !isNdbFile(file) && (getExtension(file) === 'kml' || getExtension(file) === 'gpx'))) {
+      const unchanged = await Promise.all(uniqueFiles.map(isRouteUnchangedOnGitHub));
+      if (unchanged.every(Boolean)) {
+        // GitHub confirms that every route file is unchanged. Keep current
+        // route geometry, popups and T/O state without redrawing anything.
+        return;
+      }
+    }
+
     // 실제 항로 레이어만 삭제한다.
     // NDB, FIR, U.S. ARTCC 정적 데이터는 유지한다.
     clearRouteOnly();
 
-    const requestedFiles = getRequestedFiles();
-
     if (requestedFiles.length) {
-      for (const file of [...new Set(requestedFiles)]) {
+      for (const file of uniqueFiles) {
         try {
           await loadByFilename(file, options);
         } catch (err) {
