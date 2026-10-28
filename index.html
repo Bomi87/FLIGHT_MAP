@@ -3267,13 +3267,37 @@ function initTakeoffControl() {
     } catch (err) { updateTakeoffStatus('서버 저장 실패'); alert('공유 T/O 저장 실패: ' + err.message); }
     finally { applyBtn.disabled = false; }
   });
-  document.getElementById('takeoffReset').addEventListener('click', async () => {
-    try {
-      await saveSharedTakeoff(activeTakeoffRouteInfo, null);
-      clearActualTakeoff();
-      await refreshRouteOnly({ force: true, useCached: true, skipSharedFetch: true });
-    } catch (err) { alert('공유 T/O 초기화 실패: ' + err.message); }
-  });
+document.getElementById('takeoffReset').addEventListener('click', async () => {
+  const resetBtn = document.getElementById('takeoffReset');
+  const applyBtn = document.getElementById('takeoffApply');
+
+  resetBtn.disabled = true;
+  applyBtn.disabled = true;
+
+  try {
+    updateTakeoffStatus('공유 T/O 서버에서 원본 복원 중…');
+
+    await saveSharedTakeoff(activeTakeoffRouteInfo, null);
+
+    clearActualTakeoff();
+
+    await refreshRouteOnly({
+      force: true,
+      useCached: true,
+      skipSharedFetch: true
+    });
+
+    updateTakeoffStatus('원본 복원 완료 · 비행계획서 원본값 표시 중');
+
+  } catch (err) {
+    updateTakeoffStatus('원본 복원 실패');
+    alert('공유 T/O 초기화 실패: ' + err.message);
+
+  } finally {
+    resetBtn.disabled = false;
+    applyBtn.disabled = false;
+  }
+});
 }
 
 /* ===== openAIP 공역 검색 설정 시작 ===== */
