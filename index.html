@@ -10111,6 +10111,24 @@ createNoaaModelControl().addTo(map);
  const utc=ms=>new Date(ms).toISOString().slice(0,16).replace('T',' ')+' UTC';
  let pSeq=0,sSeq=0,aSeq=0,refresh=null,moveTimer=null; let wxLastPayload=null; let wxLastWrapKey=""; let wxRedrawCached=null;
  const sigmetExpiryLayers=[];
+ let sigmetHitLayers=[];
+ function showSigmetChoices(event,clicked){
+   try{
+     const hit=sigmetHitLayers.filter(entry=>advisoryPolygonContains(entry.layer,event.latlng));
+     if(clicked&&!hit.includes(clicked))hit.unshift(clicked);
+     if(!hit.length)return;
+     const seen=new Set();
+     const choices=hit.filter(entry=>{if(seen.has(entry.key))return false;seen.add(entry.key);return true;});
+     const html=choices.length===1?choices[0].detail():
+       '<div class="wx-advisory-group wx-pirep-group">'+
+       '<div class="wx-group-header">'+choices.length+' SIGMET · 이 위치의 기상정보</div>'+
+       choices.map((entry,i)=>'<details'+(i===0?' open':'')+'><summary>'+esc(entry.label)+'</summary>'+entry.detail()+'</details>').join('')+
+       '</div>';
+     L.popup({maxWidth:390,maxHeight:490,autoPan:true}).setLatLng(event.latlng).setContent(html).openOn(map);
+   }catch(err){console.error('[SIGMET] overlap click error',err);
+     if(clicked)L.popup({maxWidth:390}).setLatLng(event.latlng).setContent(clicked.detail()).openOn(map);}
+ }
+
  const parseSigmetTime=v=>{if(v==null||v==='')return NaN;const t=String(v).trim();if(/^\d{10}(?:\.\d+)?$/.test(t))return Number(t)*1000;if(/^\d{13}$/.test(t))return Number(t);const d=Date.parse(t);return Number.isFinite(d)?d:NaN};
  // Render textual SIGMET as clearly separated, colour-coded rows.
  function formatSigmetRaw(raw){
@@ -10151,7 +10169,7 @@ createNoaaModelControl().addTo(map);
  }
  const expiryLabel=ms=>{if(!Number.isFinite(ms))return '만료시각 미확인';const remain=ms-Date.now();if(remain<=0)return 'EXPIRED';const m=Math.ceil(remain/60000);const hh=String(Math.floor(m/60)).padStart(2,'0');const mm=String(m%60).padStart(2,'0');return (m<=5?'⚠ ':'')+'EXPIRES IN '+(m<60?m+'mins':Math.floor(m/60)+'hr '+(m%60)+'mins');};
  const expiryColor=ms=>{if(!Number.isFinite(ms))return '#64748b';const m=(ms-Date.now())/60000;return m<=5?'#dc2626':m<=30?'#d97706':'#475569'};
- function pruneExpiredSigmets(){for(let i=sigmetExpiryLayers.length-1;i>=0;i--){const r=sigmetExpiryLayers[i];if(Date.now()>=r.expires){sigmetLayer.removeLayer(r.layer);sigmetExpiryLayers.splice(i,1)}}}
+ function pruneExpiredSigmets(){for(let i=sigmetExpiryLayers.length-1;i>=0;i--){const r=sigmetExpiryLayers[i];if(Date.now()>=r.expires){sigmetLayer.removeLayer(r.layer);sigmetHitLayers=sigmetHitLayers.filter(entry=>!r.layer.hasLayer(entry.layer));sigmetExpiryLayers.splice(i,1)}}}
  setInterval(pruneExpiredSigmets,15000);
  // The map's default duplicate world is for presentation only. Render one WX copy.
  // For a global overview, western-hemisphere data is shown on the RIGHT copy.
@@ -11246,7 +11264,7 @@ createNoaaModelControl().addTo(map);
   async function draw(part='all'){
    if(!chkP.checked){++pSeq;pirepLayer.clearLayers();map.removeLayer(pirepLayer)}
    if(!chkA.checked){++aSeq;advisoryHitLayers=[];advisoryExpiryGroups=[];advisoryLayer.clearLayers();map.removeLayer(advisoryLayer);if(advStatus)advStatus.textContent=''}
-   if(!chkS.checked){++sSeq;sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;map.removeLayer(sigmetLayer)}
+   if(!chkS.checked){++sSeq;sigmetLayer.clearLayers();sigmetHitLayers=[];sigmetExpiryLayers.length=0;map.removeLayer(sigmetLayer)}
    if(!chkP.checked&&!chkS.checked&&!chkA.checked){mobileStatus.textContent='모두 OFF';return}
    mobileStatus.textContent='NOAA 데이터 조회 중…';const lines=[];
    // Start independent NOAA requests concurrently instead of PIREP -> SIGMET -> AIRMET.
@@ -11305,7 +11323,7 @@ createNoaaModelControl().addTo(map);
      const sResult=pendingSigmet?await pendingSigmet:null; if(sResult&&!sResult.ok)throw sResult.error;
      const data=(sResult&&sResult.data)||(part==='rewrap'&&wxResponses.sigmet)||await jsonp({action:'sigmetsearch'}); wxResponses.sigmet=data;if(id!==sSeq||!chkS.checked)return;if(!data.ok)throw Error(data.error||'SIGMET 오류');let n=0;
      let firMap=null;try{firMap=await wxFirData()}catch(e){console.warn('WX FIR',e)} if(id!==sSeq||!chkS.checked)return;
-     const nextSigmet=L.layerGroup();const nextExpiry=[];const undrawn=[];let reviewed=0;
+     const nextSigmet=L.layerGroup();const nextExpiry=[];const nextHits=[];const undrawn=[];let reviewed=0;
      (data.items||[]).forEach(item=>{
        if(sf.value!=='all'&&item.hazard!==sf.value)return;
        const resolved=wxResolvedGeometry(item,firMap);if(!resolved.geometry){undrawn.push((item.name||wxFirCode(item)||'Unknown FIR')+' — '+resolved.source+(resolved.note?' ('+resolved.note+')':''));return;} if(resolved.source==='RAW_OF_LINE')reviewed++;
@@ -11315,7 +11333,17 @@ createNoaaModelControl().addTo(map);
        try{let g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(resolved.geometry),properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
        if(!g.getLayers().length)return;
        const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
-       g.bindPopup(txt());g.on('popupopen',()=>g.setPopupContent(txt()));g.addTo(nextSigmet);
+       const sigmetKey=[item.name,item.hazard,item.validFrom,item.validTo,item.raw].map(v=>String(v??'')).join('|');
+       const sigmetLabel='SIGMET · '+String(item.hazard||'').toUpperCase()+' — '+String(item.name||'');
+       g.eachLayer(shape=>{
+         const entry={layer:shape,key:sigmetKey,label:sigmetLabel,detail:txt};
+         nextHits.push(entry);
+         shape.on('click',e=>{
+           if(e.originalEvent)L.DomEvent.stopPropagation(e.originalEvent);
+           showSigmetChoices(e,entry);
+         });
+       });
+       g.addTo(nextSigmet);
        // Confirmed volcanic-ash SIGMET: volcano icon over grey polygon.
        // Place the marker in the same layer group so expiration/OFF hides both together.
        if(isVaSigmet && g.getBounds().isValid()){
@@ -11328,7 +11356,7 @@ createNoaaModelControl().addTo(map);
          vaBadge.bindPopup(txt());vaBadge.on('popupopen',()=>vaBadge.setPopupContent(txt()));
          g.addLayer(vaBadge);
        }if(Number.isFinite(expiry))nextExpiry.push({layer:g,expires:expiry});n++;}catch(e){console.warn('SIGMET draw failed',item.name,e);undrawn.push((item.name||'Unknown')+' — '+String(e.message||e))}
-     });sigmetLayer.clearLayers();sigmetExpiryLayers.length=0;nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetExpiryLayers.push(...nextExpiry);sigmetLayer.addTo(map);const missingEl=el.querySelector('.wx-undrawn');missingEl.style.display=undrawn.length?'block':'none';missingEl.textContent=undrawn.length?'Unmapped SIGMET ('+undrawn.length+'): '+undrawn.join(' | '):'';const d=data.diagnostics||{};lines.push(`SIGMET ${n}개 영역 / 수신 ${d.received??'?'}건 · 만료 ${d.expired??'?'} · 도형 누락 ${d.missingGeometry??'?'} · 좌표 복구 ${d.geometryRecovered??'?'} · 미표시 ${d.unsupportedGeometry??'?'}`+(data.truncated?' (일부 제한)':''));
+     });sigmetLayer.clearLayers();sigmetHitLayers=nextHits;sigmetExpiryLayers.length=0;nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetExpiryLayers.push(...nextExpiry);sigmetLayer.addTo(map);const missingEl=el.querySelector('.wx-undrawn');missingEl.style.display=undrawn.length?'block':'none';missingEl.textContent=undrawn.length?'Unmapped SIGMET ('+undrawn.length+'): '+undrawn.join(' | '):'';const d=data.diagnostics||{};lines.push(`SIGMET ${n}개 영역 / 수신 ${d.received??'?'}건 · 만료 ${d.expired??'?'} · 도형 누락 ${d.missingGeometry??'?'} · 좌표 복구 ${d.geometryRecovered??'?'} · 미표시 ${d.unsupportedGeometry??'?'}`+(data.truncated?' (일부 제한)':''));
     }catch(e){if(id!==sSeq)return;lines.push('SIGMET: '+(e.message||e));}
    }
    if(chkA.checked && part==='rewrap')drawAdvisories(true);
