@@ -10112,9 +10112,35 @@ createNoaaModelControl().addTo(map);
  let pSeq=0,sSeq=0,aSeq=0,refresh=null,moveTimer=null; let wxLastPayload=null; let wxLastWrapKey=""; let wxRedrawCached=null;
  const sigmetExpiryLayers=[];
  let sigmetHitLayers=[];
+ // Screen-coordinate hit test: matches the polygon actually drawn by Leaflet,
+ // including longitude wrapping and nested MultiPolygon components.
+ function sigmetPolygonContains(layer,latlng){
+   if(!layer || typeof layer.getLatLngs!=='function')return false;
+   const point=map.latLngToLayerPoint(latlng);
+   const containsRing=ring=>{
+     if(!Array.isArray(ring)||ring.length<3)return false;
+     const pts=ring.map(ll=>map.latLngToLayerPoint(ll));
+     let inside=false;
+     for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+       const a=pts[i],b=pts[j];
+       if((a.y>point.y)!==(b.y>point.y) &&
+          point.x<(b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x)inside=!inside;
+     }
+     return inside;
+   };
+   const isRing=a=>Array.isArray(a)&&a.length>0&&a[0]&&typeof a[0].lat==='number';
+   const containsPolygon=poly=>{
+     if(!Array.isArray(poly)||!poly.length||!containsRing(poly[0]))return false;
+     return !poly.slice(1).some(containsRing);
+   };
+   const rings=layer.getLatLngs();
+   if(isRing(rings))return containsRing(rings);
+   if(isRing(rings[0]))return containsPolygon(rings);
+   return rings.some(containsPolygon);
+ }
  function showSigmetChoices(event,clicked){
    try{
-     const hit=sigmetHitLayers.filter(entry=>advisoryPolygonContains(entry.layer,event.latlng));
+     const hit=sigmetHitLayers.filter(entry=>sigmetPolygonContains(entry.layer,event.latlng));
      if(clicked&&!hit.includes(clicked))hit.unshift(clicked);
      if(!hit.length)return;
      const seen=new Set();
