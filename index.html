@@ -12243,6 +12243,43 @@ function initPrivateMapFiles(){
   const entries=new Map();let busy=true,queue=Promise.resolve(),databasePromise=null,nextOrder=Date.now();
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const idFor=name=>name.trim().toLowerCase();
+  const privatePointHits=[],pointSelections=new Map();let pointLabelTimer=null;
+  function removePointHits(fileId){for(let i=privatePointHits.length-1;i>=0;i--)if(privatePointHits[i].fileId===fileId)privatePointHits.splice(i,1);}
+  function schedulePointLabels(){clearTimeout(pointLabelTimer);pointLabelTimer=setTimeout(updatePointLabels,20);}
+  function visiblePointGroups(){
+    const groups=[];
+    for(const entry of privatePointHits){
+      if(!map.hasLayer(entry.owner))continue;const point=map.latLngToContainerPoint(entry.shape.getLatLng());
+      let group=groups.find(g=>Math.hypot(g.point.x-point.x,g.point.y-point.y)<=10);
+      if(!group){group={point,entries:[]};groups.push(group);}group.entries.push(entry);
+    }
+    return groups;
+  }
+  function groupKey(group){return group.entries.map(e=>e.key).sort().join('|');}
+  function chosenPoint(group){const selected=pointSelections.get(groupKey(group));return group.entries.find(e=>e.key===selected)||group.entries.find(e=>/^FDC\b/i.test(e.name))||group.entries[0];}
+  function updatePointLabels(){
+    for(const entry of privatePointHits)entry.shape.closeTooltip();
+    for(const group of visiblePointGroups()){
+      const selected=chosenPoint(group);
+      for(const entry of group.entries){
+        if(entry===selected){if(!entry.owner.hasLayer(entry.shape))entry.owner.addLayer(entry.shape);entry.shape.openTooltip();}
+        else if(entry.owner.hasLayer(entry.shape))entry.owner.removeLayer(entry.shape);
+      }
+    }
+  }
+  function showPrivatePointPopup(event,entry){
+    if(event.originalEvent)L.DomEvent.stopPropagation(event.originalEvent);
+    const group=visiblePointGroups().find(g=>g.entries.includes(entry));if(!group)return;
+    const selected=chosenPoint(group),root=document.createElement('div');
+    const heading=document.createElement('div');heading.style.cssText='font-weight:700;margin-bottom:8px';heading.textContent=group.entries.length>1?'이 위치에 겹친 항목 '+group.entries.length+'개':entry.name;root.appendChild(heading);
+    for(const item of group.entries){
+      const b=document.createElement('button');b.type='button';b.style.cssText='display:block;width:100%;text-align:left;border:1px solid #e2e8f0;border-radius:5px;padding:8px;margin:5px 0;cursor:pointer;background:'+(item===selected?'#ede9fe':'#fff')+';color:#172554';
+      b.textContent=(item===selected?'✓ ':'')+item.name;b.setAttribute('aria-pressed',String(item===selected));
+      b.addEventListener('click',()=>{pointSelections.set(groupKey(group),item.key);updatePointLabels();showPrivatePointPopup(event,item);});root.appendChild(b);
+    }
+    L.popup({maxWidth:360,maxHeight:320}).setLatLng(event.latlng).setContent(root).openOn(map);
+  }
+
   // 파일의 적재 순서 대신 클릭 위치에 해당하는 모든 영역을 확인한다.
   const privatePolygonHits=[];
   function removePolygonHits(fileId){for(let i=privatePolygonHits.length-1;i>=0;i--)if(privatePolygonHits[i].fileId===fileId)privatePolygonHits.splice(i,1);}
@@ -12266,6 +12303,8 @@ function initPrivateMapFiles(){
     return contained||minDistance<=8?{entry,distance:minDistance,area:Math.max(0,area)}:null;
   }
   function showPrivatePolygonPopup(event,fallback){
+    const point=map.latLngToContainerPoint(event.latlng),pointGroup=visiblePointGroups().find(g=>Math.hypot(g.point.x-point.x,g.point.y-point.y)<=14);
+    if(pointGroup&&pointGroup.entries.length>1){showPrivatePointPopup(event,chosenPoint(pointGroup));return;}
     if(event.originalEvent)L.DomEvent.stopPropagation(event.originalEvent);
     const hits=privatePolygonHits.filter(entry=>map.hasLayer(entry.owner)).map(entry=>polygonHit(entry,event.latlng)).filter(Boolean);
     hits.sort((a,b)=>{
@@ -12274,6 +12313,9 @@ function initPrivateMapFiles(){
       return aEdge?a.distance-b.distance||a.area-b.area:a.area-b.area;
     });
     const choices=hits.length?hits.map(hit=>hit.entry):[fallback];
+    const linked=hits.map(hit=>hit.entry.feature?.labelTarget).filter(Boolean);
+    const linkedPoint=privatePointHits.find(entry=>linked.includes(entry.feature)&&map.hasLayer(entry.owner));
+    if(linkedPoint){showPrivatePointPopup(event,linkedPoint);return;}
     const heading=choices.length>1?'<div style="font-weight:700;margin-bottom:7px">이 위치에 겹친 영역 '+choices.length+'개</div>':'';
     const body=choices.map((entry,index)=>'<div style="padding:7px 0;'+(index?'border-top:1px solid #e2e8f0':'')+'">'+entry.popup+'<div style="font-size:10px;color:#64748b;margin-top:3px">'+esc(entry.fileName)+'</div></div>').join('');
     L.popup({maxWidth:380,maxHeight:320}).setLatLng(event.latlng).setContent(heading+body).openOn(map);
@@ -12543,6 +12585,11 @@ function initPrivateMapFiles(){
       }catch(error){note('GroundOverlay: '+error.message);}
     }
     if(!result.length)throw Error('표시 가능한 도형이 없습니다.'+(warnings.length?' '+warnings.join(' / '):''));
+    for(const feature of result){
+      if(feature.kind!=='polygon'||feature.name!=='영역')continue;
+      const matching=result.filter(p=>p.kind==='point'&&p.name!=='영역'&&p.style.line.color.toLowerCase()===feature.style.line.color.toLowerCase());
+      if(matching.length===1){feature.name=matching[0].name;feature.labelTarget=matching[0];}
+    }
     result.warnings=warnings;return result;
   }
   function resourcePath(value){
@@ -12610,7 +12657,7 @@ function initPrivateMapFiles(){
     }
   }
   function render(fit){
-    removePolygonHits(record.id);
+    removePolygonHits(record.id);removePointHits(record.id);
     flightEntries=[];flightLabels.clearLayers();
     const next=L.featureGroup(),centre=map.getCenter().lng;
     for(const f of features){
@@ -12640,29 +12687,32 @@ function initPrivateMapFiles(){
         }else if(s.triangle){const size=14*s.iconScale;shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point',html:'<span style="display:block;width:0;height:0;border-left:'+size/2+'px solid transparent;border-right:'+size/2+'px solid transparent;border-bottom:'+size+'px solid #dc2626;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff)"></span>',iconSize:[size,size],iconAnchor:[size/2,size]})}).addTo(next);}
         else{
           const markerColor=s.icon.color.toLowerCase()==='#ffffff'?'#dc2626':s.icon.color;
-          shape=L.circleMarker(p,{radius:(isDesktopView()?4:2.5)*s.iconScale,color:markerColor,opacity:s.icon.opacity,weight:2,fillColor:markerColor,fillOpacity:s.icon.opacity}).addTo(next);
+          shape=L.circleMarker(p,{radius:isDesktopView()?3:2.2,color:markerColor,opacity:s.icon.opacity,weight:1,fillColor:markerColor,fillOpacity:s.icon.opacity}).addTo(next);
         }
         if(f.flightTrack){
           const altitude=f.altitudeFt===null?'고도 정보 없음':Math.round(f.altitudeFt).toLocaleString('en-US')+' ft';
           shape.bindTooltip(esc(f.timeUtc)+'<br>'+esc(altitude),{direction:'top',className:'private-fr24-hover'});
           flightEntries.push({marker:shape,altitudeFt:f.altitudeFt,group:f.trackGroup||'route',size:(isDesktopView()?21:18)*s.iconScale});
         }
-        if(!f.flightTrack&&s.labelScale>0)shape.bindTooltip('<span style="color:#172554;opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:!f.flightTrack,direction:'right',offset:[6,-5],className:'private-ntm-label'});
+        if(!f.flightTrack&&s.labelScale>0)shape.bindTooltip('<span style="color:#172554;opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:true,direction:'right',offset:[6,-5],className:'private-ntm-label'});
       }
       const p=f.kind==='point'?f.points[0]:null;
       const popup='<strong>'+esc(f.flightTrack?f.timeUtc:f.name)+'</strong>'+(f.flightTrack&&f.altitudeFt!==null?'<br>'+Math.round(f.altitudeFt).toLocaleString('en-US')+' ft':'')+(p?'<br>'+p[0].toFixed(6)+', '+p[1].toFixed(6):'');
       if(f.kind==='polygon'){
         const entry={shape,owner:layer,fileId:record.id,fileName:record.name,popup};
-        privatePolygonHits.push(entry);shape.on('click',event=>showPrivatePolygonPopup(event,entry));
+        entry.feature=f;privatePolygonHits.push(entry);shape.on('click',event=>showPrivatePolygonPopup(event,entry));
+      }else if(f.kind==='point'&&!f.flightTrack&&s.labelScale>0){
+        const entry={shape,owner:layer,fileId:record.id,key:record.id+'#'+features.indexOf(f),name:f.name,feature:f};
+        privatePointHits.push(entry);shape.on('click',event=>showPrivatePointPopup(event,entry));
       }else shape.bindPopup(popup);
     }
     layer.clearLayers();next.eachLayer(l=>layer.addLayer(l));flightLabels.addTo(layer);anchor=centre;bounds=next.getBounds();
     if(state&&state.visible)map.addLayer(layer);else map.removeLayer(layer);
-    if(fit&&state.visible)map.fitBounds(layer.getBounds(),{padding:[35,35],maxZoom:10});scheduleFlightLabels();
+    if(fit&&state.visible)map.fitBounds(layer.getBounds(),{padding:[35,35],maxZoom:10});scheduleFlightLabels();schedulePointLabels();
   }
 
     render(false);
-    return {getBounds:()=>bounds,setVisible(value){state.visible=value;if(value)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}scheduleFlightLabels();},update(){if(!state)return;if(Math.abs(map.getCenter().lng-anchor)>150)render(false);else scheduleFlightLabels();},destroy(){removePolygonHits(record.id);clearTimeout(flightLabelTimer);state=null;flightEntries=[];flightLabels.clearLayers();map.removeLayer(layer);layer.clearLayers();}};
+    return {getBounds:()=>bounds,setVisible(value){state.visible=value;if(value)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}scheduleFlightLabels();schedulePointLabels();},update(){if(!state)return;if(Math.abs(map.getCenter().lng-anchor)>150)render(false);else scheduleFlightLabels();schedulePointLabels();},destroy(){removePolygonHits(record.id);removePointHits(record.id);schedulePointLabels();clearTimeout(flightLabelTimer);state=null;flightEntries=[];flightLabels.clearLayers();map.removeLayer(layer);layer.clearLayers();}};
   }
 
 }
