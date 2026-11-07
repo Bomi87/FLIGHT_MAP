@@ -12762,10 +12762,10 @@ function initPrivateMapFiles(){
           shape.bindTooltip(esc(f.timeUtc)+'<br>'+esc(altitude),{direction:'top',className:'private-fr24-hover'});
           flightEntries.push({marker:shape,altitudeFt:f.altitudeFt,group:f.trackGroup||'route',size:(isDesktopView()?21:18)*s.iconScale});
         }
-        if(!f.flightTrack&&!f.planWaypoint&&s.labelScale>0)shape.bindTooltip('<span style="color:'+(s.labelExplicit&&s.label.opacity>0?s.label.color:'#172554')+';opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:true,direction:'right',offset:[6,-5],className:'private-ntm-label'});
+        if(!f.flightTrack&&!f.planWaypoint&&s.labelScale>0)shape.bindTooltip('<span style="color:'+(s.labelExplicit&&s.label.opacity>0?(/[（(].*[)）]/.test(f.name)&&s.label.color.toLowerCase()==='#00ff00'?'#15803d':s.label.color):'#172554')+';opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:true,direction:'right',offset:[6,-5],className:'private-ntm-label'});
       }
       const p=f.kind==='point'?f.points[0]:null;
-      const popup='<strong>'+esc(f.flightTrack?f.timeUtc:f.name)+'</strong>'+(f.flightTrack&&f.altitudeFt!==null?'<br>'+Math.round(f.altitudeFt).toLocaleString('en-US')+' ft':'')+(p?'<br>'+p[0].toFixed(6)+', '+p[1].toFixed(6):'')+(f.description?'<div class="private-kml-description" style="margin-top:10px;font:12px/1.5 Arial">'+safeDescription(f.description)+'</div>':'');
+      const popup='<strong>'+esc(f.flightTrack?f.timeUtc:f.name)+'</strong>'+(f.flightTrack&&f.altitudeFt!==null?'<br>'+Math.round(f.altitudeFt).toLocaleString('en-US')+' ft':'')+(f.description?'<div class="private-kml-description" style="margin-top:10px;font:12px/1.5 Arial">'+safeDescription(f.description)+'</div>':'')+(p?'<div class="private-kml-coordinates" style="margin-top:10px">'+p[0].toFixed(6)+', '+p[1].toFixed(6)+'</div>':'');
       if(f.kind==='polygon'){
         const entry={shape,owner:layer,fileId:record.id,fileName:record.name,popup};
         entry.feature=f;privatePolygonHits.push(entry);shape.on('click',event=>showPrivatePolygonPopup(event,entry));
