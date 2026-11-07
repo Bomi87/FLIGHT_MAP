@@ -12243,6 +12243,42 @@ function initPrivateMapFiles(){
   const entries=new Map();let busy=true,queue=Promise.resolve(),databasePromise=null,nextOrder=Date.now();
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const idFor=name=>name.trim().toLowerCase();
+  // 파일의 적재 순서 대신 클릭 위치에 해당하는 모든 영역을 확인한다.
+  const privatePolygonHits=[];
+  function removePolygonHits(fileId){for(let i=privatePolygonHits.length-1;i>=0;i--)if(privatePolygonHits[i].fileId===fileId)privatePolygonHits.splice(i,1);}
+  function polygonHit(entry,latlng){
+    const point=map.latLngToContainerPoint(latlng),rings=entry.shape.getLatLngs();
+    let minDistance=Infinity,area=0;
+    function inRing(ring){
+      const pts=ring.map(p=>map.latLngToContainerPoint(p));let inside=false,a=0;
+      for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+        const p=pts[j],q=pts[i],dx=q.x-p.x,dy=q.y-p.y,length=dx*dx+dy*dy;
+        const t=length?Math.max(0,Math.min(1,((point.x-p.x)*dx+(point.y-p.y)*dy)/length)):0;
+        minDistance=Math.min(minDistance,Math.hypot(point.x-p.x-t*dx,point.y-p.y-t*dy));
+        if((q.y>point.y)!==(p.y>point.y)&&point.x<(p.x-q.x)*(point.y-q.y)/(p.y-q.y)+q.x)inside=!inside;
+        a+=p.x*q.y-q.x*p.y;
+      }
+      return {inside,area:Math.abs(a)/2};
+    }
+    if(!rings.length)return null;
+    const outer=inRing(rings[0]);area=outer.area;let contained=outer.inside;
+    for(const ring of rings.slice(1)){const hole=inRing(ring);area-=hole.area;if(hole.inside)contained=false;}
+    return contained||minDistance<=8?{entry,distance:minDistance,area:Math.max(0,area)}:null;
+  }
+  function showPrivatePolygonPopup(event,fallback){
+    if(event.originalEvent)L.DomEvent.stopPropagation(event.originalEvent);
+    const hits=privatePolygonHits.filter(entry=>map.hasLayer(entry.owner)).map(entry=>polygonHit(entry,event.latlng)).filter(Boolean);
+    hits.sort((a,b)=>{
+      const aEdge=a.distance<=8,bEdge=b.distance<=8;
+      if(aEdge!==bEdge)return aEdge?-1:1;
+      return aEdge?a.distance-b.distance||a.area-b.area:a.area-b.area;
+    });
+    const choices=hits.length?hits.map(hit=>hit.entry):[fallback];
+    const heading=choices.length>1?'<div style="font-weight:700;margin-bottom:7px">이 위치에 겹친 영역 '+choices.length+'개</div>':'';
+    const body=choices.map((entry,index)=>'<div style="padding:7px 0;'+(index?'border-top:1px solid #e2e8f0':'')+'">'+entry.popup+'<div style="font-size:10px;color:#64748b;margin-top:3px">'+esc(entry.fileName)+'</div></div>').join('');
+    L.popup({maxWidth:380,maxHeight:320}).setLatLng(event.latlng).setContent(heading+body).openOn(map);
+  }
+
   function open(value){panel.hidden=!value;button.setAttribute('aria-expanded',String(value));if(value)picker.focus();else button.focus();}
   button.addEventListener('click',()=>open(panel.hidden));panel.querySelector('.file-close').addEventListener('click',()=>open(false));panel.addEventListener('keydown',e=>{if(e.key==='Escape')open(false);});
   function database(){
@@ -12471,7 +12507,7 @@ function initPrivateMapFiles(){
           pts.forEach((p,i)=>{const next=pts[i+1]||p,prev=pts[i-1]||p,a=i<pts.length-1?p:prev,b=i<pts.length-1?next:p,r=Math.PI/180,d=(b[0]-a[0])*r;
             const heading=Math.atan2(Math.sin(d)*Math.cos(b[1]*r),Math.cos(a[1]*r)*Math.sin(b[1]*r)-Math.sin(a[1]*r)*Math.cos(b[1]*r)*Math.cos(d))/r;
             const ms=Date.parse(times[i]?.textContent||'');
-            result.push({kind:'point',name,style:{...style,heading},points:[[p[1],p[0]]],flightTrack:true,timeUtc:Number.isFinite(ms)?new Date(ms).toISOString().replace('T',' ').replace(/\.\d{3}Z$/,' UTC'):name,altitudeFt:Number.isFinite(p[2])?p[2]/0.3048:null});
+            result.push({kind:'point',name,style:{...style,heading},points:[[p[1],p[0]]],flightTrack:true,trackGroup:name+'|'+descendants(pm,'Track').indexOf(g),timeUtc:Number.isFinite(ms)?new Date(ms).toISOString().replace('T',' ').replace(/\.\d{3}Z$/,' UTC'):name,altitudeFt:Number.isFinite(p[2])?p[2]/0.3048:null});
           });
         }
         if(g.localName==='Polygon'){
@@ -12536,6 +12572,18 @@ function initPrivateMapFiles(){
     for(const entry of flightEntries)layer.removeLayer(entry.marker);
     if(!state||!state.visible||!map.hasLayer(layer))return;
     const occupied=[],size=map.getSize();
+    const asPoint=entry=>{const ll=entry.marker.getLatLng();return {lat:ll.lat,lon:ll.lng};};
+    const groups=new Map();for(const entry of flightEntries){const key=entry.group||'route';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(entry);}
+    for(const group of groups.values())group.forEach((entry,i)=>{
+      const curr=asPoint(entry);entry.currPoint=curr;entry.prevPoint=null;entry.nextPoint=null;
+      for(let j=i-1;j>=0;j--){const p=asPoint(group[j]);if(Math.abs(p.lat-curr.lat)+Math.abs(p.lon-curr.lon)>1e-9){entry.prevPoint=p;break;}}
+      for(let j=i+1;j<group.length;j++){const p=asPoint(group[j]);if(Math.abs(p.lat-curr.lat)+Math.abs(p.lon-curr.lon)>1e-9){entry.nextPoint=p;break;}}
+    });
+    function rotatedBounds(x,y,width,height,angle){
+      const r=angle*Math.PI/180,c=Math.cos(r),sn=Math.sin(r);
+      const corners=[[0,-height/2],[width,-height/2],[width,height/2],[0,height/2]].map(p=>[x+p[0]*c-p[1]*sn,y+p[0]*sn+p[1]*c]);
+      return {left:Math.min(...corners.map(p=>p[0]))-3,right:Math.max(...corners.map(p=>p[0]))+3,top:Math.min(...corners.map(p=>p[1]))-2,bottom:Math.max(...corners.map(p=>p[1]))+2};
+    }
     const overlap=(a,b)=>!(a.right<b.left||a.left>b.right||a.bottom<b.top||a.top>b.bottom);
     const reserve=rect=>occupied.some(other=>overlap(rect,other));
     // 시작과 끝을 우선하고, 축소 시 겹치는 항적점은 생략한다.
@@ -12547,19 +12595,25 @@ function initPrivateMapFiles(){
       if(reserve(icon))continue;
       const label=entry.altitudeFt===null?'':Math.round(entry.altitudeFt).toLocaleString('en-US')+' ft';
       const width=label.length*7+6,height=17,gap=radius+4;
-      const positions=[{x:point.x+gap,y:point.y-height/2},{x:point.x-width-gap,y:point.y-height/2},{x:point.x-width/2,y:point.y-gap-height},{x:point.x-width/2,y:point.y+gap}];
-      const position=label?positions.find(p=>!reserve({left:p.x-3,right:p.x+width+3,top:p.y-2,bottom:p.y+height+2})):null;
+      // 기존 waypoint와 같은 루트 방향·라벨 회전 계산을 사용한다.
+      const placement=getUnifiedRightPlacement(entry.prevPoint,entry.currPoint,entry.nextPoint,{referenceLon:map.getCenter().lng},gap);
+      const positions=[1,1.5,-1,-1.5].map(factor=>{
+        const x=point.x+placement.offsetX*factor,y=point.y+placement.offsetY*factor;
+        return {x,y,rect:rotatedBounds(x,y,width,height,placement.angle)};
+      });
+      const position=label?positions.find(p=>!reserve(p.rect)&&!overlap(p.rect,icon)):null;
       // 고도 정보가 있는 항적점은 라벨까지 들어갈 공간이 있을 때 표시한다.
       if(label&&!position)continue;
       layer.addLayer(entry.marker);occupied.push(icon);
       if(position){
         const ll=map.containerPointToLatLng([position.x,position.y]);
-        L.marker(ll,{interactive:false,keyboard:false,icon:L.divIcon({className:'private-ntm-point',iconSize:[width,height],iconAnchor:[0,0],html:'<span style="display:block;white-space:nowrap;color:#172554;font:800 12px/17px Arial;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff">'+esc(label)+'</span>'})}).addTo(flightLabels);
-        occupied.push({left:position.x-3,right:position.x+width+3,top:position.y-2,bottom:position.y+height+2});
+        L.marker(ll,{interactive:false,keyboard:false,icon:L.divIcon({className:'private-ntm-point private-flight-altitude',iconSize:[width,height],iconAnchor:[0,height/2],html:'<span style="display:block;white-space:nowrap;width:'+width+'px;height:'+height+'px;transform:rotate('+placement.angle+'deg);transform-origin:0 50%;color:#172554;font:800 12px/17px Arial;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff">'+esc(label)+'</span>'})}).addTo(flightLabels);
+        occupied.push(position.rect);
       }
     }
   }
   function render(fit){
+    removePolygonHits(record.id);
     flightEntries=[];flightLabels.clearLayers();
     const next=L.featureGroup(),centre=map.getCenter().lng;
     for(const f of features){
@@ -12594,12 +12648,16 @@ function initPrivateMapFiles(){
         if(f.flightTrack){
           const altitude=f.altitudeFt===null?'고도 정보 없음':Math.round(f.altitudeFt).toLocaleString('en-US')+' ft';
           shape.bindTooltip(esc(f.timeUtc)+'<br>'+esc(altitude),{direction:'top',className:'private-fr24-hover'});
-          flightEntries.push({marker:shape,altitudeFt:f.altitudeFt,size:(isDesktopView()?21:18)*s.iconScale});
+          flightEntries.push({marker:shape,altitudeFt:f.altitudeFt,group:f.trackGroup||'route',size:(isDesktopView()?21:18)*s.iconScale});
         }
         if(!f.flightTrack&&s.labelScale>0)shape.bindTooltip('<span style="color:#172554;opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:!f.flightTrack,direction:'right',offset:[6,-5],className:'private-ntm-label'});
       }
       const p=f.kind==='point'?f.points[0]:null;
-      shape.bindPopup('<strong>'+esc(f.flightTrack?f.timeUtc:f.name)+'</strong>'+(f.flightTrack&&f.altitudeFt!==null?'<br>'+Math.round(f.altitudeFt).toLocaleString('en-US')+' ft':'')+(p?'<br>'+p[0].toFixed(6)+', '+p[1].toFixed(6):''));
+      const popup='<strong>'+esc(f.flightTrack?f.timeUtc:f.name)+'</strong>'+(f.flightTrack&&f.altitudeFt!==null?'<br>'+Math.round(f.altitudeFt).toLocaleString('en-US')+' ft':'')+(p?'<br>'+p[0].toFixed(6)+', '+p[1].toFixed(6):'');
+      if(f.kind==='polygon'){
+        const entry={shape,owner:layer,fileId:record.id,fileName:record.name,popup};
+        privatePolygonHits.push(entry);shape.on('click',event=>showPrivatePolygonPopup(event,entry));
+      }else shape.bindPopup(popup);
     }
     layer.clearLayers();next.eachLayer(l=>layer.addLayer(l));flightLabels.addTo(layer);anchor=centre;bounds=next.getBounds();
     if(state&&state.visible)map.addLayer(layer);else map.removeLayer(layer);
@@ -12607,7 +12665,7 @@ function initPrivateMapFiles(){
   }
 
     render(false);
-    return {getBounds:()=>bounds,setVisible(value){state.visible=value;if(value)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}scheduleFlightLabels();},update(){if(!state)return;if(Math.abs(map.getCenter().lng-anchor)>150)render(false);else scheduleFlightLabels();},destroy(){clearTimeout(flightLabelTimer);state=null;flightEntries=[];flightLabels.clearLayers();map.removeLayer(layer);layer.clearLayers();}};
+    return {getBounds:()=>bounds,setVisible(value){state.visible=value;if(value)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}scheduleFlightLabels();},update(){if(!state)return;if(Math.abs(map.getCenter().lng-anchor)>150)render(false);else scheduleFlightLabels();},destroy(){removePolygonHits(record.id);clearTimeout(flightLabelTimer);state=null;flightEntries=[];flightLabels.clearLayers();map.removeLayer(layer);layer.clearLayers();}};
   }
 
 }
