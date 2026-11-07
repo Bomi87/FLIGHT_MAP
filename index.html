@@ -12344,8 +12344,8 @@ function initSharedRouteToggle(){
   function sync(){
     const on=map.hasLayer(drawn);
     button.textContent=on?'ROUTE ON':'ROUTE OFF';
-    button.style.background=on?'#facc15':'#fef9c3';
-    button.style.color='#713f12';
+button.style.background=on?'#facc15':'#fff';
+button.style.color='#333';
     button.setAttribute('aria-pressed',String(on));
     button.setAttribute('aria-label',on?'기존 ROUTE 숨기기':'기존 ROUTE 표시하기');
     button.title=on?'기존 ROUTE 숨기기 (GPX 유지)':'기존 ROUTE 표시하기';
