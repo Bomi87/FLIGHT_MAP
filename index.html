@@ -12434,15 +12434,19 @@ function initPrivateNtmControl(){
     const next=L.featureGroup(),centre=map.getCenter().lng;
     for(const f of features){
       const s=f.style;let shape;
+      // 형광 초록만 차분하게 보정하며 다른 KML 영역 색상은 유지한다.
+      const vividGreen=s.poly.color.toLowerCase()==='#00ff00';
+      const areaColor=vividGreen?'#4f9d69':s.poly.color;
+      const areaOpacity=vividGreen?s.poly.opacity*.55:s.poly.opacity;
       if(f.kind==='polygon'){
         const outer=unwrap(f.rings[0],centre),ref=outer[0][1];
-        shape=L.polygon([outer,...f.rings.slice(1).map(r=>unwrap(r,ref))],{color:s.line.color,opacity:s.outline?s.line.opacity:0,weight:s.outline?s.width:0,fill:s.fill,fillColor:s.poly.color,fillOpacity:s.poly.opacity}).addTo(next);
+        shape=L.polygon([outer,...f.rings.slice(1).map(r=>unwrap(r,ref))],{color:s.line.color,opacity:s.outline?s.line.opacity:0,weight:s.outline?s.width:0,fill:s.fill,fillColor:areaColor,fillOpacity:areaOpacity}).addTo(next);
       }else if(f.kind==='line')shape=L.polyline(unwrap(f.points,centre),{color:s.line.color,opacity:s.line.opacity,weight:s.width}).addTo(next);
       else{
         const p=unwrap(f.points,centre)[0];
-        if(s.triangle){const size=12*s.iconScale;shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point',html:'<span style="display:block;width:0;height:0;border-left:'+size/2+'px solid transparent;border-right:'+size/2+'px solid transparent;border-bottom:'+size+'px solid '+s.icon.color+';opacity:'+s.icon.opacity+'"></span>',iconSize:[size,size],iconAnchor:[size/2,size]})}).addTo(next);}
+        if(s.triangle){const size=14*s.iconScale;shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point',html:'<span style="display:block;width:0;height:0;border-left:'+size/2+'px solid transparent;border-right:'+size/2+'px solid transparent;border-bottom:'+size+'px solid #dc2626;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff)"></span>',iconSize:[size,size],iconAnchor:[size/2,size]})}).addTo(next);}
         else shape=L.circleMarker(p,{radius:(isDesktopView()?4:2.5)*s.iconScale,color:s.icon.color,opacity:s.icon.opacity,weight:1,fillColor:s.icon.color,fillOpacity:s.icon.opacity}).addTo(next);
-        if(s.labelScale>0)shape.bindTooltip('<span style="color:'+s.label.color+';opacity:'+s.label.opacity+';font-size:'+10*s.labelScale+'px;font-weight:700;text-shadow:0 1px 2px #000,1px 0 2px #000">'+esc(f.name)+'</span>',{permanent:true,direction:'right',className:'private-ntm-label'});
+        if(s.labelScale>0)shape.bindTooltip('<span style="color:#172554;opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:true,direction:'right',offset:[6,-5],className:'private-ntm-label'});
       }
       const p=f.kind==='point'?f.points[0]:null;
       shape.bindPopup('<strong>'+esc(f.name)+'</strong>'+(p?'<br>'+p[0].toFixed(6)+', '+p[1].toFixed(6):''));
@@ -12451,14 +12455,46 @@ function initPrivateNtmControl(){
     if(state&&state.visible)map.addLayer(layer);else map.removeLayer(layer);
     if(fit&&state.visible)map.fitBounds(layer.getBounds(),{padding:[35,35],maxZoom:10});sync();
   }
-  function sync(){toggle.disabled=!state;toggle.textContent=state&&state.visible?'OFF':'ON';toggle.setAttribute('aria-label',state&&state.visible?'NTM 숨기기':'NTM 표시하기');}
+  function sync(){toggle.disabled=busy||!state;toggle.textContent=state&&state.visible?'OFF':'ON';toggle.setAttribute('aria-label',state&&state.visible?'NTM 숨기기':'NTM 표시하기');}
   function summary(){const counts={polygon:0,line:0,point:0};features.forEach(f=>counts[f.kind]++);return '영역 '+counts.polygon+'개 · 선 '+counts.line+'개 · 마커 '+counts.point+'개';}
-  function save(next){try{localStorage.setItem(storageKey,JSON.stringify(next));}catch(e){throw Error('NTM을 브라우저에 저장하지 못했습니다. 저장 공간과 권한을 확인해 주세요.');}}
-  section.querySelector('[data-ntm="apply"]').addEventListener('click',()=>{
-    readSequence++;try{const xml=input.value.trim(),parsed=parse(xml),next={xml,visible:true};save(next);state=next;features=parsed;render(true);status.textContent=summary()+'\n이 브라우저에 저장됨 · 2D 평면 표시';}catch(e){status.textContent=e.message||String(e);}
-  });
-  toggle.addEventListener('click',()=>{if(!state)return;try{const next={...state,visible:!state.visible};save(next);state=next;if(state.visible)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}sync();}catch(e){status.textContent=e.message||String(e);}});
-  section.querySelector('[data-ntm="clear"]').addEventListener('click',()=>{readSequence++;try{localStorage.removeItem(storageKey);}catch(e){status.textContent='저장된 NTM을 삭제하지 못했습니다.';return;}state=null;features=[];layer.clearLayers();map.removeLayer(layer);input.value='';fileInput.value='';sync();status.textContent='NTM 표시와 저장 내용을 삭제했습니다.';});
+  // NTM 원문은 용량이 작은 localStorage 대신 IndexedDB에 저장한다.
+  let databasePromise=null,busy=false;
+  function database(){
+    if(!databasePromise)databasePromise=new Promise((resolve,reject)=>{
+      if(!window.indexedDB){reject(Error('이 브라우저는 IndexedDB 저장을 지원하지 않습니다.'));return;}
+      const request=indexedDB.open('flightMapPrivateData',1);
+      request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('ntm'))request.result.createObjectStore('ntm');};
+      request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>{db.close();databasePromise=null;};resolve(db);};
+      request.onerror=()=>{databasePromise=null;reject(request.error||Error('IndexedDB 연결 실패'));};
+      request.onblocked=()=>{databasePromise=null;reject(Error('다른 탭의 저장소 연결이 갱신을 막고 있습니다. 다른 앱 탭을 닫고 다시 시도해 주세요.'));};
+    });return databasePromise;
+  }
+  async function storedRecord(mode,value){
+    const db=await database();return new Promise((resolve,reject)=>{
+      const tx=db.transaction('ntm',mode==='read'?'readonly':'readwrite'),store=tx.objectStore('ntm');
+      const request=mode==='read'?store.get('current'):store.put(value,'current');let result;
+      request.onsuccess=()=>{result=request.result;};
+      tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error||request.error||Error('NTM 저장 실패'));tx.onabort=()=>reject(tx.error||Error('NTM 저장 작업이 중단됐습니다.'));
+    });
+  }
+  function storageError(error){
+    const name=error&&error.name||'Error';
+    if(name==='QuotaExceededError')return '브라우저 저장 공간이 부족합니다. 이 사이트의 다른 저장 데이터를 확인해 주세요. (QuotaExceededError)';
+    if(name==='SecurityError'||name==='InvalidStateError')return '브라우저가 사이트 저장을 허용하지 않습니다. 사이트 저장 권한 또는 비공개 모드 설정을 확인해 주세요. ('+name+')';
+    return 'NTM 저장소 오류: '+(error.message||String(error))+' ('+name+')';
+  }
+  async function save(next){await storedRecord('write',next);try{localStorage.removeItem(storageKey);}catch(e){/* 새 저장소 기록이 우선한다. */}}
+  function setBusy(value){busy=value;section.setAttribute('aria-busy',String(value));section.querySelectorAll('button,input,textarea').forEach(el=>{el.disabled=value;});sync();}
+  async function perform(action){if(busy)return;setBusy(true);try{await action();}catch(e){status.textContent=storageError(e);}finally{setBusy(false);}}
+
+  section.querySelector('[data-ntm="apply"]').addEventListener('click',()=>perform(async()=>{
+    readSequence++;const xml=input.value.trim(),parsed=parse(xml),next={xml,visible:true};
+    await save(next);state=next;features=parsed;render(true);status.textContent=summary()+'\n이 브라우저에 저장됨 · 2D 평면 표시';
+  }));
+  toggle.addEventListener('click',()=>perform(async()=>{if(!state)return;const next={...state,visible:!state.visible};await save(next);state=next;if(state.visible)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}sync();}));
+  section.querySelector('[data-ntm="clear"]').addEventListener('click',()=>perform(async()=>{
+    readSequence++;await save({deleted:true});state=null;features=[];layer.clearLayers();map.removeLayer(layer);input.value='';fileInput.value='';sync();status.textContent='NTM 표시와 저장 내용을 삭제했습니다.';
+  }));
   input.addEventListener('input',()=>{readSequence++;});
   fileInput.addEventListener('change',async()=>{
     const sequence=++readSequence,file=fileInput.files&&fileInput.files[0];if(!file)return;
@@ -12476,8 +12512,24 @@ function initPrivateNtmControl(){
     }catch(e){if(sequence===readSequence)status.textContent=e.message||String(e);}finally{if(sequence===readSequence)fileInput.value='';}
   });
   map.on('moveend',()=>{if(state&&Math.abs(map.getCenter().lng-anchor)>150)render(false);});
-  try{const stored=localStorage.getItem(storageKey);if(stored){const restored=JSON.parse(stored);if(typeof restored.xml!=='string'||typeof restored.visible!=='boolean')throw Error('저장 형식이 유효하지 않습니다.');features=parse(restored.xml);state=restored;input.value=state.xml;render(false);status.textContent=summary()+'\n저장한 NTM과 표시 상태를 복원했습니다.';}}catch(e){status.textContent='NTM 복원 실패: '+(e.message||String(e));}
-  sync();
+  setBusy(true);
+  (async()=>{
+    try{
+      let restored=await storedRecord('read');
+      if(restored===undefined){
+        const old=localStorage.getItem(storageKey);
+        if(old){restored=JSON.parse(old);
+          // 이전 데이터의 유효성을 확인한 뒤 저장 성공 시에만 원본을 정리한다.
+          if(typeof restored.xml!=='string'||typeof restored.visible!=='boolean')throw Error('저장 형식이 유효하지 않습니다.');
+          parse(restored.xml);await save(restored);
+        }
+      }
+      if(restored&&!restored.deleted){
+        if(typeof restored.xml!=='string'||typeof restored.visible!=='boolean')throw Error('저장 형식이 유효하지 않습니다.');
+        features=parse(restored.xml);state=restored;input.value=state.xml;render(false);status.textContent=summary()+'\n저장한 NTM과 표시 상태를 복원했습니다.';
+      }
+    }catch(e){status.textContent=storageError(e);}finally{setBusy(false);}
+  })();
 }
 initPrivateNtmControl();
 
