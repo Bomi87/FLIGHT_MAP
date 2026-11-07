@@ -12238,11 +12238,12 @@ function initPrivateGpxControl(){
   document.head.appendChild(style);
   const button=document.createElement('button');button.id='privateGpxBtn';button.type='button';button.textContent='GPX';button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','privateGpxPanel');pos.after(button);
   const panel=document.createElement('section');panel.id='privateGpxPanel';panel.hidden=true;panel.setAttribute('aria-label','개인 GPX 경로');
-  panel.innerHTML='<header>개인 GPX 경로<button class="gpx-close" type="button" aria-label="닫기">×</button></header><label for="privateGpxInput">RAW DATA</label><textarea id="privateGpxInput" spellcheck="false" placeholder="&lt;gpx&gt;…&lt;/gpx&gt;"></textarea><div class="gpx-actions"><button type="button" data-gpx="apply">ROUTE 표시</button><button type="button" data-gpx="toggle">OFF</button><button type="button" data-gpx="clear">삭제</button></div><div id="privateGpxStatus" role="status" aria-live="polite"></div>';
+  panel.innerHTML='<header>개인 GPX 경로<button class="gpx-close" type="button" aria-label="닫기">×</button></header><label for="privateGpxInput">RAW DATA</label><textarea id="privateGpxInput" spellcheck="false" placeholder="&lt;gpx&gt;…&lt;/gpx&gt;"></textarea><label for="privateGpxFile" style="display:block;margin-top:8px">GPX 파일 선택</label><input id="privateGpxFile" type="file" accept=".gpx" style="display:block;max-width:100%;margin:5px 0"><div class="gpx-actions"><button type="button" data-gpx="apply">ROUTE 표시</button><button type="button" data-gpx="toggle">OFF</button><button type="button" data-gpx="clear">삭제</button></div><div id="privateGpxStatus" role="status" aria-live="polite"></div>';
   (document.getElementById('appRoot')||document.body).appendChild(panel);
   L.DomEvent.disableClickPropagation(panel);L.DomEvent.disableScrollPropagation(panel);
   const input=panel.querySelector('textarea'),status=panel.querySelector('#privateGpxStatus');
-  const layer=L.featureGroup().addTo(map);let routes=[],anchor=null;
+  const layer=L.featureGroup().addTo(map);let routes=[],anchor=null,gpxReadSequence=0;
+  const gpxFile=panel.querySelector('#privateGpxFile');
   const toggle=panel.querySelector('[data-gpx="toggle"]');
   function syncToggle(){
     const visible=map.hasLayer(layer);
@@ -12321,6 +12322,7 @@ function initPrivateGpxControl(){
     syncToggle();scheduleRouteTextUpdate();
   }
   panel.querySelector('[data-gpx="apply"]').addEventListener('click',()=>{
+    gpxReadSequence++;
     try{
       const xml=input.value.trim(),parsed=parse(xml);
       // 표시 전에 저장 성공 여부를 확인한다. 저장 실패 시 기존 경로를 유지한다.
@@ -12330,8 +12332,21 @@ function initPrivateGpxControl(){
     }catch(e){status.textContent=e.message||String(e);}
   });
   panel.querySelector('[data-gpx="clear"]').addEventListener('click',()=>{
+    gpxReadSequence++;
     try{localStorage.removeItem(storageKey);localStorage.removeItem(visibilityKey);}catch(e){status.textContent='저장된 경로를 삭제하지 못했습니다. 브라우저 저장 권한을 확인해 주세요.';return;}
-    removeGpxLabels();routes=[];layer.clearLayers();syncToggle();scheduleRouteTextUpdate();input.value='';button.classList.remove('active');status.textContent='표시한 경로와 이 브라우저의 저장 내용을 삭제했습니다.';
+    removeGpxLabels();routes=[];layer.clearLayers();syncToggle();scheduleRouteTextUpdate();input.value='';gpxFile.value='';button.classList.remove('active');status.textContent='표시한 경로와 이 브라우저의 저장 내용을 삭제했습니다.';
+  });
+  input.addEventListener('input',()=>{gpxReadSequence++;});
+  gpxFile.addEventListener('change',async()=>{
+    const sequence=++gpxReadSequence,file=gpxFile.files&&gpxFile.files[0];if(!file)return;
+    try{
+      if(!/\.gpx$/i.test(file.name))throw Error('GPX 파일을 선택해 주세요.');
+      if(file.size>2000000)throw Error('GPX 파일은 2MB 이하로 선택해 주세요.');
+      const xml=await file.text();parse(xml);
+      if(sequence!==gpxReadSequence)return;
+      input.value=xml;status.textContent=file.name+' 불러옴 · ROUTE 표시를 눌러 주세요.';
+    }catch(e){if(sequence===gpxReadSequence)status.textContent=e.message||String(e);}
+    finally{if(sequence===gpxReadSequence)gpxFile.value='';}
   });
   map.on('moveend',()=>{if(routes.length&&Math.abs(map.getCenter().lng-anchor)>150)render(false);});
   try{const xml=localStorage.getItem(storageKey);if(xml){routes=parse(xml);input.value=xml;if(localStorage.getItem(visibilityKey)==='false')map.removeLayer(layer);render(false);status.textContent=routes.map(r=>r.name+' · '+r.points.length+'개 waypoint').join('\n')+'\n이 브라우저에 저장한 경로를 복원했습니다.';}}
@@ -12379,7 +12394,7 @@ function initPrivateNtmControl(){
       const id=url.slice(1);if(seen.has(id))throw Error('KML StyleMap 순환 참조가 있습니다.');seen.add(id);return styleNode(styles.get(id),seen);
     }
     function styleFor(pm){
-      const base={line:{color:'#ffffff',opacity:1},poly:{color:'#ffffff',opacity:1},label:{color:'#ffffff',opacity:1},icon:{color:'#ffffff',opacity:1},width:1,fill:true,outline:true,labelScale:1,iconScale:1,triangle:false};
+      const base={line:{color:'#ffffff',opacity:1},poly:{color:'#ffffff',opacity:1},label:{color:'#ffffff',opacity:1},icon:{color:'#ffffff',opacity:1},width:1,fill:true,outline:true,labelScale:1,iconScale:1,triangle:false,flightIcon:false,heading:0};
       for(const style of [reference(text(pm,'styleUrl')),child(pm,'Style')]){
         if(!style)continue;
         for(const [tag,key] of [['LineStyle','line'],['PolyStyle','poly'],['LabelStyle','label'],['IconStyle','icon']]){
@@ -12390,7 +12405,12 @@ function initPrivateNtmControl(){
           if(key==='label'||key==='icon'){
             const scale=text(part,'scale');if(scale!==null){const v=Number(scale);if(!Number.isFinite(v)||v<0||v>10)throw Error('KML scale이 유효하지 않습니다.');base[key+'Scale']=v;}
           }
-          if(key==='icon'){const icon=child(part,'Icon');base.triangle=/icon52\.png(?:$|\?)/i.test(icon&&text(icon,'href')||'');}
+          if(key==='icon'){
+            const icon=child(part,'Icon'),href=icon&&text(icon,'href')||'';
+            base.triangle=/icon52\.png(?:$|\?)/i.test(href);
+            base.flightIcon=/\/airports\.png(?:$|\?)/i.test(href);
+            const heading=Number(text(part,'heading'));base.heading=Number.isFinite(heading)?((heading%360)+360)%360:0;
+          }
         }
       }
       return base;
@@ -12418,7 +12438,7 @@ function initPrivateNtmControl(){
     for(const pm of descendants(doc,'Placemark')){
       const name=text(pm,'name')||'NTM',style=styleFor(pm);
       for(const g of Array.from(pm.getElementsByTagName('*'))){
-        if(g.localName==='Point'){const pts=coordinates(g);if(pts.length!==1)throw Error('KML Point의 좌표 수를 확인해 주세요.');result.push({kind:'point',name,style,points:pts});}
+        if(g.localName==='Point'){const pts=coordinates(g);if(pts.length!==1)throw Error('KML Point의 좌표 수를 확인해 주세요.');result.push({kind:'point',name,style,points:pts,flightTrack:style.flightIcon&&!!child(pm,'TimeStamp')});}
         if(g.localName==='LineString'){const pts=coordinates(g);if(pts.length<2)throw Error('KML 선에는 좌표가 2개 이상 필요합니다.');result.push({kind:'line',name,style,points:pts});}
         if(g.localName==='Polygon'){
           const outer=child(g,'outerBoundaryIs');if(!outer)throw Error('KML 영역의 외곽선이 없습니다.');
@@ -12436,17 +12456,23 @@ function initPrivateNtmControl(){
       const s=f.style;let shape;
       // 형광 초록만 차분하게 보정하며 다른 KML 영역 색상은 유지한다.
       const vividGreen=s.poly.color.toLowerCase()==='#00ff00';
-      const areaColor=vividGreen?'#4f9d69':s.poly.color;
-      const areaOpacity=vividGreen?s.poly.opacity*.55:s.poly.opacity;
+      const areaColor=vividGreen?'#3d9e57':s.poly.color;
+      const areaOpacity=vividGreen?s.poly.opacity*.65:s.poly.opacity;
       if(f.kind==='polygon'){
         const outer=unwrap(f.rings[0],centre),ref=outer[0][1];
         shape=L.polygon([outer,...f.rings.slice(1).map(r=>unwrap(r,ref))],{color:s.line.color,opacity:s.outline?s.line.opacity:0,weight:s.outline?s.width:0,fill:s.fill,fillColor:areaColor,fillOpacity:areaOpacity}).addTo(next);
       }else if(f.kind==='line')shape=L.polyline(unwrap(f.points,centre),{color:s.line.color,opacity:s.line.opacity,weight:s.width}).addTo(next);
       else{
         const p=unwrap(f.points,centre)[0];
-        if(s.triangle){const size=14*s.iconScale;shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point',html:'<span style="display:block;width:0;height:0;border-left:'+size/2+'px solid transparent;border-right:'+size/2+'px solid transparent;border-bottom:'+size+'px solid #dc2626;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff)"></span>',iconSize:[size,size],iconAnchor:[size/2,size]})}).addTo(next);}
-        else shape=L.circleMarker(p,{radius:(isDesktopView()?4:2.5)*s.iconScale,color:s.icon.color,opacity:s.icon.opacity,weight:1,fillColor:s.icon.color,fillOpacity:s.icon.opacity}).addTo(next);
-        if(s.labelScale>0)shape.bindTooltip('<span style="color:#172554;opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:true,direction:'right',offset:[6,-5],className:'private-ntm-label'});
+        if(f.flightTrack){
+          const size=(isDesktopView()?16:13)*s.iconScale;
+          shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point private-flight-track',html:'<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" style="display:block;transform:rotate('+s.heading+'deg);overflow:visible"><path d="M12 2 L14 9 L22 14 L22 16 L14 13 L14 19 L17 21 L17 22 L12 20 L7 22 L7 21 L10 19 L10 13 L2 16 L2 14 L10 9 Z" fill="#7c3aed" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/></svg>',iconSize:[size,size],iconAnchor:[size/2,size/2]})}).addTo(next);
+        }else if(s.triangle){const size=14*s.iconScale;shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point',html:'<span style="display:block;width:0;height:0;border-left:'+size/2+'px solid transparent;border-right:'+size/2+'px solid transparent;border-bottom:'+size+'px solid #dc2626;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff)"></span>',iconSize:[size,size],iconAnchor:[size/2,size]})}).addTo(next);}
+        else{
+          const markerColor=s.icon.color.toLowerCase()==='#ffffff'?'#dc2626':s.icon.color;
+          shape=L.circleMarker(p,{radius:(isDesktopView()?4:2.5)*s.iconScale,color:markerColor,opacity:s.icon.opacity,weight:2,fillColor:markerColor,fillOpacity:s.icon.opacity}).addTo(next);
+        }
+        if(s.labelScale>0)shape.bindTooltip('<span style="color:#172554;opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:!f.flightTrack,direction:'right',offset:[6,-5],className:'private-ntm-label'});
       }
       const p=f.kind==='point'?f.points[0]:null;
       shape.bindPopup('<strong>'+esc(f.name)+'</strong>'+(p?'<br>'+p[0].toFixed(6)+', '+p[1].toFixed(6):''));
