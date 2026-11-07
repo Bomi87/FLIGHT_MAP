@@ -12299,7 +12299,7 @@ function initPrivateGpxControl(){
       const path=points.map(ll=>({lat:ll[0],lon:ll[1]}));
       route.points.forEach((p,i)=>{
         const marker=L.circleMarker(points[i],{radius:4,color:'#6d28d9',weight:2,fillColor:'#fff',fillOpacity:1}).addTo(next);
-        marker.bindPopup('<strong>'+escape(p.name||'waypoint '+(i+1))+'</strong><br>'+escape(route.name)+'<br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6));
+      marker.bindPopup('<strong>'+escape(p.name||'waypoint '+(i+1))+'</strong><br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6));
         if(p.name){
           const before=waypointLabelRegistry.length;
           registerWaypointLabel(marker,{type:'Point',name:p.name,description:''},{
@@ -12344,7 +12344,8 @@ function initSharedRouteToggle(){
   function sync(){
     const on=map.hasLayer(drawn);
     button.textContent=on?'ROUTE ON':'ROUTE OFF';
-    button.style.background=on?'#1769aa':'#fff';button.style.color=on?'#fff':'#64748b';
+    button.style.background=on?'#facc15':'#fef9c3';
+    button.style.color='#713f12';
     button.setAttribute('aria-pressed',String(on));
     button.setAttribute('aria-label',on?'기존 ROUTE 숨기기':'기존 ROUTE 표시하기');
     button.title=on?'기존 ROUTE 숨기기 (GPX 유지)':'기존 ROUTE 표시하기';
