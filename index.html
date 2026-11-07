@@ -12267,6 +12267,7 @@ function initPrivateMapFiles(){
     for(const entry of [...entries.values()].sort((a,b)=>a.record.order-b.record.order)){
       const record=entry.record,row=document.createElement('div');row.className='private-file-row';row.dataset.fileId=record.id;
       const name=document.createElement('span');name.className='private-file-name';name.textContent=record.name;name.title=record.name;row.appendChild(name);
+      if(entry.warnings.length){const detail=document.createElement('small');detail.textContent='일부 요소 제외 ('+entry.warnings.length+')';detail.style.cssText='display:block;font-size:10px;font-weight:400;color:#92400e';detail.title=entry.warnings.join('\n');name.appendChild(detail);}
       for(const [label,action] of [['ON','on'],['OFF','off'],['삭제','delete']]){
         const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.action=action;b.disabled=busy;
         b.setAttribute('aria-label',record.name+' '+label);
@@ -12287,30 +12288,39 @@ function initPrivateMapFiles(){
   function addRecord(record,parsed){
     const old=entries.get(record.id);if(old)old.renderer.destroy();
     const renderer=record.kind==='gpx'?createGpxRenderer(record,parsed):createKmlRenderer(record,parsed);
-    entries.set(record.id,{record,renderer});
+    entries.set(record.id,{record,renderer,warnings:parsed.warnings||[]});
   }
   function fitVisible(){const bounds=L.latLngBounds([]);for(const entry of entries.values())if(entry.record.visible){const b=entry.renderer.getBounds();if(b&&b.isValid())bounds.extend(b);}if(bounds.isValid())map.fitBounds(bounds,{padding:[35,35],maxZoom:10});}
   async function readFile(file){
-    if(file.size>20000000)throw Error('파일은 20MB 이하로 선택해 주세요.');const extension=(file.name.match(/\.([^.]+)$/)||[])[1]?.toLowerCase();let xml;
+    if(file.size>20000000)throw Error('파일은 20MB 이하로 선택해 주세요.');const extension=(file.name.match(/\.([^.]+)$/)||[])[1]?.toLowerCase();let xml,assets={},assetBase='';
     if(extension==='kmz'){
       if(!window.JSZip)throw Error('KMZ 압축 해제 라이브러리를 불러오지 못했습니다.');
       const zip=await JSZip.loadAsync(await file.arrayBuffer()),kmls=Object.values(zip.files).filter(e=>!e.dir&&/\.kml$/i.test(e.name));
       const main=kmls.find(e=>/^doc\.kml$/i.test(e.name))||(kmls.length===1?kmls[0]:null);
       if(!main)throw Error('KMZ 기본 doc.kml을 찾을 수 없거나 KML이 여러 개입니다. 사용할 KML을 별도 파일로 선택해 주세요.');xml=await main.async('string');
+      assetBase=main.name.includes('/')?main.name.slice(0,main.name.lastIndexOf('/')+1):'';
+      // KMZ 안에 포함된 이미지 아이콘을 함께 저장한다. 외부 URL은 요청하지 않는다.
+      const images=Object.values(zip.files).filter(e=>!e.dir&&/\.(png|jpe?g|gif|webp)$/i.test(e.name));let imageBytes=0;
+      for(const image of images){
+        const bytes=await image.async('uint8array');imageBytes+=bytes.length;if(imageBytes>12000000)throw Error('KMZ 내부 이미지 합계가 12MB를 초과합니다.');
+        const ext=image.name.split('.').pop().toLowerCase(),mime=ext==='jpg'||ext==='jpeg'?'image/jpeg':'image/'+ext;
+        let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+        assets[resourcePath(image.name)]='data:'+mime+';base64,'+btoa(binary);
+      }
     }else if(extension==='gpx'||extension==='kml')xml=await file.text();else throw Error('GPX·KML·KMZ 파일을 선택해 주세요.');
     if(xml.length>2000000)throw Error('압축을 푼 원문은 2MB 이하로 선택해 주세요.');
-    return {kind:extension==='gpx'?'gpx':'kml',xml};
+    return {kind:extension==='gpx'?'gpx':'kml',xml,assets,assetBase};
   }
   picker.addEventListener('change',()=>{
     const files=Array.from(picker.files||[]);picker.value='';if(!files.length)return;
     enqueue(async()=>{
-      const failures=[];let success=0;
+      const failures=[],notes=[];let success=0;
       for(const file of files){try{
         const content=await readFile(file),id=idFor(file.name),old=entries.get(id);
-        const record={id,name:file.name,kind:content.kind,xml:content.xml,visible:true,order:old?old.record.order:nextOrder++};
-        const parsed=parsedRecord(record);await storage('files','put',record);addRecord(record,parsed);success++;updateList();
+        const record={id,name:file.name,kind:content.kind,xml:content.xml,assets:content.assets,assetBase:content.assetBase,visible:true,order:old?old.record.order:nextOrder++};
+        const parsed=parsedRecord(record);await storage('files','put',record);addRecord(record,parsed);if(parsed.warnings?.length)notes.push(file.name+': '+parsed.warnings.join(' / '));success++;updateList();
       }catch(e){failures.push(file.name+': '+errorText(e));}}
-      if(success)fitVisible();status.textContent=success+'개 파일 표시·저장됨'+(failures.length?'\n'+failures.join('\n'):'');
+      if(success)fitVisible();status.textContent=success+'개 파일 표시·저장됨'+([...failures,...notes].length?'\n'+[...failures,...notes].join('\n'):'');
     });
   });
   // 기존 한 개씩 저장하던 GPX와 KML도 최초 한 번 가져온다.
@@ -12375,7 +12385,14 @@ function initPrivateMapFiles(){
     if(/<\/?gx:/.test(xml)&&!/<kml\b[^>]*\bxmlns:gx\s*=/.test(xml))xml=xml.replace(/<kml\b/, '<kml xmlns:gx="http://www.google.com/kml/ext/2.2"');
     const doc=new DOMParser().parseFromString(xml.trim(),'application/xml');
     if(doc.getElementsByTagName('parsererror').length||descendants(doc,'parsererror').length||doc.documentElement.localName!=='kml')throw Error('KML XML 형식을 확인해 주세요.');
-    if(descendants(doc,'NetworkLink').length||descendants(doc,'GroundOverlay').length||descendants(doc,'Model').length)throw Error('이 입력창은 Point·LineString·Polygon을 지원합니다. NetworkLink·영상 오버레이·3D 모델은 지원하지 않습니다.');
+    const warnings=[];
+    for(const [tag,label] of [['NetworkLink','외부 NetworkLink'],['Model','3D 모델'],['ScreenOverlay','화면 로고/장식'],['Tour','투어 애니메이션']]){const count=descendants(doc,tag).length;if(count)warnings.push(label+' '+count+'개 제외');}
+    function note(message){if(!warnings.includes(message))warnings.push(message);}
+    function variedColor(base,seed){
+      let hash=2166136261;for(const c of seed){hash^=c.charCodeAt(0);hash=Math.imul(hash,16777619);}
+      let value='#';for(let i=0;i<3;i++){hash^=hash<<13;hash^=hash>>>17;hash^=hash<<5;const channel=parseInt(base.color.slice(1+i*2,3+i*2),16);value+=Math.floor(channel*((hash>>>0)/4294967296)).toString(16).padStart(2,'0');}
+      return {color:value,opacity:base.opacity};
+    }
     const styles=new Map();for(const n of [...descendants(doc,'Style'),...descendants(doc,'StyleMap')])if(n.getAttribute('id'))styles.set(n.getAttribute('id'),n);
     function styleNode(node,seen){
       if(!node)return null;if(node.localName==='Style')return node;
@@ -12384,16 +12401,16 @@ function initPrivateMapFiles(){
       return reference(text(pair,'styleUrl'),seen);
     }
     function reference(url,seen=new Set()){
-      if(!url)return null;if(!url.startsWith('#'))throw Error('외부 styleUrl은 불러오지 않습니다. 스타일을 같은 KML에 포함해 주세요.');
-      const id=url.slice(1);if(seen.has(id))throw Error('KML StyleMap 순환 참조가 있습니다.');seen.add(id);return styleNode(styles.get(id),seen);
+      if(!url)return null;if(!url.startsWith('#')){note('외부 스타일은 기본 스타일로 대체');return null;}
+      const id=url.slice(1);if(seen.has(id)){note('순환 스타일 참조는 기본 스타일로 대체');return null;}seen.add(id);return styleNode(styles.get(id),seen);
     }
     function styleFor(pm){
-      const base={line:{color:'#ffffff',opacity:1},poly:{color:'#ffffff',opacity:1},label:{color:'#ffffff',opacity:1},icon:{color:'#ffffff',opacity:1},width:1,fill:true,outline:true,labelScale:1,iconScale:1,triangle:false,flightIcon:false,heading:0};
+      const base={line:{color:'#ffffff',opacity:1},poly:{color:'#ffffff',opacity:1},label:{color:'#ffffff',opacity:1},icon:{color:'#ffffff',opacity:1},width:1,fill:true,outline:true,labelScale:1,iconScale:1,triangle:false,flightIcon:false,heading:0,iconHref:'',randomModes:{}};
       for(const style of [reference(text(pm,'styleUrl')),child(pm,'Style')]){
         if(!style)continue;
         for(const [tag,key] of [['LineStyle','line'],['PolyStyle','poly'],['LabelStyle','label'],['IconStyle','icon']]){
           const part=child(style,tag);if(!part)continue;const c=text(part,'color');if(c!==null)base[key]=color(c);
-          if(text(part,'colorMode')==='random')throw Error('colorMode=random은 지원하지 않습니다. normal 색상을 지정해 주세요.');
+          if(text(part,'colorMode')!==null)base.randomModes[key]=text(part,'colorMode')==='random';
           if(key==='line'&&text(part,'width')!==null){base.width=Number(text(part,'width'));if(!Number.isFinite(base.width)||base.width<0||base.width>50)throw Error('KML 선 두께가 유효하지 않습니다.');}
           if(key==='poly'){if(text(part,'fill')!==null)base.fill=text(part,'fill')!=='0';if(text(part,'outline')!==null)base.outline=text(part,'outline')!=='0';}
           if(key==='label'||key==='icon'){
@@ -12401,12 +12418,14 @@ function initPrivateMapFiles(){
           }
           if(key==='icon'){
             const icon=child(part,'Icon'),href=icon&&text(icon,'href')||'';
+            base.iconHref=href;
             base.triangle=/icon52\.png(?:$|\?)/i.test(href);
             base.flightIcon=/\/airports\.png(?:$|\?)/i.test(href);
             const heading=Number(text(part,'heading'));base.heading=Number.isFinite(heading)?((heading%360)+360)%360:0;
           }
         }
       }
+      for(const key of ['line','poly','label','icon'])if(base.randomModes[key])base[key]=variedColor(base[key],(text(pm,'name')||'')+'|'+key+'|'+(descendants(pm,'coordinates')[0]?.textContent||''));
       return base;
     }
     let count=0;
@@ -12430,7 +12449,9 @@ function initPrivateMapFiles(){
     }
     const result=[];
     for(const pm of descendants(doc,'Placemark')){
-      const name=text(pm,'name')||'NTM',style=styleFor(pm);
+      const before=result.length;
+      try{
+      const name=text(pm,'name')||'지도 요소',style=styleFor(pm);
       for(const g of Array.from(pm.getElementsByTagName('*'))){
         if(g.localName==='Point'){const pts=coordinates(g);if(pts.length!==1)throw Error('KML Point의 좌표 수를 확인해 주세요.');const stamp=child(pm,'TimeStamp'),when=stamp&&text(stamp,'when');
           const whenMs=when?Date.parse(when):NaN;
@@ -12442,14 +12463,47 @@ function initPrivateMapFiles(){
           const altitudeFt=reported?Number(reported[1].replace(/,/g,'')):(Number.isFinite(altitudeM)?altitudeM/0.3048:null);
           result.push({kind:'point',name,style,points:pts,flightTrack:style.flightIcon&&!!stamp,timeUtc,altitudeFt});}
         if(g.localName==='LineString'){const pts=coordinates(g);if(pts.length<2)throw Error('KML 선에는 좌표가 2개 이상 필요합니다.');result.push({kind:'line',name,style,points:pts});}
+        if(g.localName==='Track'){
+          const coords=children(g,'coord'),times=children(g,'when');
+          const pts=coords.map(c=>{if(++count>10000)throw Error('좌표가 10,000개를 초과합니다');const v=c.textContent.trim().split(/\s+/).map(Number);if(v.length<2||!v.every(Number.isFinite)||Math.abs(v[0])>180||Math.abs(v[1])>90)throw Error('gx:Track 좌표 오류');return v;});
+          if(pts.length<2)throw Error('gx:Track에 좌표가 부족합니다');
+          result.push({kind:'line',name,style,points:pts.map(p=>[p[1],p[0]])});
+          pts.forEach((p,i)=>{const next=pts[i+1]||p,prev=pts[i-1]||p,a=i<pts.length-1?p:prev,b=i<pts.length-1?next:p,r=Math.PI/180,d=(b[0]-a[0])*r;
+            const heading=Math.atan2(Math.sin(d)*Math.cos(b[1]*r),Math.cos(a[1]*r)*Math.sin(b[1]*r)-Math.sin(a[1]*r)*Math.cos(b[1]*r)*Math.cos(d))/r;
+            const ms=Date.parse(times[i]?.textContent||'');
+            result.push({kind:'point',name,style:{...style,heading},points:[[p[1],p[0]]],flightTrack:true,timeUtc:Number.isFinite(ms)?new Date(ms).toISOString().replace('T',' ').replace(/\.\d{3}Z$/,' UTC'):name,altitudeFt:Number.isFinite(p[2])?p[2]/0.3048:null});
+          });
+        }
         if(g.localName==='Polygon'){
           const outer=child(g,'outerBoundaryIs');if(!outer)throw Error('KML 영역의 외곽선이 없습니다.');
           result.push({kind:'polygon',name,style,rings:[ring(outer),...children(g,'innerBoundaryIs').map(ring)]});
         }
       }
+      if(result.length===before)note(name+': 표시 가능한 도형 없음');
+      }catch(error){note((text(pm,'name')||'지도 요소')+': '+(error.message||String(error)));}
     }
-    if(!result.length)throw Error('표시할 Point·LineString·Polygon이 없습니다.');
-    return result;
+    for(const overlay of descendants(doc,'GroundOverlay')){
+      try{
+        const box=child(overlay,'LatLonBox'),icon=child(overlay,'Icon'),href=icon&&text(icon,'href');
+        if(!box||!href)throw Error('LatLonBox 또는 이미지가 없습니다');
+        const north=Number(text(box,'north')),south=Number(text(box,'south')),east=Number(text(box,'east')),west=Number(text(box,'west')),rotation=Number(text(box,'rotation')||0);
+        if(![north,south,east,west].every(Number.isFinite)||north<=south||north>90||south< -90)throw Error('유효하지 않은 영상 경계');
+        if(rotation!==0)throw Error('회전 영상 오버레이는 제외');
+        const opacity=text(overlay,'color')?color(text(overlay,'color')).opacity:1;
+        result.push({kind:'overlay',name:text(overlay,'name')||'영상',href,opacity,bounds:[[south,west],[north,east]]});
+      }catch(error){note('GroundOverlay: '+error.message);}
+    }
+    if(!result.length)throw Error('표시 가능한 도형이 없습니다.'+(warnings.length?' '+warnings.join(' / '):''));
+    result.warnings=warnings;return result;
+  }
+  function resourcePath(value){
+    const parts=[];let path=String(value||'').replace(/\\/g,'/');try{path=decodeURIComponent(path);}catch(e){}
+    for(const part of path.split('/')){if(!part||part==='.')continue;if(part==='..')parts.pop();else parts.push(part);}return parts.join('/');
+  }
+  function embeddedImage(record,href){
+    if(!href||/^(?:[a-z]+:|\/\/)/i.test(href))return null;
+    const path=resourcePath((record.assetBase||'')+href),url=record.assets&&record.assets[path];
+    return typeof url==='string'&&/^data:image\/(?:png|jpeg|gif|webp);base64,/.test(url)?url:null;
   }
   function unwrap(points,reference){let prev=reference;return points.map(p=>{let lon=p[1];while(lon-prev>180)lon-=360;while(lon-prev<-180)lon+=360;prev=lon;return [p[0],lon];});}
   function createGpxRenderer(record,routes){
@@ -12509,6 +12563,12 @@ function initPrivateMapFiles(){
     flightEntries=[];flightLabels.clearLayers();
     const next=L.featureGroup(),centre=map.getCenter().lng;
     for(const f of features){
+      if(f.kind==='overlay'){
+        const image=embeddedImage(record,f.href);
+        if(image){const ll=unwrap([[f.bounds[0][0],f.bounds[0][1]],[f.bounds[1][0],f.bounds[1][1]]],centre);L.imageOverlay(image,ll,{opacity:f.opacity,interactive:true}).bindPopup(esc(f.name)).addTo(next);}
+        else{const note='영상 이미지가 KMZ에 없어 제외: '+f.name;if(!features.warnings.includes(note))features.warnings.push(note);}
+        continue;
+      }
       const s=f.style;let shape;
       // 형광 초록만 차분하게 보정하며 다른 KML 영역 색상은 유지한다.
       const vividGreen=s.poly.color.toLowerCase()==='#00ff00';
@@ -12523,6 +12583,9 @@ function initPrivateMapFiles(){
         if(f.flightTrack){
           const size=(isDesktopView()?21:18)*s.iconScale;
           shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point private-flight-track',html:'<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" style="display:block;transform:rotate('+s.heading+'deg);overflow:visible"><path d="M12 2 L14 9 L22 14 L22 16 L14 13 L14 19 L17 21 L17 22 L12 20 L7 22 L7 21 L10 19 L10 13 L2 16 L2 14 L10 9 Z" fill="#7c3aed" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/></svg>',iconSize:[size,size],iconAnchor:[size/2,size/2]})}).addTo(next);
+        }else if(embeddedImage(record,s.iconHref)){
+          const size=24*s.iconScale,url=embeddedImage(record,s.iconHref);
+          shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point',html:'<img alt="" src="'+esc(url)+'" width="'+size+'" height="'+size+'" style="display:block;object-fit:contain;transform:rotate('+s.heading+'deg)">',iconSize:[size,size],iconAnchor:[size/2,size/2]})}).addTo(next);
         }else if(s.triangle){const size=14*s.iconScale;shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point',html:'<span style="display:block;width:0;height:0;border-left:'+size/2+'px solid transparent;border-right:'+size/2+'px solid transparent;border-bottom:'+size+'px solid #dc2626;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff)"></span>',iconSize:[size,size],iconAnchor:[size/2,size]})}).addTo(next);}
         else{
           const markerColor=s.icon.color.toLowerCase()==='#ffffff'?'#dc2626':s.icon.color;
