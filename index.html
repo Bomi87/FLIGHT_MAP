@@ -12210,6 +12210,96 @@ setInterval(async () => {
 
 initTakeoffControl();
 initPositioningControl();
+/* GPX 붙여넣기: 서버로 전송하지 않고 현재 브라우저에만 저장한다. */
+function initPrivateGpxControl(){
+  const pos=document.getElementById('posFloatingBtn');
+  if(!pos||document.getElementById('privateGpxBtn'))return;
+  const storageKey='flightMap.privateGpx.v1';
+  const style=document.createElement('style');
+  style.textContent=`
+  #privateGpxBtn{position:absolute;top:10px;left:124px;z-index:1002;height:28px;padding:0 10px;border:0;border-radius:6px;background:#fff;color:#333;font:800 11px Arial;box-shadow:0 1px 5px #0004;cursor:pointer}
+  #privateGpxBtn.active{background:#7c3aed;color:white}
+  #privateGpxPanel[hidden]{display:none!important}
+  #privateGpxPanel{position:absolute;top:45px;left:8px;z-index:1200;width:390px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 65px);overflow:auto;box-sizing:border-box;padding:14px;background:#fff;color:#1e293b;border-radius:10px;box-shadow:0 3px 15px #0004;font:12px/1.5 Arial}
+  #privateGpxPanel header{display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:800;margin-bottom:8px}
+  #privateGpxPanel textarea{display:block;width:100%;box-sizing:border-box;min-height:160px;max-height:40vh;resize:vertical;font:12px/1.4 monospace;border:1px solid #cbd5e1;border-radius:6px;padding:8px}
+  #privateGpxPanel .gpx-actions{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
+  #privateGpxPanel button{border:0;border-radius:5px;padding:8px 10px;cursor:pointer;background:#ede9fe;color:#5b21b6;font-weight:700}
+  #privateGpxPanel .gpx-close{background:transparent;font-size:19px;padding:0 4px}
+  #privateGpxStatus{white-space:pre-wrap;overflow-wrap:anywhere}
+  .private-gpx-label{background:#fffE;border:1px solid #c4b5fd;color:#5b21b6;font:700 10px Arial;box-shadow:none;padding:2px 4px}
+  @media(max-width:767px){#privateGpxBtn{height:27px;font-size:10px}}
+  `;
+  document.head.appendChild(style);
+  const button=document.createElement('button');button.id='privateGpxBtn';button.type='button';button.textContent='GPX';button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','privateGpxPanel');pos.after(button);
+  const panel=document.createElement('section');panel.id='privateGpxPanel';panel.hidden=true;panel.setAttribute('aria-label','개인 GPX 경로');
+  panel.innerHTML='<header>개인 GPX 경로<button class="gpx-close" type="button" aria-label="닫기">×</button></header><p>GPX 원문을 붙여넣으세요. 이 브라우저에만 저장되며, 경로 지우기를 누르면 삭제됩니다.</p><label for="privateGpxInput">GPX 원문</label><textarea id="privateGpxInput" spellcheck="false" placeholder="&lt;gpx&gt;…&lt;/gpx&gt;"></textarea><div class="gpx-actions"><button type="button" data-gpx="apply">경로 표시·저장</button><button type="button" data-gpx="fit">전체 경로 보기</button><button type="button" data-gpx="clear">경로 지우기</button></div><div id="privateGpxStatus" role="status" aria-live="polite"></div>';
+  (document.getElementById('appRoot')||document.body).appendChild(panel);
+  L.DomEvent.disableClickPropagation(panel);L.DomEvent.disableScrollPropagation(panel);
+  const input=panel.querySelector('textarea'),status=panel.querySelector('#privateGpxStatus');
+  const layer=L.featureGroup().addTo(map);let routes=[],anchor=null;
+  function open(value){panel.hidden=!value;button.setAttribute('aria-expanded',String(value));if(value)input.focus();else button.focus();}
+  button.addEventListener('click',()=>open(panel.hidden));panel.querySelector('.gpx-close').addEventListener('click',()=>open(false));panel.addEventListener('keydown',e=>{if(e.key==='Escape')open(false);});
+  const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function parse(xml){
+    if(!xml.trim())throw Error('GPX 원문을 붙여넣어 주세요.');
+    if(xml.length>2000000)throw Error('GPX 크기는 2MB 이하로 입력해 주세요.');
+    if(/<!DOCTYPE|<!ENTITY/i.test(xml))throw Error('DOCTYPE 또는 ENTITY 선언이 있는 XML은 지원하지 않습니다.');
+    const doc=new DOMParser().parseFromString(xml.trim(),'application/xml');
+    if(doc.getElementsByTagName('parsererror').length||doc.getElementsByTagNameNS('*','parsererror').length||doc.documentElement.localName!=='gpx')throw Error('GPX XML 형식을 확인해 주세요.');
+    const children=(node,name)=>Array.from(node.children).filter(n=>n.localName===name);
+    const name=node=>{const n=children(node,'name')[0];return n?n.textContent.trim():'';};
+    let total=0;const result=[];
+    function add(node,tag,label){
+      const points=children(node,tag).map(n=>{
+        const a=n.getAttribute('lat'),b=n.getAttribute('lon');
+        const lat=Number(a),lon=Number(b);
+        if(a===null||b===null||!a.trim()||!b.trim()||!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)throw Error('유효하지 않은 GPX 위도·경도가 있습니다.');
+        if(++total>5000)throw Error('최대 5,000개 지점까지 지원합니다.');
+        return {lat,lon,name:name(n)};
+      });
+      if(points.length<2)throw Error('경로마다 지점이 2개 이상 필요합니다.');
+      result.push({name:label||'GPX 경로',points});
+    }
+    for(const rte of children(doc.documentElement,'rte'))add(rte,'rtept',name(rte));
+    for(const trk of children(doc.documentElement,'trk'))for(const seg of children(trk,'trkseg'))add(seg,'trkpt',name(trk));
+    if(!result.length)throw Error('rte/rtept 또는 trk/trkseg/trkpt 경로가 없습니다.');
+    return result;
+  }
+  function render(fit){
+    const next=L.featureGroup();const centre=map.getCenter().lng;
+    for(const route of routes){
+      let previous=centre;const points=route.points.map(p=>{let lon=p.lon;while(lon-previous>180)lon-=360;while(lon-previous<-180)lon+=360;previous=lon;return [p.lat,lon];});
+      L.polyline(points,{color:'#7c3aed',weight:3,opacity:.95}).bindPopup(escape(route.name)).addTo(next);
+      route.points.forEach((p,i)=>{
+        const marker=L.circleMarker(points[i],{radius:4,color:'#6d28d9',weight:2,fillColor:'#fff',fillOpacity:1}).addTo(next);
+        marker.bindPopup('<strong>'+escape(p.name||'지점 '+(i+1))+'</strong><br>'+escape(route.name)+'<br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6));
+        if(p.name)marker.bindTooltip(escape(p.name),{permanent:true,direction:'top',className:'private-gpx-label',offset:[0,-5]});
+      });
+    }
+    layer.clearLayers();next.eachLayer(l=>layer.addLayer(l));anchor=centre;button.classList.toggle('active',routes.length>0);
+    if(fit&&routes.length)map.fitBounds(layer.getBounds(),{padding:[35,35],maxZoom:10});
+  }
+  panel.querySelector('[data-gpx="apply"]').addEventListener('click',()=>{
+    try{
+      const xml=input.value.trim(),parsed=parse(xml);
+      // 표시 전에 저장 성공 여부를 확인한다. 저장 실패 시 기존 경로를 유지한다.
+      try{localStorage.setItem(storageKey,xml);}catch(e){throw Error('브라우저 저장에 실패했습니다. 저장 공간 또는 사이트 저장 권한을 확인해 주세요.');}
+      routes=parsed;render(true);
+      status.textContent=routes.map(r=>r.name+' · '+r.points.length+'개 지점').join('\n')+'\n이 브라우저에 저장됨 · 다른 사용자에게 공유되지 않음';
+    }catch(e){status.textContent=e.message||String(e);}
+  });
+  panel.querySelector('[data-gpx="fit"]').addEventListener('click',()=>{if(routes.length)render(true);else status.textContent='먼저 GPX 경로를 표시해 주세요.';});
+  panel.querySelector('[data-gpx="clear"]').addEventListener('click',()=>{
+    try{localStorage.removeItem(storageKey);}catch(e){status.textContent='저장된 경로를 삭제하지 못했습니다. 브라우저 저장 권한을 확인해 주세요.';return;}
+    routes=[];layer.clearLayers();input.value='';button.classList.remove('active');status.textContent='표시한 경로와 이 브라우저의 저장 내용을 삭제했습니다.';
+  });
+  map.on('moveend',()=>{if(routes.length&&Math.abs(map.getCenter().lng-anchor)>150)render(false);});
+  try{const xml=localStorage.getItem(storageKey);if(xml){routes=parse(xml);input.value=xml;render(false);status.textContent=routes.map(r=>r.name+' · '+r.points.length+'개 지점').join('\n')+'\n이 브라우저에 저장한 경로를 복원했습니다.';}}
+  catch(e){status.textContent='저장 경로를 복원하지 못했습니다: '+(e.message||String(e));}
+}
+initPrivateGpxControl();
+
 init();
   </script>
 
