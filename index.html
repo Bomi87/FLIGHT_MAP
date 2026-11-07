@@ -12237,8 +12237,8 @@ function initPrivateGpxControl(){
   `;
   document.head.appendChild(style);
   const button=document.createElement('button');button.id='privateGpxBtn';button.type='button';button.textContent='GPX';button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','privateGpxPanel');pos.after(button);
-  const panel=document.createElement('section');panel.id='privateGpxPanel';panel.hidden=true;panel.setAttribute('aria-label','GPX 경로');
-  panel.innerHTML='<header>GPX 경로<button class="gpx-close" type="button" aria-label="닫기">×</button></header><label for="privateGpxInput">RAW DATA</label><textarea id="privateGpxInput" spellcheck="false" placeholder="&lt;gpx&gt;…&lt;/gpx&gt;"></textarea><div class="gpx-actions"><button type="button" data-gpx="apply">ROUTE 표시</button><button type="button" data-gpx="toggle">OFF</button><button type="button" data-gpx="clear">삭제</button></div><div id="privateGpxStatus" role="status" aria-live="polite"></div>';
+  const panel=document.createElement('section');panel.id='privateGpxPanel';panel.hidden=true;panel.setAttribute('aria-label','개인 GPX 경로');
+  panel.innerHTML='<header>개인 GPX 경로<button class="gpx-close" type="button" aria-label="닫기">×</button></header><label for="privateGpxInput">RAW DATA</label><textarea id="privateGpxInput" spellcheck="false" placeholder="&lt;gpx&gt;…&lt;/gpx&gt;"></textarea><div class="gpx-actions"><button type="button" data-gpx="apply">ROUTE 표시</button><button type="button" data-gpx="toggle">OFF</button><button type="button" data-gpx="clear">삭제</button></div><div id="privateGpxStatus" role="status" aria-live="polite"></div>';
   (document.getElementById('appRoot')||document.body).appendChild(panel);
   L.DomEvent.disableClickPropagation(panel);L.DomEvent.disableScrollPropagation(panel);
   const input=panel.querySelector('textarea'),status=panel.querySelector('#privateGpxStatus');
@@ -12338,6 +12338,149 @@ function initPrivateGpxControl(){
   catch(e){status.textContent='저장 경로를 복원하지 못했습니다: '+(e.message||String(e));}
 }
 initPrivateGpxControl();
+/* NTM은 별도 브라우저 저장소를 사용하며 서버로 전송하지 않는다. */
+function initPrivateNtmControl(){
+  const panel=document.getElementById('privateGpxPanel');if(!panel||document.getElementById('privateNtmInput'))return;
+  const storageKey='flightMap.privateNtm.v1';
+  const section=document.createElement('section');section.id='privateNtmSection';
+  section.style.cssText='margin-top:16px;padding-top:12px;border-top:1px solid #ddd';
+  section.innerHTML='<header>개인 NTM · KML / KMZ</header><label for="privateNtmInput">NTM RAW DATA</label><textarea id="privateNtmInput" spellcheck="false" placeholder="KML 원문을 붙여넣으세요"></textarea><label for="privateNtmFile" style="display:block;margin-top:8px">KML / KMZ 파일 선택</label><input id="privateNtmFile" type="file" accept=".kml,.kmz" style="display:block;max-width:100%;margin:5px 0"><div class="gpx-actions"><button type="button" data-ntm="apply">NTM 표시</button><button type="button" data-ntm="toggle">OFF</button><button type="button" data-ntm="clear" style="margin-left:auto">삭제</button></div><div id="privateNtmStatus" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></div>';
+  panel.appendChild(section);
+  const css=document.createElement('style');css.textContent='.private-ntm-label{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important}.private-ntm-label:before{display:none!important}.private-ntm-point{background:transparent;border:0}';document.head.appendChild(css);
+  const input=section.querySelector('textarea'),fileInput=section.querySelector('input'),status=section.querySelector('[role="status"]'),toggle=section.querySelector('[data-ntm="toggle"]');
+  const layer=L.featureGroup();let state=null,features=[],anchor=null,readSequence=0;
+  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const children=(n,name)=>Array.from(n.children||[]).filter(c=>c.localName===name);
+  const descendants=(n,name)=>Array.from(n.getElementsByTagNameNS('*',name));
+  const child=(n,name)=>children(n,name)[0];
+  const text=(n,name)=>{const c=n&&child(n,name);return c?c.textContent.trim():null;};
+  function color(value){
+    if(!/^[0-9a-f]{8}$/i.test(value||''))throw Error('KML 색상은 8자리 AABBGGRR 형식이어야 합니다.');
+    return {color:'#'+value.slice(6,8)+value.slice(4,6)+value.slice(2,4),opacity:parseInt(value.slice(0,2),16)/255};
+  }
+  function parse(xml){
+    if(!xml.trim())throw Error('NTM KML 원문을 입력해 주세요.');
+    if(xml.length>2000000)throw Error('KML 원문은 2MB 이하로 입력해 주세요.');
+    if(/<!DOCTYPE|<!ENTITY/i.test(xml))throw Error('DOCTYPE 또는 ENTITY 선언이 있는 KML은 지원하지 않습니다.');
+    // 일부 내보내기 도구가 생략한 gx 네임스페이스만 보완한다.
+    if(/<\/?gx:/.test(xml)&&!/<kml\b[^>]*\bxmlns:gx\s*=/.test(xml))xml=xml.replace(/<kml\b/, '<kml xmlns:gx="http://www.google.com/kml/ext/2.2"');
+    const doc=new DOMParser().parseFromString(xml.trim(),'application/xml');
+    if(doc.getElementsByTagName('parsererror').length||descendants(doc,'parsererror').length||doc.documentElement.localName!=='kml')throw Error('KML XML 형식을 확인해 주세요.');
+    if(descendants(doc,'NetworkLink').length||descendants(doc,'GroundOverlay').length||descendants(doc,'Model').length)throw Error('이 입력창은 Point·LineString·Polygon을 지원합니다. NetworkLink·영상 오버레이·3D 모델은 지원하지 않습니다.');
+    const styles=new Map();for(const n of [...descendants(doc,'Style'),...descendants(doc,'StyleMap')])if(n.getAttribute('id'))styles.set(n.getAttribute('id'),n);
+    function styleNode(node,seen){
+      if(!node)return null;if(node.localName==='Style')return node;
+      const pair=children(node,'Pair').find(p=>text(p,'key')==='normal');if(!pair)return null;
+      const inline=child(pair,'Style');if(inline)return inline;
+      return reference(text(pair,'styleUrl'),seen);
+    }
+    function reference(url,seen=new Set()){
+      if(!url)return null;if(!url.startsWith('#'))throw Error('외부 styleUrl은 불러오지 않습니다. 스타일을 같은 KML에 포함해 주세요.');
+      const id=url.slice(1);if(seen.has(id))throw Error('KML StyleMap 순환 참조가 있습니다.');seen.add(id);return styleNode(styles.get(id),seen);
+    }
+    function styleFor(pm){
+      const base={line:{color:'#ffffff',opacity:1},poly:{color:'#ffffff',opacity:1},label:{color:'#ffffff',opacity:1},icon:{color:'#ffffff',opacity:1},width:1,fill:true,outline:true,labelScale:1,iconScale:1,triangle:false};
+      for(const style of [reference(text(pm,'styleUrl')),child(pm,'Style')]){
+        if(!style)continue;
+        for(const [tag,key] of [['LineStyle','line'],['PolyStyle','poly'],['LabelStyle','label'],['IconStyle','icon']]){
+          const part=child(style,tag);if(!part)continue;const c=text(part,'color');if(c!==null)base[key]=color(c);
+          if(text(part,'colorMode')==='random')throw Error('colorMode=random은 지원하지 않습니다. normal 색상을 지정해 주세요.');
+          if(key==='line'&&text(part,'width')!==null){base.width=Number(text(part,'width'));if(!Number.isFinite(base.width)||base.width<0||base.width>50)throw Error('KML 선 두께가 유효하지 않습니다.');}
+          if(key==='poly'){if(text(part,'fill')!==null)base.fill=text(part,'fill')!=='0';if(text(part,'outline')!==null)base.outline=text(part,'outline')!=='0';}
+          if(key==='label'||key==='icon'){
+            const scale=text(part,'scale');if(scale!==null){const v=Number(scale);if(!Number.isFinite(v)||v<0||v>10)throw Error('KML scale이 유효하지 않습니다.');base[key+'Scale']=v;}
+          }
+          if(key==='icon'){const icon=child(part,'Icon');base.triangle=/icon52\.png(?:$|\?)/i.test(icon&&text(icon,'href')||'');}
+        }
+      }
+      return base;
+    }
+    let count=0;
+    function coordinates(node){
+      const value=text(node,'coordinates');if(!value)throw Error('KML coordinates가 없습니다.');
+      return value.split(/\s+/).map(token=>{
+        if(++count>10000)throw Error('NTM 좌표는 최대 10,000개까지 지원합니다.');
+        const p=token.split(',');if(p.length<2||!p[0].trim()||!p[1].trim())throw Error('KML 좌표 형식을 확인해 주세요.');
+        const lon=Number(p[0]),lat=Number(p[1]);if(!Number.isFinite(lon)||!Number.isFinite(lat)||Math.abs(lon)>180||Math.abs(lat)>90)throw Error('KML 위도·경도가 유효하지 않습니다.');
+        return [lat,lon];
+      });
+    }
+    function ring(boundary){
+      const n=child(boundary,'LinearRing');if(!n)throw Error('KML LinearRing이 없습니다.');const pts=coordinates(n);
+      if(new Set(pts.map(p=>p.join(','))).size<3)throw Error('영역에는 서로 다른 좌표가 3개 이상 필요합니다.');
+      const a=pts[0],b=pts[pts.length-1];if(a[0]!==b[0]||a[1]!==b[1])pts.push(a.slice());
+      // 날짜변경선을 고려하여 면적 0인 링을 차단한다.
+      const unwrapped=unwrap(pts,pts[0][1]);let area=0;
+      for(let i=1;i<unwrapped.length;i++)area+=(unwrapped[i-1][1]-a[1])*(unwrapped[i][0]-a[0])-(unwrapped[i][1]-a[1])*(unwrapped[i-1][0]-a[0]);
+      if(Math.abs(area)<1e-10)throw Error('면적이 없는 KML 영역입니다.');return pts;
+    }
+    const result=[];
+    for(const pm of descendants(doc,'Placemark')){
+      const name=text(pm,'name')||'NTM',style=styleFor(pm);
+      for(const g of Array.from(pm.getElementsByTagName('*'))){
+        if(g.localName==='Point'){const pts=coordinates(g);if(pts.length!==1)throw Error('KML Point의 좌표 수를 확인해 주세요.');result.push({kind:'point',name,style,points:pts});}
+        if(g.localName==='LineString'){const pts=coordinates(g);if(pts.length<2)throw Error('KML 선에는 좌표가 2개 이상 필요합니다.');result.push({kind:'line',name,style,points:pts});}
+        if(g.localName==='Polygon'){
+          const outer=child(g,'outerBoundaryIs');if(!outer)throw Error('KML 영역의 외곽선이 없습니다.');
+          result.push({kind:'polygon',name,style,rings:[ring(outer),...children(g,'innerBoundaryIs').map(ring)]});
+        }
+      }
+    }
+    if(!result.length)throw Error('표시할 Point·LineString·Polygon이 없습니다.');
+    return result;
+  }
+  function unwrap(points,reference){let prev=reference;return points.map(p=>{let lon=p[1];while(lon-prev>180)lon-=360;while(lon-prev<-180)lon+=360;prev=lon;return [p[0],lon];});}
+  function render(fit){
+    const next=L.featureGroup(),centre=map.getCenter().lng;
+    for(const f of features){
+      const s=f.style;let shape;
+      if(f.kind==='polygon'){
+        const outer=unwrap(f.rings[0],centre),ref=outer[0][1];
+        shape=L.polygon([outer,...f.rings.slice(1).map(r=>unwrap(r,ref))],{color:s.line.color,opacity:s.outline?s.line.opacity:0,weight:s.outline?s.width:0,fill:s.fill,fillColor:s.poly.color,fillOpacity:s.poly.opacity}).addTo(next);
+      }else if(f.kind==='line')shape=L.polyline(unwrap(f.points,centre),{color:s.line.color,opacity:s.line.opacity,weight:s.width}).addTo(next);
+      else{
+        const p=unwrap(f.points,centre)[0];
+        if(s.triangle){const size=12*s.iconScale;shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point',html:'<span style="display:block;width:0;height:0;border-left:'+size/2+'px solid transparent;border-right:'+size/2+'px solid transparent;border-bottom:'+size+'px solid '+s.icon.color+';opacity:'+s.icon.opacity+'"></span>',iconSize:[size,size],iconAnchor:[size/2,size]})}).addTo(next);}
+        else shape=L.circleMarker(p,{radius:(isDesktopView()?4:2.5)*s.iconScale,color:s.icon.color,opacity:s.icon.opacity,weight:1,fillColor:s.icon.color,fillOpacity:s.icon.opacity}).addTo(next);
+        if(s.labelScale>0)shape.bindTooltip('<span style="color:'+s.label.color+';opacity:'+s.label.opacity+';font-size:'+10*s.labelScale+'px;font-weight:700;text-shadow:0 1px 2px #000,1px 0 2px #000">'+esc(f.name)+'</span>',{permanent:true,direction:'right',className:'private-ntm-label'});
+      }
+      const p=f.kind==='point'?f.points[0]:null;
+      shape.bindPopup('<strong>'+esc(f.name)+'</strong>'+(p?'<br>'+p[0].toFixed(6)+', '+p[1].toFixed(6):''));
+    }
+    layer.clearLayers();next.eachLayer(l=>layer.addLayer(l));anchor=centre;
+    if(state&&state.visible)map.addLayer(layer);else map.removeLayer(layer);
+    if(fit&&state.visible)map.fitBounds(layer.getBounds(),{padding:[35,35],maxZoom:10});sync();
+  }
+  function sync(){toggle.disabled=!state;toggle.textContent=state&&state.visible?'OFF':'ON';toggle.setAttribute('aria-label',state&&state.visible?'NTM 숨기기':'NTM 표시하기');}
+  function summary(){const counts={polygon:0,line:0,point:0};features.forEach(f=>counts[f.kind]++);return '영역 '+counts.polygon+'개 · 선 '+counts.line+'개 · 마커 '+counts.point+'개';}
+  function save(next){try{localStorage.setItem(storageKey,JSON.stringify(next));}catch(e){throw Error('NTM을 브라우저에 저장하지 못했습니다. 저장 공간과 권한을 확인해 주세요.');}}
+  section.querySelector('[data-ntm="apply"]').addEventListener('click',()=>{
+    readSequence++;try{const xml=input.value.trim(),parsed=parse(xml),next={xml,visible:true};save(next);state=next;features=parsed;render(true);status.textContent=summary()+'\n이 브라우저에 저장됨 · 2D 평면 표시';}catch(e){status.textContent=e.message||String(e);}
+  });
+  toggle.addEventListener('click',()=>{if(!state)return;try{const next={...state,visible:!state.visible};save(next);state=next;if(state.visible)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}sync();}catch(e){status.textContent=e.message||String(e);}});
+  section.querySelector('[data-ntm="clear"]').addEventListener('click',()=>{readSequence++;try{localStorage.removeItem(storageKey);}catch(e){status.textContent='저장된 NTM을 삭제하지 못했습니다.';return;}state=null;features=[];layer.clearLayers();map.removeLayer(layer);input.value='';fileInput.value='';sync();status.textContent='NTM 표시와 저장 내용을 삭제했습니다.';});
+  input.addEventListener('input',()=>{readSequence++;});
+  fileInput.addEventListener('change',async()=>{
+    const sequence=++readSequence,file=fileInput.files&&fileInput.files[0];if(!file)return;
+    try{
+      if(file.size>20000000)throw Error('파일은 20MB 이하로 선택해 주세요.');let xml;
+      if(/\.kmz$/i.test(file.name)){
+        if(!window.JSZip)throw Error('KMZ 압축 해제 라이브러리를 불러오지 못했습니다.');
+        const archive=await JSZip.loadAsync(await file.arrayBuffer());
+        const entries=Object.values(archive.files).filter(e=>!e.dir&&/\.kml$/i.test(e.name));
+        const main=entries.find(e=>/^doc\.kml$/i.test(e.name))||(entries.length===1?entries[0]:null);
+        if(!main)throw Error('KMZ에서 기본 doc.kml을 찾을 수 없거나 KML 파일이 여러 개입니다. 사용할 KML을 직접 붙여넣어 주세요.');
+        xml=await main.async('string');
+      }else if(/\.kml$/i.test(file.name))xml=await file.text();else throw Error('KML 또는 KMZ 파일을 선택해 주세요.');
+      parse(xml);if(sequence!==readSequence)return;input.value=xml;status.textContent=file.name+' 불러옴 · NTM 표시를 눌러 주세요.';
+    }catch(e){if(sequence===readSequence)status.textContent=e.message||String(e);}finally{if(sequence===readSequence)fileInput.value='';}
+  });
+  map.on('moveend',()=>{if(state&&Math.abs(map.getCenter().lng-anchor)>150)render(false);});
+  try{const stored=localStorage.getItem(storageKey);if(stored){const restored=JSON.parse(stored);if(typeof restored.xml!=='string'||typeof restored.visible!=='boolean')throw Error('저장 형식이 유효하지 않습니다.');features=parse(restored.xml);state=restored;input.value=state.xml;render(false);status.textContent=summary()+'\n저장한 NTM과 표시 상태를 복원했습니다.';}}catch(e){status.textContent='NTM 복원 실패: '+(e.message||String(e));}
+  sync();
+}
+initPrivateNtmControl();
+
 /* 공용 ROUTE 표시만 전환한다. 개인 GPX와 기상·POS 레이어는 별개다. */
 function initSharedRouteToggle(){
   const gpx=document.getElementById('privateGpxBtn');
