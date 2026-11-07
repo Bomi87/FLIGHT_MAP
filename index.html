@@ -12378,7 +12378,6 @@ function initPrivateMapFiles(){
       const record=entry.record,row=document.createElement('div');row.className='private-file-row';row.dataset.fileId=record.id;
       const name=document.createElement('span');name.className='private-file-name';name.textContent=record.name;name.title=record.name;row.appendChild(name);
       if(record.kind==='gpx'){const swatch=document.createElement('span');swatch.setAttribute('aria-hidden','true');swatch.style.cssText='display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:'+record.routeColor;name.prepend(swatch);}
-      if(entry.warnings.length){const detail=document.createElement('small');detail.textContent='일부 요소 제외 ('+entry.warnings.length+')';detail.style.cssText='display:block;font-size:10px;font-weight:400;color:#92400e';detail.title=entry.warnings.join('\n');name.appendChild(detail);}
       for(const [label,action] of [['ON','on'],['OFF','off'],['삭제','delete']]){
         const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.action=action;b.disabled=busy;
         b.setAttribute('aria-label',record.name+' '+label);
