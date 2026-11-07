@@ -12344,7 +12344,7 @@ function initPrivateGpxControl(){
       if(file.size>2000000)throw Error('GPX 파일은 2MB 이하로 선택해 주세요.');
       const xml=await file.text();parse(xml);
       if(sequence!==gpxReadSequence)return;
-      input.value=xml;status.textContent=file.name+' 불러옴 · ROUTE 표시를 눌러 주세요.';
+      input.value=xml;gpxFile.value='';panel.querySelector('[data-gpx="apply"]').click();
     }catch(e){if(sequence===gpxReadSequence)status.textContent=e.message||String(e);}
     finally{if(sequence===gpxReadSequence)gpxFile.value='';}
   });
@@ -12359,11 +12359,43 @@ function initPrivateNtmControl(){
   const storageKey='flightMap.privateNtm.v1';
   const section=document.createElement('section');section.id='privateNtmSection';
   section.style.cssText='margin-top:16px;padding-top:12px;border-top:1px solid #ddd';
-  section.innerHTML='<header>개인 NTM · KML / KMZ</header><label for="privateNtmInput">NTM RAW DATA</label><textarea id="privateNtmInput" spellcheck="false" placeholder="KML 원문을 붙여넣으세요"></textarea><label for="privateNtmFile" style="display:block;margin-top:8px">KML / KMZ 파일 선택</label><input id="privateNtmFile" type="file" accept=".kml,.kmz" style="display:block;max-width:100%;margin:5px 0"><div class="gpx-actions"><button type="button" data-ntm="apply">NTM 표시</button><button type="button" data-ntm="toggle">OFF</button><button type="button" data-ntm="clear" style="margin-left:auto">삭제</button></div><div id="privateNtmStatus" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></div>';
+  section.innerHTML='<header>개인 KML / KMZ</header><label for="privateNtmInput">NTM RAW DATA</label><textarea id="privateNtmInput" spellcheck="false" placeholder="KML 원문을 붙여넣으세요"></textarea><label for="privateNtmFile" style="display:block;margin-top:8px">KML / KMZ 파일 선택</label><input id="privateNtmFile" type="file" accept=".kml,.kmz" style="display:block;max-width:100%;margin:5px 0"><div class="gpx-actions"><button type="button" data-ntm="apply">지도에 표시</button><button type="button" data-ntm="toggle">OFF</button><button type="button" data-ntm="clear" style="margin-left:auto">삭제</button></div><div id="privateNtmStatus" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></div>';
   panel.appendChild(section);
   const css=document.createElement('style');css.textContent='.private-ntm-label{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important}.private-ntm-label:before{display:none!important}.private-ntm-point{background:transparent;border:0}';document.head.appendChild(css);
   const input=section.querySelector('textarea'),fileInput=section.querySelector('input'),status=section.querySelector('[role="status"]'),toggle=section.querySelector('[data-ntm="toggle"]');
   const layer=L.featureGroup();let state=null,features=[],anchor=null,readSequence=0;
+  // 항적 아이콘과 고도 라벨은 화면 픽셀 기준으로 함께 중첩 검사한다.
+  let flightEntries=[],flightLabelTimer=null;
+  const flightLabels=L.featureGroup();
+  function scheduleFlightLabels(){clearTimeout(flightLabelTimer);flightLabelTimer=setTimeout(updateFlightLabels,20);}
+  function updateFlightLabels(){
+    flightLabels.clearLayers();
+    for(const entry of flightEntries)layer.removeLayer(entry.marker);
+    if(!state||!state.visible||!map.hasLayer(layer))return;
+    const occupied=[],size=map.getSize();
+    const overlap=(a,b)=>!(a.right<b.left||a.left>b.right||a.bottom<b.top||a.top>b.bottom);
+    const reserve=rect=>occupied.some(other=>overlap(rect,other));
+    // 시작과 끝을 우선하고, 축소 시 겹치는 항적점은 생략한다.
+    const order=flightEntries.length>1?[flightEntries[0],flightEntries[flightEntries.length-1],...flightEntries.slice(1,-1)]:flightEntries;
+    for(const entry of order){
+      const point=map.latLngToContainerPoint(entry.marker.getLatLng()),radius=entry.size/2+3;
+      if(point.x< -80||point.y< -30||point.x>size.x+80||point.y>size.y+30)continue;
+      const icon={left:point.x-radius,right:point.x+radius,top:point.y-radius,bottom:point.y+radius};
+      if(reserve(icon))continue;
+      const label=entry.altitudeFt===null?'':Math.round(entry.altitudeFt).toLocaleString('en-US')+' ft';
+      const width=label.length*7+6,height=17,gap=radius+4;
+      const positions=[{x:point.x+gap,y:point.y-height/2},{x:point.x-width-gap,y:point.y-height/2},{x:point.x-width/2,y:point.y-gap-height},{x:point.x-width/2,y:point.y+gap}];
+      const position=label?positions.find(p=>!reserve({left:p.x-3,right:p.x+width+3,top:p.y-2,bottom:p.y+height+2})):null;
+      // 고도 정보가 있는 항적점은 라벨까지 들어갈 공간이 있을 때 표시한다.
+      if(label&&!position)continue;
+      layer.addLayer(entry.marker);occupied.push(icon);
+      if(position){
+        const ll=map.containerPointToLatLng([position.x,position.y]);
+        L.marker(ll,{interactive:false,keyboard:false,icon:L.divIcon({className:'private-ntm-point',iconSize:[width,height],iconAnchor:[0,0],html:'<span style="display:block;white-space:nowrap;color:#172554;font:800 12px/17px Arial;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff">'+esc(label)+'</span>'})}).addTo(flightLabels);
+        occupied.push({left:position.x-3,right:position.x+width+3,top:position.y-2,bottom:position.y+height+2});
+      }
+    }
+  }
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const children=(n,name)=>Array.from(n.children||[]).filter(c=>c.localName===name);
   const descendants=(n,name)=>Array.from(n.getElementsByTagNameNS('*',name));
@@ -12438,7 +12470,15 @@ function initPrivateNtmControl(){
     for(const pm of descendants(doc,'Placemark')){
       const name=text(pm,'name')||'NTM',style=styleFor(pm);
       for(const g of Array.from(pm.getElementsByTagName('*'))){
-        if(g.localName==='Point'){const pts=coordinates(g);if(pts.length!==1)throw Error('KML Point의 좌표 수를 확인해 주세요.');result.push({kind:'point',name,style,points:pts,flightTrack:style.flightIcon&&!!child(pm,'TimeStamp')});}
+        if(g.localName==='Point'){const pts=coordinates(g);if(pts.length!==1)throw Error('KML Point의 좌표 수를 확인해 주세요.');const stamp=child(pm,'TimeStamp'),when=stamp&&text(stamp,'when');
+          const whenMs=when?Date.parse(when):NaN;
+          const timeUtc=Number.isFinite(whenMs)?new Date(whenMs).toISOString().replace('T',' ').replace(/\.\d{3}Z$/,' UTC'):name;
+          const description=(text(pm,'description')||'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ');
+          const reported=description.match(/Altitude\s*:\s*([+-]?[\d,]+(?:\.\d+)?)\s*ft/i);
+          const altitudeText=(text(g,'coordinates')||'').trim().split(/\s+/)[0].split(',')[2];
+          const altitudeM=altitudeText!==undefined&&altitudeText.trim()!==''?Number(altitudeText):NaN;
+          const altitudeFt=reported?Number(reported[1].replace(/,/g,'')):(Number.isFinite(altitudeM)?altitudeM/0.3048:null);
+          result.push({kind:'point',name,style,points:pts,flightTrack:style.flightIcon&&!!stamp,timeUtc,altitudeFt});}
         if(g.localName==='LineString'){const pts=coordinates(g);if(pts.length<2)throw Error('KML 선에는 좌표가 2개 이상 필요합니다.');result.push({kind:'line',name,style,points:pts});}
         if(g.localName==='Polygon'){
           const outer=child(g,'outerBoundaryIs');if(!outer)throw Error('KML 영역의 외곽선이 없습니다.');
@@ -12451,6 +12491,7 @@ function initPrivateNtmControl(){
   }
   function unwrap(points,reference){let prev=reference;return points.map(p=>{let lon=p[1];while(lon-prev>180)lon-=360;while(lon-prev<-180)lon+=360;prev=lon;return [p[0],lon];});}
   function render(fit){
+    flightEntries=[];flightLabels.clearLayers();
     const next=L.featureGroup(),centre=map.getCenter().lng;
     for(const f of features){
       const s=f.style;let shape;
@@ -12465,21 +12506,26 @@ function initPrivateNtmControl(){
       else{
         const p=unwrap(f.points,centre)[0];
         if(f.flightTrack){
-          const size=(isDesktopView()?16:13)*s.iconScale;
+          const size=(isDesktopView()?21:18)*s.iconScale;
           shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point private-flight-track',html:'<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" style="display:block;transform:rotate('+s.heading+'deg);overflow:visible"><path d="M12 2 L14 9 L22 14 L22 16 L14 13 L14 19 L17 21 L17 22 L12 20 L7 22 L7 21 L10 19 L10 13 L2 16 L2 14 L10 9 Z" fill="#7c3aed" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/></svg>',iconSize:[size,size],iconAnchor:[size/2,size/2]})}).addTo(next);
         }else if(s.triangle){const size=14*s.iconScale;shape=L.marker(p,{icon:L.divIcon({className:'private-ntm-point',html:'<span style="display:block;width:0;height:0;border-left:'+size/2+'px solid transparent;border-right:'+size/2+'px solid transparent;border-bottom:'+size+'px solid #dc2626;filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff)"></span>',iconSize:[size,size],iconAnchor:[size/2,size]})}).addTo(next);}
         else{
           const markerColor=s.icon.color.toLowerCase()==='#ffffff'?'#dc2626':s.icon.color;
           shape=L.circleMarker(p,{radius:(isDesktopView()?4:2.5)*s.iconScale,color:markerColor,opacity:s.icon.opacity,weight:2,fillColor:markerColor,fillOpacity:s.icon.opacity}).addTo(next);
         }
-        if(s.labelScale>0)shape.bindTooltip('<span style="color:#172554;opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:!f.flightTrack,direction:'right',offset:[6,-5],className:'private-ntm-label'});
+        if(f.flightTrack){
+          const altitude=f.altitudeFt===null?'고도 정보 없음':Math.round(f.altitudeFt).toLocaleString('en-US')+' ft';
+          shape.bindTooltip(esc(f.timeUtc)+'<br>'+esc(altitude),{direction:'top',className:'private-fr24-hover'});
+          flightEntries.push({marker:shape,altitudeFt:f.altitudeFt,size:(isDesktopView()?21:18)*s.iconScale});
+        }
+        if(!f.flightTrack&&s.labelScale>0)shape.bindTooltip('<span style="color:#172554;opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:!f.flightTrack,direction:'right',offset:[6,-5],className:'private-ntm-label'});
       }
       const p=f.kind==='point'?f.points[0]:null;
-      shape.bindPopup('<strong>'+esc(f.name)+'</strong>'+(p?'<br>'+p[0].toFixed(6)+', '+p[1].toFixed(6):''));
+      shape.bindPopup('<strong>'+esc(f.flightTrack?f.timeUtc:f.name)+'</strong>'+(f.flightTrack&&f.altitudeFt!==null?'<br>'+Math.round(f.altitudeFt).toLocaleString('en-US')+' ft':'')+(p?'<br>'+p[0].toFixed(6)+', '+p[1].toFixed(6):''));
     }
-    layer.clearLayers();next.eachLayer(l=>layer.addLayer(l));anchor=centre;
+    layer.clearLayers();next.eachLayer(l=>layer.addLayer(l));flightLabels.addTo(layer);anchor=centre;
     if(state&&state.visible)map.addLayer(layer);else map.removeLayer(layer);
-    if(fit&&state.visible)map.fitBounds(layer.getBounds(),{padding:[35,35],maxZoom:10});sync();
+    if(fit&&state.visible)map.fitBounds(layer.getBounds(),{padding:[35,35],maxZoom:10});sync();scheduleFlightLabels();
   }
   function sync(){toggle.disabled=busy||!state;toggle.textContent=state&&state.visible?'OFF':'ON';toggle.setAttribute('aria-label',state&&state.visible?'NTM 숨기기':'NTM 표시하기');}
   function summary(){const counts={polygon:0,line:0,point:0};features.forEach(f=>counts[f.kind]++);return '영역 '+counts.polygon+'개 · 선 '+counts.line+'개 · 마커 '+counts.point+'개';}
@@ -12517,9 +12563,9 @@ function initPrivateNtmControl(){
     readSequence++;const xml=input.value.trim(),parsed=parse(xml),next={xml,visible:true};
     await save(next);state=next;features=parsed;render(true);status.textContent=summary()+'\n이 브라우저에 저장됨 · 2D 평면 표시';
   }));
-  toggle.addEventListener('click',()=>perform(async()=>{if(!state)return;const next={...state,visible:!state.visible};await save(next);state=next;if(state.visible)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}sync();}));
+  toggle.addEventListener('click',()=>perform(async()=>{if(!state)return;const next={...state,visible:!state.visible};await save(next);state=next;if(state.visible)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}sync();scheduleFlightLabels();}));
   section.querySelector('[data-ntm="clear"]').addEventListener('click',()=>perform(async()=>{
-    readSequence++;await save({deleted:true});state=null;features=[];layer.clearLayers();map.removeLayer(layer);input.value='';fileInput.value='';sync();status.textContent='NTM 표시와 저장 내용을 삭제했습니다.';
+    readSequence++;await save({deleted:true});state=null;features=[];flightEntries=[];flightLabels.clearLayers();layer.clearLayers();map.removeLayer(layer);input.value='';fileInput.value='';sync();status.textContent='NTM 표시와 저장 내용을 삭제했습니다.';
   }));
   input.addEventListener('input',()=>{readSequence++;});
   fileInput.addEventListener('change',async()=>{
@@ -12534,10 +12580,10 @@ function initPrivateNtmControl(){
         if(!main)throw Error('KMZ에서 기본 doc.kml을 찾을 수 없거나 KML 파일이 여러 개입니다. 사용할 KML을 직접 붙여넣어 주세요.');
         xml=await main.async('string');
       }else if(/\.kml$/i.test(file.name))xml=await file.text();else throw Error('KML 또는 KMZ 파일을 선택해 주세요.');
-      parse(xml);if(sequence!==readSequence)return;input.value=xml;status.textContent=file.name+' 불러옴 · NTM 표시를 눌러 주세요.';
+      parse(xml);if(sequence!==readSequence)return;input.value=xml;fileInput.value='';section.querySelector('[data-ntm="apply"]').click();
     }catch(e){if(sequence===readSequence)status.textContent=e.message||String(e);}finally{if(sequence===readSequence)fileInput.value='';}
   });
-  map.on('moveend',()=>{if(state&&Math.abs(map.getCenter().lng-anchor)>150)render(false);});
+  map.on('moveend zoomend',()=>{if(state&&Math.abs(map.getCenter().lng-anchor)>150)render(false);else scheduleFlightLabels();});
   setBusy(true);
   (async()=>{
     try{
