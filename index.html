@@ -12243,6 +12243,22 @@ function initPrivateMapFiles(){
   const entries=new Map();let busy=true,queue=Promise.resolve(),databasePromise=null,nextOrder=Date.now();
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const idFor=name=>name.trim().toLowerCase();
+  const gpxPalette=['#7c3aed','#2563eb','#ea580c','#0891b2','#db2777','#059669','#a16207','#4f46e5'];
+  function assignGpxColor(record){
+    if(record.kind!=='gpx')return;
+    if(/^#[0-9a-f]{6}$/i.test(record.routeColor||''))return;
+    const used=new Set([...entries.values()].filter(e=>e.record.kind==='gpx').map(e=>e.record.routeColor?.toLowerCase()));
+    let color=gpxPalette.find(c=>!used.has(c));
+    // 기본 팔레트를 모두 사용한 뒤에도 새 파일에 색을 추가한다.
+    for(let i=used.size;!color;i++){
+      const h=((i*137.508)%360)/60,c=.68,x=c*(1-Math.abs(h%2-1)),m=.14;
+      const rgb=h<1?[c,x,0]:h<2?[x,c,0]:h<3?[0,c,x]:h<4?[0,x,c]:h<5?[x,0,c]:[c,0,x];
+      const candidate='#'+rgb.map(v=>Math.round((v+m)*255).toString(16).padStart(2,'0')).join('');
+      if(!used.has(candidate))color=candidate;
+    }
+    record.routeColor=color;
+  }
+
   const privatePointHits=[],pointSelections=new Map();let pointLabelTimer=null;
   function removePointHits(fileId){for(let i=privatePointHits.length-1;i>=0;i--)if(privatePointHits[i].fileId===fileId)privatePointHits.splice(i,1);}
   function schedulePointLabels(){clearTimeout(pointLabelTimer);pointLabelTimer=setTimeout(updatePointLabels,20);}
@@ -12345,6 +12361,7 @@ function initPrivateMapFiles(){
     for(const entry of [...entries.values()].sort((a,b)=>a.record.order-b.record.order)){
       const record=entry.record,row=document.createElement('div');row.className='private-file-row';row.dataset.fileId=record.id;
       const name=document.createElement('span');name.className='private-file-name';name.textContent=record.name;name.title=record.name;row.appendChild(name);
+      if(record.kind==='gpx'){const swatch=document.createElement('span');swatch.setAttribute('aria-hidden','true');swatch.style.cssText='display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:'+record.routeColor;name.prepend(swatch);}
       if(entry.warnings.length){const detail=document.createElement('small');detail.textContent='일부 요소 제외 ('+entry.warnings.length+')';detail.style.cssText='display:block;font-size:10px;font-weight:400;color:#92400e';detail.title=entry.warnings.join('\n');name.appendChild(detail);}
       for(const [label,action] of [['ON','on'],['OFF','off'],['삭제','delete']]){
         const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.action=action;b.disabled=busy;
@@ -12395,8 +12412,8 @@ function initPrivateMapFiles(){
       const failures=[],notes=[];let success=0;
       for(const file of files){try{
         const content=await readFile(file),id=idFor(file.name),old=entries.get(id);
-        const record={id,name:file.name,kind:content.kind,xml:content.xml,assets:content.assets,assetBase:content.assetBase,visible:true,order:old?old.record.order:nextOrder++};
-        const parsed=parsedRecord(record);await storage('files','put',record);addRecord(record,parsed);if(parsed.warnings?.length)notes.push(file.name+': '+parsed.warnings.join(' / '));success++;updateList();
+        const record={id,name:file.name,kind:content.kind,xml:content.xml,assets:content.assets,assetBase:content.assetBase,routeColor:old?.record.routeColor,visible:true,order:old?old.record.order:nextOrder++};
+        const parsed=parsedRecord(record);assignGpxColor(record);await storage('files','put',record);addRecord(record,parsed);if(parsed.warnings?.length)notes.push(file.name+': '+parsed.warnings.join(' / '));success++;updateList();
       }catch(e){failures.push(file.name+': '+errorText(e));}}
       if(success)fitVisible();status.textContent=success+'개 파일 표시·저장됨'+([...failures,...notes].length?'\n'+[...failures,...notes].join('\n'):'');
     });
@@ -12419,7 +12436,7 @@ function initPrivateMapFiles(){
   map.on('moveend zoomend',()=>{for(const entry of entries.values())entry.renderer.update();});
   updateList();enqueue(async()=>{
     await migrate();const records=await storage('files','all'),errors=[];
-    for(const record of records.sort((a,b)=>a.order-b.order)){try{addRecord(record,parsedRecord(record));nextOrder=Math.max(nextOrder,record.order+1);}catch(e){errors.push(record.name+': '+errorText(e));}}
+    for(const record of records.sort((a,b)=>a.order-b.order)){try{const parsed=parsedRecord(record);if(record.kind==='gpx'&&!/^#[0-9a-f]{6}$/i.test(record.routeColor||'')){assignGpxColor(record);await storage('files','put',record);}addRecord(record,parsed);nextOrder=Math.max(nextOrder,record.order+1);}catch(e){errors.push(record.name+': '+errorText(e));}}
     if(errors.length)status.textContent=errors.join('\n');else if(records.length)status.textContent=entries.size+'개 파일과 표시 상태를 복원했습니다.';
   });
   function parseGpx(xml){
@@ -12603,15 +12620,16 @@ function initPrivateMapFiles(){
   }
   function unwrap(points,reference){let prev=reference;return points.map(p=>{let lon=p[1];while(lon-prev>180)lon-=360;while(lon-prev<-180)lon+=360;prev=lon;return [p[0],lon];});}
   function createGpxRenderer(record,routes){
+    const routeColor=record.routeColor||'#7c3aed',waypointFill='#'+[1,3,5].map(i=>Math.round(parseInt(routeColor.slice(i,i+2),16)*.35+255*.65).toString(16).padStart(2,'0')).join('');
     const layer=L.featureGroup();let anchor=null,bounds=null,visible=record.visible,alive=true;
     function removeLabels(){for(let i=waypointLabelRegistry.length-1;i>=0;i--){const item=waypointLabelRegistry[i];if(item.privateFileId!==record.id)continue;if(item.labelMarker)item.targetLayer.removeLayer(item.labelMarker);waypointLabelRegistry.splice(i,1);}}
     function render(){
       removeLabels();layer.clearLayers();const centre=map.getCenter().lng;
       for(const route of routes){
         const points=unwrap(route.points.map(p=>[p.lat,p.lon]),centre),path=points.map(p=>({lat:p[0],lon:p[1]}));
-        L.polyline(points,{color:'#7c3aed',weight:3,opacity:.95}).bindPopup(esc(record.name)+'<br>'+esc(route.name)).addTo(layer);
+        L.polyline(points,{color:routeColor,weight:3,opacity:.95}).bindPopup(esc(record.name)+'<br>'+esc(route.name)).addTo(layer);
         route.points.forEach((p,i)=>{
-          const marker=L.circleMarker(points[i],{radius:isDesktopView()?4:2.5,color:'#6d28d9',weight:isDesktopView()?2:1,fillColor:'#c4b5fd',fillOpacity:1}).addTo(layer);
+          const marker=L.circleMarker(points[i],{radius:isDesktopView()?4:2.5,color:routeColor,weight:isDesktopView()?2:1,fillColor:waypointFill,fillOpacity:1}).addTo(layer);
           marker.bindPopup('<strong>'+esc(p.name||'waypoint '+(i+1))+'</strong><br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6));
           if(p.name){const before=waypointLabelRegistry.length;registerWaypointLabel(marker,{type:'Point',name:p.name,description:''},{minZoom:ROUTE_LABEL_MIN_ZOOM,prevPoint:path[i-1]||null,currPoint:path[i],nextPoint:path[i+1]||null,renderContext:{referenceLon:centre},sequence:i,targetLayer:layer});for(let j=before;j<waypointLabelRegistry.length;j++){waypointLabelRegistry[j].privateGpx=true;waypointLabelRegistry[j].privateFileId=record.id;}}
         });
