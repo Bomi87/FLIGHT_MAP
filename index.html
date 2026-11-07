@@ -12297,7 +12297,11 @@ function initPrivateMapFiles(){
   function showPrivatePointPopup(event,entry){
     if(event.originalEvent)L.DomEvent.stopPropagation(event.originalEvent);
     const group=visiblePointGroups().find(g=>g.entries.includes(entry));if(!group)return;
-    const selected=chosenPoint(group),root=document.createElement('div');
+    const selected=chosenPoint(group);
+    if(group.entries.length===1){
+      L.popup({maxWidth:420,maxHeight:480}).setLatLng(event.latlng).setContent(selected.popup||'<strong>'+esc(selected.name)+'</strong>').openOn(map);return;
+    }
+    const root=document.createElement('div');
     const heading=document.createElement('div');heading.style.cssText='font-weight:700;margin-bottom:8px';heading.textContent=group.entries.length>1?'이 위치에 겹친 항목 '+group.entries.length+'개':entry.name;root.appendChild(heading);
     for(const item of group.entries){
       const b=document.createElement('button');b.type='button';b.style.cssText='display:block;width:100%;text-align:left;border:1px solid #e2e8f0;border-radius:5px;padding:8px;margin:5px 0;cursor:pointer;background:'+(item===selected?'#ede9fe':'#fff')+';color:#172554';
