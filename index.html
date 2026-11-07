@@ -12372,12 +12372,50 @@ function initPrivateMapFiles(){
     });
   }
   function errorText(error){const name=error&&error.name||'Error';return name==='QuotaExceededError'?'브라우저 저장 공간이 부족합니다. (QuotaExceededError)':name==='SecurityError'?'브라우저 사이트 저장 권한을 확인해 주세요. (SecurityError)':error.message||String(error);}
+  function representativeSymbol(record,features){
+    if(record.kind==='gpx')return {kind:'dot',color:record.routeColor,title:'GPX 경로 색상'};
+    if(features.some(f=>f.flightTrack))return {kind:'aircraft',color:'#7c3aed',title:'항공기 항적'};
+    const plan=features.find(f=>f.planWaypoint&&originalIcon(record,f.style.iconHref));
+    if(plan)return {kind:'image',url:originalIcon(record,plan.style.iconHref),title:'운항계획 waypoint 아이콘'};
+    const triangle=features.find(f=>f.kind==='point'&&f.style.triangle);
+    if(triangle)return {kind:'triangle',color:'#dc2626',title:'지도 마커'};
+    const image=features.find(f=>f.kind==='point'&&embeddedImage(record,f.style.iconHref));
+    if(image)return {kind:'image',url:embeddedImage(record,image.style.iconHref),title:'KMZ 원본 마커'};
+    const polygons=features.filter(f=>f.kind==='polygon');
+    if(polygons.length){
+      const colors=[...new Set(polygons.map(f=>{const s=f.style,c=s.fill?s.poly.color:s.line.color;return c.toLowerCase()==='#00ff00'&&s.fill?'#3d9e57':c;}))].slice(0,3);
+      return {kind:'areas',colors,title:'영역 대표 색상'};
+    }
+    const original=features.find(f=>f.kind==='point'&&originalIcon(record,f.style.iconHref));
+    if(original)return {kind:'image',url:originalIcon(record,original.style.iconHref),title:'KML 원본 마커'};
+    const line=features.find(f=>f.kind==='line');if(line)return {kind:'line',color:line.style.line.color,title:'경로 대표 색상'};
+    const point=features.find(f=>f.kind==='point');if(point)return {kind:'dot',color:point.style.icon.color.toLowerCase()==='#ffffff'?'#dc2626':point.style.icon.color,title:'마커 대표 색상'};
+    return {kind:'dot',color:'#64748b',title:'지도 파일'};
+  }
+  function makeFileSymbol(symbol){
+    const wrap=document.createElement('span');wrap.className='private-file-symbol';wrap.setAttribute('aria-hidden','true');wrap.title=symbol.title;
+    wrap.style.cssText='display:inline-flex;align-items:center;justify-content:center;width:20px;height:18px;margin-right:5px;vertical-align:middle;flex-shrink:0';
+    if(symbol.kind==='image'){
+      const img=document.createElement('img');img.alt='';img.src=symbol.url;img.style.cssText='display:block;width:17px;height:17px;object-fit:contain';
+      img.addEventListener('error',()=>{img.remove();const dot=document.createElement('span');dot.style.cssText='width:9px;height:9px;background:#64748b;border-radius:50%';wrap.appendChild(dot);},{once:true});wrap.appendChild(img);
+    }else if(symbol.kind==='dot'){
+      const dot=document.createElement('span');dot.style.cssText='width:9px;height:9px;border-radius:50%;background:'+symbol.color;wrap.appendChild(dot);
+    }else if(symbol.kind==='areas'){
+      for(const color of symbol.colors){const square=document.createElement('span');square.style.cssText='width:8px;height:10px;box-sizing:border-box;border:1px solid '+color+';background:'+color+';margin-left:-2px;opacity:.8';wrap.appendChild(square);}
+    }else{
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('width','17');svg.setAttribute('height','17');
+      const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d',symbol.kind==='aircraft'?'M12 2 L14 9 L22 14 L22 16 L14 13 L14 19 L17 21 L17 22 L12 20 L7 22 L7 21 L10 19 L10 13 L2 16 L2 14 L10 9 Z':symbol.kind==='triangle'?'M12 3 L22 21 H2 Z':'M2 19 L9 9 L15 13 L22 4');
+      path.setAttribute('fill',symbol.kind==='line'?'none':symbol.color);path.setAttribute('stroke',symbol.color);path.setAttribute('stroke-width',symbol.kind==='line'?'3':'1');path.setAttribute('stroke-linejoin','round');svg.appendChild(path);wrap.appendChild(svg);
+    }
+    return wrap;
+  }
   function updateList(){
     list.replaceChildren();
     for(const entry of [...entries.values()].sort((a,b)=>a.record.order-b.record.order)){
       const record=entry.record,row=document.createElement('div');row.className='private-file-row';row.dataset.fileId=record.id;
       const name=document.createElement('span');name.className='private-file-name';name.textContent=record.name;name.title=record.name;row.appendChild(name);
-      if(record.kind==='gpx'){const swatch=document.createElement('span');swatch.setAttribute('aria-hidden','true');swatch.style.cssText='display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:'+record.routeColor;name.prepend(swatch);}
+      name.prepend(makeFileSymbol(entry.symbol));
       for(const [label,action] of [['ON','on'],['OFF','off'],['삭제','delete']]){
         const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.action=action;b.disabled=busy;
         b.setAttribute('aria-label',record.name+' '+label);
@@ -12398,7 +12436,7 @@ function initPrivateMapFiles(){
   function addRecord(record,parsed){
     const old=entries.get(record.id);if(old)old.renderer.destroy();
     const renderer=record.kind==='gpx'?createGpxRenderer(record,parsed):createKmlRenderer(record,parsed);
-    entries.set(record.id,{record,renderer,warnings:parsed.warnings||[]});
+    entries.set(record.id,{record,renderer,symbol:representativeSymbol(record,parsed),warnings:parsed.warnings||[]});
   }
   function fitVisible(){const bounds=L.latLngBounds([]);for(const entry of entries.values())if(entry.record.visible){const b=entry.renderer.getBounds();if(b&&b.isValid())bounds.extend(b);}if(bounds.isValid())map.fitBounds(bounds,{padding:[35,35],maxZoom:10});}
   async function readFile(file){
