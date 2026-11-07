@@ -12237,8 +12237,8 @@ function initPrivateGpxControl(){
   `;
   document.head.appendChild(style);
   const button=document.createElement('button');button.id='privateGpxBtn';button.type='button';button.textContent='GPX';button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','privateGpxPanel');pos.after(button);
-  const panel=document.createElement('section');panel.id='privateGpxPanel';panel.hidden=true;panel.setAttribute('aria-label','개인 GPX 경로');
-  panel.innerHTML='<header>개인 GPX 경로<button class="gpx-close" type="button" aria-label="닫기">×</button></header><label for="privateGpxInput">GPX 원문</label><textarea id="privateGpxInput" spellcheck="false" placeholder="&lt;gpx&gt;…&lt;/gpx&gt;"></textarea><div class="gpx-actions"><button type="button" data-gpx="apply">ROUTE 표시</button><button type="button" data-gpx="toggle">OFF</button><button type="button" data-gpx="clear">삭제</button></div><div id="privateGpxStatus" role="status" aria-live="polite"></div>';
+  const panel=document.createElement('section');panel.id='privateGpxPanel';panel.hidden=true;panel.setAttribute('aria-label','GPX 경로');
+  panel.innerHTML='<header>GPX 경로<button class="gpx-close" type="button" aria-label="닫기">×</button></header><label for="privateGpxInput">RAW DATA</label><textarea id="privateGpxInput" spellcheck="false" placeholder="&lt;gpx&gt;…&lt;/gpx&gt;"></textarea><div class="gpx-actions"><button type="button" data-gpx="apply">ROUTE 표시</button><button type="button" data-gpx="toggle">OFF</button><button type="button" data-gpx="clear">삭제</button></div><div id="privateGpxStatus" role="status" aria-live="polite"></div>';
   (document.getElementById('appRoot')||document.body).appendChild(panel);
   L.DomEvent.disableClickPropagation(panel);L.DomEvent.disableScrollPropagation(panel);
   const input=panel.querySelector('textarea'),status=panel.querySelector('#privateGpxStatus');
@@ -12303,7 +12303,7 @@ function initPrivateGpxControl(){
       L.polyline(points,{color:'#7c3aed',weight:3,opacity:.95}).bindPopup(escape(route.name)).addTo(next);
       const path=points.map(ll=>({lat:ll[0],lon:ll[1]}));
       route.points.forEach((p,i)=>{
-        const marker=L.circleMarker(points[i],{radius:4,color:'#6d28d9',weight:2,fillColor:'#c4b5fd',fillOpacity:1}).addTo(next);
+        const marker=L.circleMarker(points[i],{radius:isDesktopView()?4:2.5,color:'#6d28d9',weight:isDesktopView()?2:1,fillColor:'#c4b5fd',fillOpacity:1}).addTo(next);
         marker.bindPopup('<strong>'+escape(p.name||'waypoint '+(i+1))+'</strong><br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6));
         if(p.name){
           const before=waypointLabelRegistry.length;
