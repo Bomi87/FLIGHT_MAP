@@ -10333,7 +10333,87 @@ createNoaaModelControl().addTo(map);
   * World-wide FIR half-plane/polyline clipping with polygon-clipping. All geometric
   * inferences are marked RAW_* and require the official AIP/FIR data validation.
   */
- function wxAreaGeometry(g){return !!g&&['Polygon','MultiPolygon'].includes(g.type)&&Array.isArray(g.coordinates)&&g.coordinates.length>0}
+ // SIGMET 도형 검사: 형식 이름만으로 정상 영역으로 판단하지 않는다.
+ function wxRingArea(ring){
+   if(!Array.isArray(ring)||ring.length<3)return 0;
+   const pts=[];
+   for(const p of ring){
+     if(!Array.isArray(p)||!Number.isFinite(p[0])||!Number.isFinite(p[1])||Math.abs(p[1])>90)return 0;
+     let x=p[0];if(pts.length){while(x-pts[pts.length-1][0]>180)x-=360;while(x-pts[pts.length-1][0]<-180)x+=360;}
+     pts.push([x,p[1]]);
+   }
+   if(new Set(pts.map(p=>p.join(','))).size<3)return 0;
+   const a=pts[0];let area=0;
+   for(let i=0;i<pts.length;i++){const p=pts[i],q=pts[(i+1)%pts.length];area+=(p[0]-a[0])*(q[1]-a[1])-(q[0]-a[0])*(p[1]-a[1]);}
+   return Math.abs(area)/2;
+ }
+ function wxAreaGeometry(g){
+   if(!g||!['Polygon','MultiPolygon'].includes(g.type)||!Array.isArray(g.coordinates)||!g.coordinates.length)return false;
+   const polygons=g.type==='Polygon'?[g.coordinates]:g.coordinates;
+   return polygons.every(rings=>Array.isArray(rings)&&rings.length&&rings.every(r=>wxRingArea(r)>1e-10)&&
+     wxRingArea(rings[0])-rings.slice(1).reduce((s,r)=>s+wxRingArea(r),0)>1e-10);
+ }
+ // 구면상의 목적지와 방위를 사용해 폭을 구성한다.
+ // WID は全幅。中心線の両側に半幅を確保する。端部・接続部は丸めた近似。
+ function wxCorridorDestination(p,bearing,km){
+   const rad=Math.PI/180,d=km/6371.0088,a=p[1]*rad,b=p[0]*rad,t=bearing*rad;
+   const y=Math.asin(Math.max(-1,Math.min(1,Math.sin(a)*Math.cos(d)+Math.cos(a)*Math.sin(d)*Math.cos(t))));
+   const x=b+Math.atan2(Math.sin(t)*Math.sin(d)*Math.cos(a),Math.cos(d)-Math.sin(a)*Math.sin(y));
+   return [x/rad,y/rad];
+ }
+ function wxCorridorBearing(a,b){const r=Math.PI/180,d=(b[0]-a[0])*r;
+   return Math.atan2(Math.sin(d)*Math.cos(b[1]*r),Math.cos(a[1]*r)*Math.sin(b[1]*r)-Math.sin(a[1]*r)*Math.cos(b[1]*r)*Math.cos(d))/r;
+ }
+ function wxCorridorDistance(a,b){const r=Math.PI/180,x=Math.sin((b[1]-a[1])*r/2),y=Math.sin((b[0]-a[0])*r/2);
+   return 12742.0176*Math.asin(Math.sqrt(Math.min(1,x*x+Math.cos(a[1]*r)*Math.cos(b[1]*r)*y*y)));
+ }
+ function wxRawWidthCorridor(raw){
+   const text=String(raw||'').toUpperCase().replace(/\s+/g,' ').replace(/[–−]/g,'-');
+   const header=/\b(\d+(?:\.\d+)?)\s*(NM|KM)\s+WID(?:E)?\s+LINE\b(?:\s+BTN)?/g;
+   const found=[...text.matchAll(header)];if(!found.length)return null;
+   if(found.length!==1)throw Error('WID LINE 구간이 여러 개여서 자동 복구하지 않았습니다');
+   const m=found[0],width=Number(m[1])*(m[2]==='NM'?1.852:1);
+   if(!(width>0&&width<=2000))throw Error('WID LINE 폭이 유효 범위를 벗어났습니다');
+   let tail=text.slice(m.index+m[0].length).trim();const points=[];
+   const coord=/^([NS])(\d{4}|\d{2})\s*([EW])(\d{5}|\d{3})(?!\d)/;
+   while(true){
+     const c=tail.match(coord);if(!c)break;
+     const lat=Number(c[2].slice(0,2))+(c[2].length===4?Number(c[2].slice(2))/60:0);
+     const lon=Number(c[4].slice(0,3))+(c[4].length===5?Number(c[4].slice(3))/60:0);
+     if(lat>90||lon>180||(c[2].length===4&&Number(c[2].slice(2))>=60)||(c[4].length===5&&Number(c[4].slice(3))>=60))throw Error('WID LINE 좌표가 유효하지 않습니다');
+     const p=[lon*(c[3]==='W'?-1:1),lat*(c[1]==='S'?-1:1)];
+     if(!points.length||wxCorridorDistance(points[points.length-1],p)>1e-6)points.push(p);
+     tail=tail.slice(c[0].length).trim();
+     if(!tail.startsWith('-'))break;tail=tail.slice(1).trim();
+     if(!coord.test(tail))throw Error('WID LINE 연결 좌표를 해석할 수 없습니다');
+   }
+   if(points.length<2||points.length>20)throw Error('WID LINE 좌표는 서로 다른 점 2~20개가 필요합니다');
+   if(tail&&!/^(?:CB\b|TOP\b|BASE\b|FL\d|SFC\b|ABV\b|BLW\b|MOV\b|STNR\b|INTSF\b|WKN\b|NC\b|=)/.test(tail))throw Error('WID LINE 뒤에 지원하지 않는 위치 조건이 있습니다');
+   if(typeof polygonClipping==='undefined')throw Error('영역 병합 라이브러리가 없어 WID LINE을 복구할 수 없습니다');
+   // 날짜변경선을 지날 때도 모든 조각을 같은 경도 범위에 둔다.
+   for(let i=1;i<points.length;i++){while(points[i][0]-points[i-1][0]>180)points[i][0]-=360;while(points[i][0]-points[i-1][0]<-180)points[i][0]+=360;}
+   const radius=width/2,shapes=[];
+   function align(p,ref){while(p[0]-ref>180)p[0]-=360;while(p[0]-ref<-180)p[0]+=360;return p;}
+   function circle(p){const ring=[];for(let d=0;d<360;d+=5)ring.push(align(wxCorridorDestination(p,d,radius),p[0]));ring.push(ring[0].slice());shapes.push([ring]);}
+   for(let i=1;i<points.length;i++){
+     const a=points[i-1],b=points[i],length=wxCorridorDistance(a,b),bearing=wxCorridorBearing(a,b);
+     if(length>10000)throw Error('WID LINE 구간이 너무 길어 자동 복구하지 않았습니다');
+     const steps=Math.max(1,Math.ceil(length/25));let prev=a;circle(a);
+     for(let j=1;j<=steps;j++){
+       const next=j===steps?b:align(wxCorridorDestination(a,bearing,length*j/steps),a[0]);
+       const start=wxCorridorBearing(prev,next),end=wxCorridorBearing(next,prev)+180;
+       const ring=[align(wxCorridorDestination(prev,start-90,radius),prev[0]),align(wxCorridorDestination(next,end-90,radius),next[0]),align(wxCorridorDestination(next,end+90,radius),next[0]),align(wxCorridorDestination(prev,start+90,radius),prev[0])];
+       ring.push(ring[0].slice());shapes.push([ring]);prev=next;
+     }
+     circle(b);
+   }
+   for(const shape of shapes)for(const ring of shape)for(const p of ring){p[0]=Math.round(p[0]*1e9)/1e9;p[1]=Math.round(p[1]*1e9)/1e9;}
+   let merged=[];for(const shape of shapes)merged=merged.length?polygonClipping.union(merged,[shape]):[shape];
+   const geometry={type:'MultiPolygon',coordinates:merged};
+   if(!wxAreaGeometry(geometry))throw Error('복구한 WID LINE 영역이 유효하지 않습니다');
+   return {geometry,source:'RAW_WID_LINE',note:'원문 WID LINE으로 복구한 근사 영역 · 전폭 '+m[1]+m[2]+' · 원문 확인 필요'};
+ }
+
  function wxMulti(g){return g.type==='Polygon'?[g.coordinates]:g.coordinates}
  function wxGeometryBounds(g){
    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
@@ -10505,7 +10585,7 @@ createNoaaModelControl().addTo(map);
      return null;
    }
  }
- function wxResolvedGeometry(item,firMap){
+ function wxResolvedGeometryCandidate(item,firMap){
    const raw=String(item.raw||'').toUpperCase(),firCode=wxFirCode(item),fir=firMap?.get(firCode);
    // Some NOAA geometries omit the unprefixed Greenwich longitude 00000.
    // In that specific case, use the complete explicit WI polygon from the
@@ -10535,6 +10615,10 @@ createNoaaModelControl().addTo(map);
    }
    // Highest priority: valid area polygon from NOAA. Never override with inferred FIR.
    if(wxAreaGeometry(item.geometry)&&item.geometrySource==='NOAA')return wxAugmentNoaaWithWI(item)||{geometry:item.geometry,source:'NOAA',note:''};
+   if(/\bWID(?:E)?\s+LINE\b/.test(raw)){
+     try{return wxRawWidthCorridor(raw)||{geometry:null,source:'WID_LINE_ERROR',note:'WID LINE 폭 또는 단위를 해석할 수 없습니다'};}
+     catch(e){return {geometry:null,source:'WID_LINE_ERROR',note:String(e.message||e)};}
+   }
    if(/\bENTIRE\s+FIR\b/.test(raw))return fir?{geometry:fir.geometry,source:'RAW_ENTIRE_FIR',note:'FIR boundary from world_fir.geojson; verify AIRAC currency'}:{geometry:null,source:'MISSING_FIR',note:'FIR boundary unavailable'};
    if(/\b[NS]\s+OF\s+[NS]\d{4}\b|\b[EW]\s+OF\s+[EW]\d{5}\b/.test(raw)){
      if(!fir)return {geometry:null,source:'MISSING_FIR',note:'Coordinate constraints require FIR boundary'};
@@ -10551,6 +10635,11 @@ createNoaaModelControl().addTo(map);
    if(wi)return {geometry:wi,source:'RAW_WI',note:'Polygon from SIGMET WI vertices'};
    if(wxAreaGeometry(item.geometry))return {geometry:item.geometry,source:'NOAA',note:''};
    return {geometry:null,source:'UNMAPPED',note:'No polygon available'};
+ }
+ function wxResolvedGeometry(item,firMap){
+   const result=wxResolvedGeometryCandidate(item,firMap);
+   if(result.geometry&&!wxAreaGeometry(result.geometry))return {geometry:null,source:'INVALID_GEOMETRY',note:'유효한 면적이 없는 SIGMET 도형입니다'};
+   return result;
  }
  const WX_BACKEND_URL=AIRSPACE_SEARCH_BACKEND_URL;
  const wxResponses={};
@@ -11358,7 +11447,7 @@ createNoaaModelControl().addTo(map);
         const hue=isVaSigmet?'#64748b':item.hazard==='icing'?'#38bdf8':item.hazard==='turb'?'#f97316':'#ef4444';
        try{let g=L.geoJSON({type:'Feature',geometry:wxShiftGeometryToRight(resolved.geometry),properties:{}},{style:{color:hue,weight:2,fillColor:hue,fillOpacity:.16},pointToLayer:(feature,ll)=>L.circleMarker(ll,{radius:7,color:hue,fillOpacity:.75})});
        if(!g.getLayers().length)return;
-       const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div></div>`;
+       const txt=()=>`<div class="wx-sigmet-popup"><div class="wx-pop-head">SIGMET · ${esc(item.hazard.toUpperCase())} — ${esc(item.name||'')}</div><div class="wx-pop-valid">VALID UTC: ${fmtSigmetValid(item.validFrom,item.validTo)}</div><div style="color:${expiryColor(expiry)};font-weight:800;margin-bottom:5px">${esc(expiryLabel(expiry))}</div><div class="wx-pop-raw">${formatSigmetRaw(item.raw)}</div>${resolved.source==='RAW_WID_LINE'?'<div style="margin-top:6px;color:#92400e">'+esc(resolved.note)+'</div>':''}</div>`;
        const sigmetKey=[item.name,item.hazard,item.validFrom,item.validTo,item.raw].map(v=>String(v??'')).join('|');
        const sigmetLabel='SIGMET · '+String(item.hazard||'').toUpperCase()+' — '+String(item.name||'');
        g.eachLayer(shape=>{
