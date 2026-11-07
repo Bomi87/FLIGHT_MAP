@@ -11946,7 +11946,11 @@ function clearRouteOnly() {
   drawn.clearLayers();
   routeBoundsGroup.clearLayers();
 
-  waypointLabelRegistry.length = 0;
+  // 개인 GPX는 공용 루트 새로고침과 별개로 유지한다.
+  clearAllRouteTextMarkers();
+  for(let i=waypointLabelRegistry.length-1;i>=0;i--){
+    if(!waypointLabelRegistry[i].privateGpx)waypointLabelRegistry.splice(i,1);
+  }
   airspaceLabelRegistry.length = 0;
 
   clearAllRouteTextMarkers();
@@ -12143,7 +12147,7 @@ function worldCopyV16Refresh(){
       worldCopyV16Shift(layer,delta);
     }
     waypointLabelRegistry.forEach(item=>{
-      if(item.renderContext)item.renderContext.referenceLon=routePivot;
+      if(item.renderContext&&!item.privateGpx)item.renderContext.referenceLon=routePivot;
     });
   }
   // Independent markers and boundaries each choose the nearest longitude copy.
@@ -12227,13 +12231,12 @@ function initPrivateGpxControl(){
   #privateGpxPanel button{border:0;border-radius:5px;padding:8px 10px;cursor:pointer;background:#ede9fe;color:#5b21b6;font-weight:700}
   #privateGpxPanel .gpx-close{background:transparent;font-size:19px;padding:0 4px}
   #privateGpxStatus{white-space:pre-wrap;overflow-wrap:anywhere}
-  .private-gpx-label{background:#fffE;border:1px solid #c4b5fd;color:#5b21b6;font:700 10px Arial;box-shadow:none;padding:2px 4px}
   @media(max-width:767px){#privateGpxBtn{height:27px;font-size:10px}}
   `;
   document.head.appendChild(style);
   const button=document.createElement('button');button.id='privateGpxBtn';button.type='button';button.textContent='GPX';button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','privateGpxPanel');pos.after(button);
   const panel=document.createElement('section');panel.id='privateGpxPanel';panel.hidden=true;panel.setAttribute('aria-label','개인 GPX 경로');
-  panel.innerHTML='<header>개인 GPX 경로<button class="gpx-close" type="button" aria-label="닫기">×</button></header><p>GPX 원문을 붙여넣으세요. 이 브라우저에만 저장되며, 경로 지우기를 누르면 삭제됩니다.</p><label for="privateGpxInput">GPX 원문</label><textarea id="privateGpxInput" spellcheck="false" placeholder="&lt;gpx&gt;…&lt;/gpx&gt;"></textarea><div class="gpx-actions"><button type="button" data-gpx="apply">경로 표시·저장</button><button type="button" data-gpx="fit">전체 경로 보기</button><button type="button" data-gpx="clear">경로 지우기</button></div><div id="privateGpxStatus" role="status" aria-live="polite"></div>';
+  panel.innerHTML='<header>개인 GPX 경로<button class="gpx-close" type="button" aria-label="닫기">×</button></header><p>GPX 원문을 붙여넣으세요. 이 브라우저에만 저장되며, 삭제를 누르면 저장 내용도 삭제됩니다.</p><label for="privateGpxInput">GPX 원문</label><textarea id="privateGpxInput" spellcheck="false" placeholder="&lt;gpx&gt;…&lt;/gpx&gt;"></textarea><div class="gpx-actions"><button type="button" data-gpx="apply">ROUTE 표시</button><button type="button" data-gpx="clear">삭제</button></div><div id="privateGpxStatus" role="status" aria-live="polite"></div>';
   (document.getElementById('appRoot')||document.body).appendChild(panel);
   L.DomEvent.disableClickPropagation(panel);L.DomEvent.disableScrollPropagation(panel);
   const input=panel.querySelector('textarea'),status=panel.querySelector('#privateGpxStatus');
@@ -12266,19 +12269,37 @@ function initPrivateGpxControl(){
     if(!result.length)throw Error('rte/rtept 또는 trk/trkseg/trkpt 경로가 없습니다.');
     return result;
   }
+  function removeGpxLabels(){
+    for(let i=waypointLabelRegistry.length-1;i>=0;i--){
+      const item=waypointLabelRegistry[i];if(!item.privateGpx)continue;
+      if(item.labelMarker)item.targetLayer.removeLayer(item.labelMarker);
+      waypointLabelRegistry.splice(i,1);
+    }
+  }
   function render(fit){
+    removeGpxLabels();
     const next=L.featureGroup();const centre=map.getCenter().lng;
     for(const route of routes){
       let previous=centre;const points=route.points.map(p=>{let lon=p.lon;while(lon-previous>180)lon-=360;while(lon-previous<-180)lon+=360;previous=lon;return [p.lat,lon];});
       L.polyline(points,{color:'#7c3aed',weight:3,opacity:.95}).bindPopup(escape(route.name)).addTo(next);
+      const path=points.map(ll=>({lat:ll[0],lon:ll[1]}));
       route.points.forEach((p,i)=>{
         const marker=L.circleMarker(points[i],{radius:4,color:'#6d28d9',weight:2,fillColor:'#fff',fillOpacity:1}).addTo(next);
         marker.bindPopup('<strong>'+escape(p.name||'지점 '+(i+1))+'</strong><br>'+escape(route.name)+'<br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6));
-        if(p.name)marker.bindTooltip(escape(p.name),{permanent:true,direction:'top',className:'private-gpx-label',offset:[0,-5]});
+        if(p.name){
+          const before=waypointLabelRegistry.length;
+          registerWaypointLabel(marker,{type:'Point',name:p.name,description:''},{
+            minZoom:ROUTE_LABEL_MIN_ZOOM,prevPoint:path[i-1]||null,currPoint:path[i],
+            nextPoint:path[i+1]||null,renderContext:{referenceLon:centre},
+            sequence:i,targetLayer:layer
+          });
+          for(let j=before;j<waypointLabelRegistry.length;j++)waypointLabelRegistry[j].privateGpx=true;
+        }
       });
     }
     layer.clearLayers();next.eachLayer(l=>layer.addLayer(l));anchor=centre;button.classList.toggle('active',routes.length>0);
     if(fit&&routes.length)map.fitBounds(layer.getBounds(),{padding:[35,35],maxZoom:10});
+    scheduleRouteTextUpdate();
   }
   panel.querySelector('[data-gpx="apply"]').addEventListener('click',()=>{
     try{
@@ -12289,10 +12310,9 @@ function initPrivateGpxControl(){
       status.textContent=routes.map(r=>r.name+' · '+r.points.length+'개 지점').join('\n')+'\n이 브라우저에 저장됨 · 다른 사용자에게 공유되지 않음';
     }catch(e){status.textContent=e.message||String(e);}
   });
-  panel.querySelector('[data-gpx="fit"]').addEventListener('click',()=>{if(routes.length)render(true);else status.textContent='먼저 GPX 경로를 표시해 주세요.';});
   panel.querySelector('[data-gpx="clear"]').addEventListener('click',()=>{
     try{localStorage.removeItem(storageKey);}catch(e){status.textContent='저장된 경로를 삭제하지 못했습니다. 브라우저 저장 권한을 확인해 주세요.';return;}
-    routes=[];layer.clearLayers();input.value='';button.classList.remove('active');status.textContent='표시한 경로와 이 브라우저의 저장 내용을 삭제했습니다.';
+    removeGpxLabels();routes=[];layer.clearLayers();scheduleRouteTextUpdate();input.value='';button.classList.remove('active');status.textContent='표시한 경로와 이 브라우저의 저장 내용을 삭제했습니다.';
   });
   map.on('moveend',()=>{if(routes.length&&Math.abs(map.getCenter().lng-anchor)>150)render(false);});
   try{const xml=localStorage.getItem(storageKey);if(xml){routes=parse(xml);input.value=xml;render(false);status.textContent=routes.map(r=>r.name+' · '+r.points.length+'개 지점').join('\n')+'\n이 브라우저에 저장한 경로를 복원했습니다.';}}
