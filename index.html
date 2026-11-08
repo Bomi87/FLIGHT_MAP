@@ -12579,6 +12579,20 @@ function initPrivateMapFiles(){
           if(!response.ok)throw Error('경로 서버에 연결하지 못했습니다. HTTP '+response.status);
           const data=await response.json();
           if(data.status!=='success')throw Error(data.msg||'경로를 생성하지 못했습니다.');
+    // 단일 waypoint는 지정한 이름을 지도 라벨에도 적용
+if (label) {
+  const doc=new DOMParser().parseFromString(data.gpx,'application/xml');
+  const points=doc.getElementsByTagNameNS('*','rtept');
+
+  if (points.length===1) {
+    const nameNode=points[0].getElementsByTagNameNS('*','name')[0];
+
+    if (nameNode) {
+      nameNode.textContent=label;
+      data.gpx=new XMLSerializer().serializeToString(doc);
+    }
+  }
+}
           payload={v:1,source:'ubikais-route',fileName:data.fileName,gpx:data.gpx};
         }catch(e){if(e.name==='AbortError')throw Error('경로 생성 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요.');throw e;}finally{clearTimeout(timer);}
       }
