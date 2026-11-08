@@ -12471,6 +12471,43 @@ function initPrivateMapFiles(){
       if(success)fitVisible();status.textContent=success+'개 파일 표시·저장됨'+([...failures,...notes].length?'\n'+[...failures,...notes].join('\n'):'');
     });
   });
+  async function importRouteMapPayload(payload){
+    if(!payload||payload.v!==1||payload.source!=='ubikais-route'||typeof payload.gpx!=='string'||typeof payload.fileName!=='string'||!/\.gpx$/i.test(payload.fileName))throw Error('자동 전달된 GPX 형식이 올바르지 않습니다.');
+    if(payload.gpx.length>250000)throw Error('전달받은 GPX 데이터가 너무 큽니다.');
+    const name=payload.fileName.replace(/[\x00-\x1f/\\]/g,'_').slice(0,160),id=idFor(name),old=entries.get(id);
+    const record={id,name,kind:'gpx',xml:payload.gpx,visible:true,order:old?old.record.order:nextOrder++,routeColor:old?.record.routeColor};
+    const parsed=parseGpx(record.xml);assignGpxColor(record);await storage('files','put',record);addRecord(record,parsed);
+    if(map.hasLayer(drawn))map.removeLayer(drawn);
+    const bounds=entries.get(id).renderer.getBounds();if(bounds&&bounds.isValid())map.fitBounds(bounds,{padding:[35,35],maxZoom:10});
+    status.textContent=name+' 자동 표시·저장됨';updateList();return name;
+  }
+  async function receiveRouteMapGpx(){
+    const hash=new URLSearchParams(location.hash.slice(1)),incoming=hash.get('importGpx');if(!incoming)return;
+    if(incoming.length>350000)throw Error('전달받은 GPX 데이터가 너무 큽니다.');
+    let payload;try{payload=JSON.parse(incoming);}catch(e){throw Error('전달받은 GPX 정보를 읽을 수 없습니다.');}
+    await importRouteMapPayload(payload);
+    hash.delete('importGpx');history.replaceState(null,'',location.pathname+location.search+(hash.toString()?'#'+hash.toString():''));
+  }
+  // 같은 사이트에서 이미 열린 루트앱을 검색하고 경로를 전달한다.
+  try{window.name='SK_FLIGHT_MAP';}catch(e){}
+  if(typeof BroadcastChannel==='function'){
+    const bridge=new BroadcastChannel('SK_FLIGHT_MAP_BRIDGE_V1');
+    const tabId=typeof crypto.randomUUID==='function'?crypto.randomUUID():Date.now()+'-'+Math.random();
+    let lastActive=Date.now();
+    window.addEventListener('focus',()=>{lastActive=Date.now();});document.addEventListener('pointerdown',()=>{lastActive=Date.now();});
+    bridge.onmessage=event=>{
+      const message=event.data;if(!message||message.v!==1)return;
+      if(message.type==='DISCOVER')bridge.postMessage({v:1,type:'READY',requestId:message.requestId,tabId,lastActive,visible:document.visibilityState==='visible',file:new URLSearchParams(location.search).get('file')||''});
+      if(message.type==='IMPORT_GPX'&&message.target===tabId){
+        enqueue(async()=>{try{
+          const fileName=await importRouteMapPayload(message.payload);
+          bridge.postMessage({v:1,type:'IMPORTED',requestId:message.requestId,tabId,fileName});
+          try{window.focus();}catch(e){}
+        }catch(e){bridge.postMessage({v:1,type:'IMPORT_ERROR',requestId:message.requestId,tabId,error:errorText(e)});throw e;}});
+      }
+    };
+  }
+
   // 기존 한 개씩 저장하던 GPX와 KML도 최초 한 번 가져온다.
   async function migrate(){
     if(await storage('meta','get',null,'multiFileMigrated'))return;
@@ -12491,6 +12528,7 @@ function initPrivateMapFiles(){
     await migrate();const records=await storage('files','all'),errors=[];
     for(const record of records.sort((a,b)=>a.order-b.order)){try{const parsed=parsedRecord(record);if(record.kind==='gpx'&&!/^#[0-9a-f]{6}$/i.test(record.routeColor||'')){assignGpxColor(record);await storage('files','put',record);}addRecord(record,parsed);nextOrder=Math.max(nextOrder,record.order+1);}catch(e){errors.push(record.name+': '+errorText(e));}}
     if(errors.length)status.textContent=errors.join('\n');else if(records.length)status.textContent=entries.size+'개 파일과 표시 상태를 복원했습니다.';
+    await receiveRouteMapGpx();
   });
   function parseGpx(xml){
     if(!xml.trim())throw Error('GPX 원문을 붙여넣어 주세요.');
