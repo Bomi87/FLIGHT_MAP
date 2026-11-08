@@ -12554,7 +12554,14 @@ function initPrivateMapFiles(){
     enqueue(async()=>{
       const coords=await coordinateInput(raw);let payload;
       if(coords){
-        const name=(label||'COORD '+new Date().toISOString().replace(/[:.]/g,'-')).replace(/[\x00-\x1f/\\]/g,'_').replace(/\.gpx$/i,'').slice(0,120);
+        const name=(
+  label ||
+  (coords.length===1
+    ? raw.trim()
+    : 'COORD '+new Date().toISOString().replace(/[:.]/g,'-'))
+).replace(/[\x00-\x1f/\\]/g,'_')
+ .replace(/\.gpx$/i,'')
+ .slice(0,120);
         const gpx='<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="Flight Map"><rte><name>'+esc(name)+'</name>'+coords.map((p,i)=>
   '<rtept lat="'+p.lat+'" lon="'+p.lon+'"><name>'+
   esc(label ? (coords.length===1 ? name : name+'-'+(i+1)) : p.name)+
