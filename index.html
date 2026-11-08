@@ -12727,7 +12727,7 @@ function initPrivateMapFiles(){
       bounds=layer.getBounds();anchor=centre;if(visible)map.addLayer(layer);scheduleRouteTextUpdate();
     }
     render();
-    return {getBounds:()=>bounds,setVisible(value){visible=value;if(value)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}scheduleRouteTextUpdate();},update(){if(alive&&Math.abs(map.getCenter().lng-anchor)>150)render();},destroy(){alive=false;removeLabels();map.removeLayer(layer);layer.clearLayers();scheduleRouteTextUpdate();}};
+    return {getBounds:()=>bounds,setVisible(value){visible=value;if(value)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}scheduleRouteTextUpdate();},update(){if(alive&&Math.abs(map.getCenter().lng-anchor)>150&&!(map._popup?.isOpen()&&map._popup._source&&layer.hasLayer(map._popup._source)))render();},destroy(){alive=false;removeLabels();map.removeLayer(layer);layer.clearLayers();scheduleRouteTextUpdate();}};
   }
   function createKmlRenderer(record,features){
     const layer=L.featureGroup();let state={...record},anchor=null,bounds=null;
@@ -12737,32 +12737,36 @@ function initPrivateMapFiles(){
   function scheduleFlightLabels(){clearTimeout(flightLabelTimer);flightLabelTimer=setTimeout(updateFlightLabels,20);}
   function updateFlightLabels(){
     flightLabels.clearLayers();
-    for(const entry of flightEntries)layer.removeLayer(entry.marker);
     if(!state||!state.visible||!map.hasLayer(layer))return;
+    const popup=map._popup;
+    const pinned=popup&&popup.isOpen()?flightEntries.find(entry=>entry.marker.getPopup()===popup):null;
+    const keep=new Set();
     const occupied=[],size=map.getSize();
     const overlap=(a,b)=>!(a.right<b.left||a.left>b.right||a.bottom<b.top||a.top>b.bottom);
     const reserve=rect=>occupied.some(other=>overlap(rect,other));
     // 시작과 끝을 우선하고, 축소 시 겹치는 항적점은 생략한다.
-    const order=flightEntries.length>1?[flightEntries[0],flightEntries[flightEntries.length-1],...flightEntries.slice(1,-1)]:flightEntries;
+    const normalOrder=flightEntries.length>1?[flightEntries[0],flightEntries[flightEntries.length-1],...flightEntries.slice(1,-1)]:flightEntries;
+    const order=pinned?[pinned,...normalOrder.filter(entry=>entry!==pinned)]:normalOrder;
     for(const entry of order){
       const point=map.latLngToContainerPoint(entry.marker.getLatLng()),radius=entry.size/2+3;
-      if(point.x< -80||point.y< -30||point.x>size.x+80||point.y>size.y+30)continue;
+      if(entry!==pinned&&(point.x< -80||point.y< -30||point.x>size.x+80||point.y>size.y+30))continue;
       const icon={left:point.x-radius,right:point.x+radius,top:point.y-radius,bottom:point.y+radius};
-      if(reserve(icon))continue;
-     const label=entry.altitudeFt===null?'':Math.round(entry.altitudeFt).toLocaleString('en-US')+' ft';
+      if(entry!==pinned&&reserve(icon))continue;
+      const label=entry.altitudeFt===null?'':Math.round(entry.altitudeFt).toLocaleString('en-US')+' ft';
       const width=label.length*7+6,height=17,gap=radius+4;
       // 고도 라벨은 수평으로 유지하고 화면상의 빈 공간에 배치한다.
       const positions=[{x:point.x+gap,y:point.y-height/2},{x:point.x-width-gap,y:point.y-height/2},{x:point.x-width/2,y:point.y-gap-height},{x:point.x-width/2,y:point.y+gap}].map(p=>({...p,rect:{left:p.x-3,right:p.x+width+3,top:p.y-2,bottom:p.y+height+2}}));
       const position=label?positions.find(p=>!reserve(p.rect)&&!overlap(p.rect,icon)):null;
       // 고도 정보가 있는 항적점은 라벨까지 들어갈 공간이 있을 때 표시한다.
-      if(label&&!position)continue;
-      layer.addLayer(entry.marker);occupied.push(icon);
+      if(entry!==pinned&&label&&!position)continue;
+      keep.add(entry.marker);if(!layer.hasLayer(entry.marker))layer.addLayer(entry.marker);occupied.push(icon);
       if(position){
         const ll=map.containerPointToLatLng([position.x,position.y]);
         L.marker(ll,{interactive:false,keyboard:false,icon:L.divIcon({className:'private-ntm-point private-flight-altitude',iconSize:[width,height],iconAnchor:[0,0],html:'<span style="display:block;white-space:nowrap;width:'+width+'px;height:'+height+'px;color:#172554;font:800 12px/17px Arial;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff">'+esc(label)+'</span>'})}).addTo(flightLabels);
         occupied.push(position.rect);
       }
     }
+    for(const entry of flightEntries)if(!keep.has(entry.marker)&&layer.hasLayer(entry.marker))layer.removeLayer(entry.marker);
   }
   function removePlanLabels(){for(let i=waypointLabelRegistry.length-1;i>=0;i--){const item=waypointLabelRegistry[i];if(item.privateFileId!==record.id)continue;if(item.labelMarker)item.targetLayer.removeLayer(item.labelMarker);waypointLabelRegistry.splice(i,1);}}
   function render(fit){
@@ -12800,7 +12804,6 @@ function initPrivateMapFiles(){
         }
         if(f.flightTrack){
           const altitude=f.altitudeFt===null?'고도 정보 없음':Math.round(f.altitudeFt).toLocaleString('en-US')+' ft';
-     
           flightEntries.push({marker:shape,altitudeFt:f.altitudeFt,group:f.trackGroup||'route',size:(isDesktopView()?21:18)*s.iconScale});
         }
         if(!f.flightTrack&&!f.planWaypoint&&s.labelScale>0)shape.bindTooltip('<span style="color:'+(s.labelExplicit&&s.label.opacity>0?(/[（(].*[)）]/.test(f.name)&&s.label.color.toLowerCase()==='#00ff00'?'#15803d':s.label.color):'#172554')+';opacity:1;font-size:'+Math.max(13,12*s.labelScale)+'px;font-weight:800;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff">'+esc(f.name)+'</span>',{permanent:true,direction:'right',offset:[6,-5],className:'private-ntm-label'});
@@ -12835,7 +12838,7 @@ function initPrivateMapFiles(){
   }
 
     render(false);
-    return {getBounds:()=>bounds,setVisible(value){state.visible=value;if(value)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}scheduleFlightLabels();schedulePointLabels();scheduleRouteTextUpdate();},update(){if(!state)return;if(Math.abs(map.getCenter().lng-anchor)>150)render(false);else scheduleFlightLabels();schedulePointLabels();},destroy(){removePlanLabels();scheduleRouteTextUpdate();removePolygonHits(record.id);removePointHits(record.id);schedulePointLabels();clearTimeout(flightLabelTimer);state=null;flightEntries=[];flightLabels.clearLayers();map.removeLayer(layer);layer.clearLayers();}};
+    return {getBounds:()=>bounds,setVisible(value){state.visible=value;if(value)map.addLayer(layer);else{layer.eachLayer(l=>{if(l.closePopup)l.closePopup();});map.removeLayer(layer);}scheduleFlightLabels();schedulePointLabels();scheduleRouteTextUpdate();},update(){if(!state)return;if(Math.abs(map.getCenter().lng-anchor)>150&&!(map._popup?.isOpen()&&map._popup._source&&layer.hasLayer(map._popup._source)))render(false);else scheduleFlightLabels();schedulePointLabels();},destroy(){removePlanLabels();scheduleRouteTextUpdate();removePolygonHits(record.id);removePointHits(record.id);schedulePointLabels();clearTimeout(flightLabelTimer);state=null;flightEntries=[];flightLabels.clearLayers();map.removeLayer(layer);layer.clearLayers();}};
   }
 
 }
