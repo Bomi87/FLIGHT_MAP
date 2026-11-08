@@ -12749,7 +12749,7 @@ function initPrivateMapFiles(){
       if(point.x< -80||point.y< -30||point.x>size.x+80||point.y>size.y+30)continue;
       const icon={left:point.x-radius,right:point.x+radius,top:point.y-radius,bottom:point.y+radius};
       if(reserve(icon))continue;
-     const label='';
+     const label=entry.altitudeFt===null?'':Math.round(entry.altitudeFt).toLocaleString('en-US')+' ft';
       const width=label.length*7+6,height=17,gap=radius+4;
       // 고도 라벨은 수평으로 유지하고 화면상의 빈 공간에 배치한다.
       const positions=[{x:point.x+gap,y:point.y-height/2},{x:point.x-width-gap,y:point.y-height/2},{x:point.x-width/2,y:point.y-gap-height},{x:point.x-width/2,y:point.y+gap}].map(p=>({...p,rect:{left:p.x-3,right:p.x+width+3,top:p.y-2,bottom:p.y+height+2}}));
