@@ -12228,6 +12228,11 @@ function initPrivateMapFiles(){
   #privateMapFilesPanel button:disabled{cursor:wait;opacity:.55}
   #privateMapFilesPanel .file-close{font-size:19px;background:transparent;padding:0 4px;color:#5b21b6}
   #privateMapFilesInput{display:block;width:100%;margin:5px 0 12px;font-size:12px}
+  #privateRouteForm{border-top:1px solid #e2e8f0;padding:10px 0 12px;margin:0}
+  #privateRouteInput{display:block;width:100%;box-sizing:border-box;margin:5px 0 7px;padding:8px;resize:vertical;border:1px solid #cbd5e1;border-radius:5px;font:12px/1.5 Arial}
+  .private-route-actions{display:flex;gap:7px}.private-route-actions input{flex:1;min-width:0;padding:6px 8px;border:1px solid #cbd5e1;border-radius:5px;font:12px Arial}
+  #privateMapFilesPanel #privateRouteSubmit{background:#7c3aed;color:#fff;white-space:nowrap}
+  #privateRouteForm small{display:block;color:#64748b;margin-top:4px;font-size:10px}
   .private-file-row{display:flex;align-items:center;gap:5px;border-top:1px solid #e2e8f0;padding:9px 0}
   .private-file-name{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700}
   #privateMapFilesPanel .file-delete{margin-left:12px;background:#f1f5f9;color:#64748b}
@@ -12237,7 +12242,7 @@ function initPrivateMapFiles(){
   `;document.head.appendChild(css);
   const button=document.createElement('button');button.id='privateGpxBtn';button.type='button';button.textContent='FILE';button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','privateMapFilesPanel');pos.after(button);
   const panel=document.createElement('section');panel.id='privateMapFilesPanel';panel.hidden=true;panel.setAttribute('aria-label','개인 지도 파일');
-  panel.innerHTML='<header>개인 지도 파일<button type="button" class="file-close" aria-label="닫기">×</button></header><label for="privateMapFilesInput">파일 선택 · GPX / KML / KMZ</label><input id="privateMapFilesInput" type="file" accept=".gpx,.kml,.kmz" multiple><div id="privateMapFilesList"></div><div id="privateMapFilesStatus" role="status" aria-live="polite"></div>';
+  panel.innerHTML='<header>개인 지도 파일<button type="button" class="file-close" aria-label="닫기">×</button></header><label for="privateMapFilesInput">파일 선택 · GPX / KML / KMZ</label><input id="privateMapFilesInput" type="file" accept=".gpx,.kml,.kmz" multiple><form id="privateRouteForm"><label for="privateRouteInput">ROUTE / WAYPOINT / 좌표</label><textarea id="privateRouteInput" rows="3" maxlength="100000" placeholder="BULTI Y711 MUGUS Y742 SALMI Q11 TACLE&#10;또는 36.722861, 126.824917"></textarea><div class="private-route-actions"><input id="privateRouteName" type="text" maxlength="120" aria-label="경로 이름" placeholder="이름 (선택)"><button id="privateRouteSubmit" type="submit">ROUTE 표시</button></div><small>DD / DDM / DMS · 여러 좌표는 줄바꿈</small></form><div id="privateMapFilesList"></div><div id="privateMapFilesStatus" role="status" aria-live="polite"></div>';
   (document.getElementById('appRoot')||document.body).appendChild(panel);L.DomEvent.disableClickPropagation(panel);L.DomEvent.disableScrollPropagation(panel);
   const picker=panel.querySelector('input'),list=panel.querySelector('#privateMapFilesList'),status=panel.querySelector('[role="status"]');
   if(!map.getPane('privateFilePoints'))map.createPane('privateFilePoints').style.zIndex='620';
@@ -12429,7 +12434,7 @@ function initPrivateMapFiles(){
       list.appendChild(row);
     }
     if(!entries.size){const empty=document.createElement('p');empty.textContent='표시할 파일을 선택해 주세요.';empty.style.color='#64748b';list.appendChild(empty);}
-    button.classList.toggle('active',[...entries.values()].some(e=>e.record.visible));picker.disabled=busy;panel.setAttribute('aria-busy',String(busy));
+    button.classList.toggle('active',[...entries.values()].some(e=>e.record.visible));picker.disabled=busy;manualSubmit.disabled=busy;manualInput.disabled=busy;manualName.disabled=busy;panel.setAttribute('aria-busy',String(busy));
   }
   function enqueue(action){queue=queue.then(async()=>{busy=true;updateList();try{await action();}catch(e){status.textContent=errorText(e);}finally{busy=false;updateList();}});return queue;}
   function parsedRecord(record){return record.kind==='gpx'?parseGpx(record.xml):parseKml(record.xml);}
@@ -12471,6 +12476,93 @@ function initPrivateMapFiles(){
       if(success)fitVisible();status.textContent=success+'개 파일 표시·저장됨'+([...failures,...notes].length?'\n'+[...failures,...notes].join('\n'):'');
     });
   });
+  const manualForm=panel.querySelector('#privateRouteForm');
+  const manualInput=panel.querySelector('#privateRouteInput'),manualName=panel.querySelector('#privateRouteName');
+  const manualSubmit=panel.querySelector('#privateRouteSubmit');
+  const MANUAL_ROUTE_BACKEND_URL='https://script.google.com/macros/s/AKfycby8SXVmuTrmYnMTyloD9Gk5q1VY8xgjIxwgBevDFQF1svEV2ErSxo8nFZdpP4I8tAFLpQ/exec';
+  function coordinateAngle(body,axis,hemisphere){
+    let clean=body.trim().replace(/^[,\s]+|[,\s]+$/g,'');
+    if(!clean||/[^\d+\-\.\s°'":]/.test(clean))throw Error('좌표 기호와 숫자를 확인해 주세요.');
+    const nums=clean.replace(/[°'":]/g,' ').trim().split(/\s+/);
+    if(nums.length>3||nums.some(n=>!/^[-+]?\d+(?:\.\d+)?$/.test(n)))throw Error('도·분·초 형식을 확인해 주세요.');
+    let d,m=0,s=0;
+    const degreeDigits=axis==='lat'?2:3;
+    if(nums.length===1&&hemisphere){
+      const token=nums[0],unsigned=token.replace(/^[+-]/,''),integer=unsigned.split('.')[0];
+      if(integer.length===degreeDigits+2){d=Number(unsigned.slice(0,degreeDigits));m=Number(unsigned.slice(degreeDigits));}
+      else if(integer.length===degreeDigits+4){d=Number(unsigned.slice(0,degreeDigits));m=Number(unsigned.slice(degreeDigits,degreeDigits+2));s=Number(unsigned.slice(degreeDigits+2));}
+      else if(integer.length<=degreeDigits)d=Number(unsigned);
+      else throw Error('붙여 쓴 좌표 자리수를 확인해 주세요. 예: N352303E1302930');
+      if(token.startsWith('-'))throw Error('N/S/E/W 좌표에는 음수 부호를 함께 쓰지 마세요.');
+    }else{
+      d=Number(nums[0]);m=nums.length>1?Number(nums[1]):0;s=nums.length>2?Number(nums[2]):0;
+      if(nums.length>1&&!Number.isInteger(d)||nums.length>2&&!Number.isInteger(m))throw Error('도·분·초는 마지막 단위에만 소수를 사용해 주세요.');
+      if(hemisphere&&d<0)throw Error('N/S/E/W 좌표에는 음수 부호를 함께 쓰지 마세요.');
+    }
+    if(m<0||m>=60||s<0||s>=60)throw Error('좌표의 분·초는 0 이상 60 미만이어야 합니다.');
+    const limit=axis==='lat'?90:180,value=Math.abs(d)+m/60+s/3600;
+    if(!Number.isFinite(value)||value>limit)throw Error(axis==='lat'?'위도 범위는 ±90도입니다.':'경도 범위는 ±180도입니다.');
+    return value*(hemisphere?(/[SW]/.test(hemisphere)?-1:1):(d<0||nums[0].startsWith('-')?-1:1));
+  }
+  async function coordinateInput(raw){
+    const normalized=raw.toUpperCase().replace(/[−–]/g,'-').replace(/[º˚]/g,'°').replace(/[′’‘]/g,"'").replace(/[″“”]/g,'"').replace(/\r/g,'').trim();
+    const rows=normalized.split(/[;\n]+/).map(s=>s.trim().replace(/^[-•]\s+(?=[NSEW\d])/,'')).filter(Boolean);
+    const points=[];let recognized=false;
+    const add=(lat,lon,name)=>{if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)throw Error('변환된 좌표가 유효하지 않습니다.');points.push({lat,lon,name:name||'COORD '+(points.length+1)});if(points.length>5000)throw Error('좌표는 최대 5,000개까지 입력해 주세요.');};
+    for(let index=0;index<rows.length;index++){
+      const row=rows[index];
+      try{
+        // Hemisphere prefixes or suffixes; compact and separated DMS/DDM/DD.
+        if((/^[NS]\s*\d/.test(row)&&/[EW]\s*\d/.test(row))||(/\d[^A-Z]*[NS]/.test(row)&&/\d[^A-Z]*[EW]/.test(row))||(/^[EW]\s*\d/.test(row)&&/[NS]\s*\d/.test(row))){
+          recognized=true;const prefix=/^[NSEW]/.test(row),pattern=prefix?/([NSEW])([^NSEW]+)/g:/([^NSEW]+)([NSEW])/g;
+          const parts=Array.from(row.matchAll(pattern));if(!parts.length||parts.map(m=>m[0]).join('')!==row)throw Error('좌표의 방위 문자 위치를 확인해 주세요.');
+          if(parts.length%2)throw Error('위도와 경도를 한 쌍으로 입력해 주세요.');
+          for(let i=0;i<parts.length;i+=2){let lat,lon;for(const part of parts.slice(i,i+2)){const h=part[prefix?1:2],body=part[prefix?2:1],axis=/[NS]/.test(h)?'lat':'lon';if(axis==='lat'){if(lat!==undefined)throw Error('위도가 중복됐습니다.');lat=coordinateAngle(body,axis,h);}else{if(lon!==undefined)throw Error('경도가 중복됐습니다.');lon=coordinateAngle(body,axis,h);}}if(lat===undefined||lon===undefined)throw Error('N/S 위도와 E/W 경도가 모두 필요합니다.');add(lat,lon);}continue;
+        }
+        if(/^[+\-\d\s.,°'":()[\]]+$/.test(row)){
+          recognized=true;const clean=row.replace(/[()[\]]/g,''),halves=clean.split(',');
+          if(halves.length===2){add(coordinateAngle(halves[0],'lat'),coordinateAngle(halves[1],'lon'));continue;}
+          const decimal=clean.match(/^([+-]?\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)$/);
+          if(decimal){add(coordinateAngle(decimal[1],'lat'),coordinateAngle(decimal[2],'lon'));continue;}
+          throw Error('좌표는 위도, 경도 순서로 입력해 주세요. 여러 좌표는 줄바꿈 또는 ;로 구분해 주세요.');
+        }
+        if(recognized||/^[NS]\d{4,}/.test(row))throw Error('좌표 형식을 확인해 주세요. 좌표와 항로명은 따로 입력해 주세요.');
+        return null;
+      }catch(e){throw Error((index+1)+'번째 줄: '+errorText(e));}
+    }
+    return recognized?points:null;
+  }
+
+  manualForm.addEventListener('submit',event=>{
+    event.preventDefault();if(busy||manualSubmit.disabled)return;
+    const raw=manualInput.value.trim(),label=manualName.value.trim();
+    if(!raw){status.textContent='항로, waypoint 또는 좌표를 입력해 주세요.';manualInput.focus();return;}
+    manualSubmit.disabled=true;
+    enqueue(async()=>{
+      const coords=await coordinateInput(raw);let payload;
+      if(coords){
+        const name=(label||'COORD '+new Date().toISOString().replace(/[:.]/g,'-')).replace(/[\x00-\x1f/\\]/g,'_').replace(/\.gpx$/i,'').slice(0,120);
+        const gpx='<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="Flight Map"><rte><name>'+esc(name)+'</name>'+coords.map(p=>'<rtept lat="'+p.lat+'" lon="'+p.lon+'"><name>'+p.name+'</name></rtept>').join('')+'</rte></gpx>';
+        payload={v:1,source:'ubikais-route',fileName:name+'.gpx',gpx};
+      }else{
+        const route=raw.toUpperCase().replace(/\s+/g,' ').trim();
+        if(route.length>6000||!/^[A-Z0-9 .\/-]+$/.test(route))throw Error('항로는 waypoint·항로명으로, 소수 좌표는 위도, 경도 형식으로 입력해 주세요.');
+        status.textContent='SkyVector에서 경로를 확인하고 GPX를 생성하는 중…';
+        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),90000);
+        try{
+          const url=MANUAL_ROUTE_BACKEND_URL+'?'+new URLSearchParams({mode:'manualRouteGpx',route,name:label});
+          const response=await fetch(url,{signal:controller.signal,credentials:'omit'});
+          if(!response.ok)throw Error('경로 서버에 연결하지 못했습니다. HTTP '+response.status);
+          const data=await response.json();
+          if(data.status!=='success')throw Error(data.msg||'경로를 생성하지 못했습니다.');
+          payload={v:1,source:'ubikais-route',fileName:data.fileName,gpx:data.gpx};
+        }catch(e){if(e.name==='AbortError')throw Error('경로 생성 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요.');throw e;}finally{clearTimeout(timer);}
+      }
+      await importRouteMapPayload(payload);
+      status.textContent=payload.fileName+' 표시·저장됨';
+    });
+  });
+
   async function importRouteMapPayload(payload){
     if(!payload||payload.v!==1||payload.source!=='ubikais-route'||typeof payload.gpx!=='string'||typeof payload.fileName!=='string'||!/\.gpx$/i.test(payload.fileName))throw Error('자동 전달된 GPX 형식이 올바르지 않습니다.');
     if(payload.gpx.length>250000)throw Error('전달받은 GPX 데이터가 너무 큽니다.');
@@ -12547,7 +12639,7 @@ function initPrivateMapFiles(){
         if(++total>5000)throw Error('최대 5,000개 waypoint까지 지원합니다.');
         return {lat,lon,name:name(n)};
       });
-      if(points.length<2)throw Error('경로마다 waypoint이 2개 이상 필요합니다.');
+      if(!points.length)throw Error('경로마다 waypoint이 1개 이상 필요합니다.');
       result.push({name:label||'GPX 경로',points});
     }
     for(const rte of children(doc.documentElement,'rte'))add(rte,'rtept',name(rte));
@@ -12755,7 +12847,7 @@ function initPrivateMapFiles(){
       removeLabels();layer.clearLayers();const centre=map.getCenter().lng;
       for(const route of routes){
         const points=unwrap(route.points.map(p=>[p.lat,p.lon]),centre),path=points.map(p=>({lat:p[0],lon:p[1]}));
-        L.polyline(points,{color:routeColor,weight:3,opacity:.95}).bindPopup(esc(record.name)+'<br>'+esc(route.name)).addTo(layer);
+        if(points.length>1)L.polyline(points,{color:routeColor,weight:3,opacity:.95}).bindPopup(esc(record.name)+'<br>'+esc(route.name)).addTo(layer);
         route.points.forEach((p,i)=>{
           const marker=L.circleMarker(points[i],{radius:isDesktopView()?4:2.5,color:routeColor,weight:isDesktopView()?2:1,fillColor:waypointFill,fillOpacity:1}).addTo(layer);
           marker.bindPopup('<strong>'+esc(p.name||'waypoint '+(i+1))+'</strong><br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6));
