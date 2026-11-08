@@ -12506,44 +12506,25 @@ function initPrivateMapFiles(){
   }
   async function coordinateInput(raw){
     const normalized=raw.toUpperCase().replace(/[−–]/g,'-').replace(/[º˚]/g,'°').replace(/[′’‘]/g,"'").replace(/[″“”]/g,'"').replace(/\r/g,'').trim();
+    // 항로명·waypoint가 포함된 문자열은 전체를 SkyVector로 전달한다.
+    if(/[A-Z]/.test(normalized.replace(/[NSEW]/g,'')))return null;
     const rows=normalized.split(/[;\n]+/).map(s=>s.trim().replace(/^[-•]\s+(?=[NSEW\d])/,'')).filter(Boolean);
     const points=[];let recognized=false;
     const add=(lat,lon,name)=>{if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)throw Error('변환된 좌표가 유효하지 않습니다.');points.push({lat,lon,name:name||'COORD '+(points.length+1)});if(points.length>5000)throw Error('좌표는 최대 5,000개까지 입력해 주세요.');};
     for(let index=0;index<rows.length;index++){
       const row=rows[index];
       try{
+        const compactTokens=row.split(/\s+/);
+        if(compactTokens.every(t=>/^(?:\d{6}[NS]\d{7}[EW]|\d{4}N)$/.test(t))){
+          recognized=true;
+          for(const token of compactTokens){
+            const full=token.match(/^(\d{6})([NS])(\d{7})([EW])$/);
+            if(full)add(coordinateAngle(full[1],'lat',full[2]),coordinateAngle(full[3],'lon',full[4]),token);
+            else add(Number(token.slice(0,2)),-Number(token.slice(2,4)),token);
+          }
+          continue;
+        }
         // Hemisphere prefixes or suffixes; compact and separated DMS/DDM/DD.
-    // 5140N → 북위 51°, 서경 40°
-    // 한 줄에 입력한 정밀 좌표·축약 좌표를 각각 표시
-const coordinateTokens = row.split(/\s+/);
-
-if (coordinateTokens.every(t =>
-  /^(?:\d{6}[NS]\d{7}[EW]|\d{4}N)$/.test(t)
-)) {
-  recognized = true;
-
-  for (const token of coordinateTokens) {
-    const full = token.match(/^(\d{6})([NS])(\d{7})([EW])$/);
-
-    if (full) {
-      add(
-        coordinateAngle(full[1], 'lat', full[2]),
-        coordinateAngle(full[3], 'lon', full[4]),
-        token
-      );
-    } else {
-      add(Number(token.slice(0, 2)), -Number(token.slice(2, 4)), token);
-    }
-  }
-
-  continue;
-}
-const oceanic = row.match(/^(\d{2})(\d{2})N$/);
-if (oceanic) {
-  recognized = true;
-  add(Number(oceanic[1]), -Number(oceanic[2]), row);
-  continue;
-}
         if((/^[NS]\s*\d/.test(row)&&/[EW]\s*\d/.test(row))||(/\d[^A-Z]*[NS]/.test(row)&&/\d[^A-Z]*[EW]/.test(row))||(/^[EW]\s*\d/.test(row)&&/[NS]\s*\d/.test(row))){
           recognized=true;const prefix=/^[NSEW]/.test(row),pattern=prefix?/([NSEW])([^NSEW]+)/g:/([^NSEW]+)([NSEW])/g;
           const parts=Array.from(row.matchAll(pattern));if(!parts.length||parts.map(m=>m[0]).join('')!==row)throw Error('좌표의 방위 문자 위치를 확인해 주세요.');
@@ -12563,6 +12544,7 @@ if (oceanic) {
     }
     return recognized?points:null;
   }
+
 
   manualForm.addEventListener('submit',event=>{
     event.preventDefault();if(busy||manualSubmit.disabled)return;
