@@ -12513,6 +12513,13 @@ function initPrivateMapFiles(){
       const row=rows[index];
       try{
         // Hemisphere prefixes or suffixes; compact and separated DMS/DDM/DD.
+    // 5140N → 북위 51°, 서경 40°
+const oceanic = row.match(/^(\d{2})(\d{2})N$/);
+if (oceanic) {
+  recognized = true;
+  add(Number(oceanic[1]), -Number(oceanic[2]));
+  continue;
+}
         if((/^[NS]\s*\d/.test(row)&&/[EW]\s*\d/.test(row))||(/\d[^A-Z]*[NS]/.test(row)&&/\d[^A-Z]*[EW]/.test(row))||(/^[EW]\s*\d/.test(row)&&/[NS]\s*\d/.test(row))){
           recognized=true;const prefix=/^[NSEW]/.test(row),pattern=prefix?/([NSEW])([^NSEW]+)/g:/([^NSEW]+)([NSEW])/g;
           const parts=Array.from(row.matchAll(pattern));if(!parts.length||parts.map(m=>m[0]).join('')!==row)throw Error('좌표의 방위 문자 위치를 확인해 주세요.');
