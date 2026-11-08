@@ -12514,10 +12514,34 @@ function initPrivateMapFiles(){
       try{
         // Hemisphere prefixes or suffixes; compact and separated DMS/DDM/DD.
     // 5140N → 북위 51°, 서경 40°
+    // 한 줄에 입력한 정밀 좌표·축약 좌표를 각각 표시
+const coordinateTokens = row.split(/\s+/);
+
+if (coordinateTokens.every(t =>
+  /^(?:\d{6}[NS]\d{7}[EW]|\d{4}N)$/.test(t)
+)) {
+  recognized = true;
+
+  for (const token of coordinateTokens) {
+    const full = token.match(/^(\d{6})([NS])(\d{7})([EW])$/);
+
+    if (full) {
+      add(
+        coordinateAngle(full[1], 'lat', full[2]),
+        coordinateAngle(full[3], 'lon', full[4]),
+        token
+      );
+    } else {
+      add(Number(token.slice(0, 2)), -Number(token.slice(2, 4)), token);
+    }
+  }
+
+  continue;
+}
 const oceanic = row.match(/^(\d{2})(\d{2})N$/);
 if (oceanic) {
   recognized = true;
-  add(Number(oceanic[1]), -Number(oceanic[2]));
+  add(Number(oceanic[1]), -Number(oceanic[2]), row);
   continue;
 }
         if((/^[NS]\s*\d/.test(row)&&/[EW]\s*\d/.test(row))||(/\d[^A-Z]*[NS]/.test(row)&&/\d[^A-Z]*[EW]/.test(row))||(/^[EW]\s*\d/.test(row)&&/[NS]\s*\d/.test(row))){
