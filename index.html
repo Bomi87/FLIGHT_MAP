@@ -12974,7 +12974,7 @@ if (label) {
         const points=unwrap(route.points.map(p=>[p.lat,p.lon]),centre),path=points.map(p=>({lat:p[0],lon:p[1]}));
         if(points.length>1)L.polyline(points,{color:routeColor,weight:3,opacity:.95}).bindPopup(esc(record.name)+'<br>'+esc(route.name)).addTo(layer);
         route.points.forEach((p,i)=>{
-          const marker=L.circleMarker(points[i],{radius:isDesktopView()?4:2.5,color:routeColor,weight:isDesktopView()?2:1,fillColor:waypointFill,fillOpacity:1}).addTo(layer);
+          const marker=L.circleMarker(points[i],{pane:'privateFilePoints',renderer:privatePointRenderer,radius:isDesktopView()?4:2.5,color:routeColor,weight:isDesktopView()?2:1,fillColor:waypointFill,fillOpacity:1}).addTo(layer);
           marker.bindPopup('<strong>'+esc(p.name||'waypoint '+(i+1))+'</strong><br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6));
           if(p.name){const before=waypointLabelRegistry.length;registerWaypointLabel(marker,{type:'Point',name:p.name,description:''},{minZoom:ROUTE_LABEL_MIN_ZOOM,prevPoint:path[i-1]||null,currPoint:path[i],nextPoint:path[i+1]||null,renderContext:{referenceLon:centre},sequence:i,targetLayer:layer});for(let j=before;j<waypointLabelRegistry.length;j++){waypointLabelRegistry[j].privateGpx=true;waypointLabelRegistry[j].privateFileId=record.id;}}
         });
