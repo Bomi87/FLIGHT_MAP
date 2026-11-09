@@ -10414,7 +10414,7 @@ createNoaaModelControl().addTo(map);
    return {geometry,source:'RAW_WID_LINE',note:'원문 WID LINE으로 복구한 근사 영역 · 전폭 '+m[1]+m[2]+' · 원문 확인 필요'};
  }
 
- function wxMulti(g){return g.type==='Polygon'?[g.coordinates]:g.coordinates}
+function wxMulti(g){return g.type==='Polygon'?[g.coordinates]:g.coordinates}
  function wxGeometryBounds(g){
    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
    function visit(v){if(Array.isArray(v)&&typeof v[0]==='number'&&typeof v[1]==='number'){
@@ -10736,17 +10736,19 @@ createNoaaModelControl().addTo(map);
  // without applying the UA/UUA slash-field parser to unrelated ARP tokens.
  function wxAirepArpFields(raw){
    const text=String(raw||'').trim().toUpperCase().replace(/\s+/g,' ');
-   if(!/^ARP\s/.test(text))return null;
+   const hasArpPrefix=/^ARP\s/.test(text);
+   const compactReport=!hasArpPrefix && /^[A-Z0-9]{2,10}\s+[0-8]\d[0-5]\d[NS]\s*(?:0\d\d|1[0-7]\d|180)(?:[0-5]\d)?[EW]\s+(?:[01]\d|2[0-3])[0-5]\d\s+F\d{3}\s+(?:MS|PS)\d{2}\s+(?:[0-2]\d{2}|3[0-5]\d|360)\/\d{2,3}(?:KT)?(?=\s|=|$)/.test(text);
+   if(!hasArpPrefix&&!compactReport)return null;
    // ICAO AIREP positions may be combined (3731N09132W) or split (3731N 09132W).
-   const compactText=text.replace(/\b([0-8]\d[0-5]\d[NS])\s+((?:0\d\d|1[0-7]\d|180)[0-5]\d[EW])\b/g,'$1$2');
-   const tokens=compactText.split(' ');
-   const coordinate=/^(\d{2})(\d{2})([NS])(\d{3})(\d{2})([EW])$/;
+   const compactText=text.replace(/\b([0-8]\d[0-5]\d[NS])\s+((?:0\d\d|1[0-7]\d|180)(?:[0-5]\d)?[EW])\b/g,'$1$2');
+   const tokens=compactText.replace(/=$/,'').trimEnd().split(' ');
+   const coordinate=/^(\d{2})(\d{2})([NS])(\d{3})(\d{2})?([EW])$/;
    const points=[];
    tokens.forEach((token,i)=>{
      const match=token.match(coordinate);
      if(!match)return;
      const lat=Number(match[1])+Number(match[2])/60;
-     const lon=Number(match[4])+Number(match[5])/60;
+     const lon=Number(match[4])+Number(match[5]||0)/60;
      if(lat>90||lon>180)return;
      const next=tokens[i+1]||'';
      points.push({point:token,lat:(match[3]==='S'?-lat:lat),lon:(match[6]==='W'?-lon:lon),time:/^(?:[01]\d|2[0-3])[0-5]\d$/.test(next)?next:''});
@@ -10754,7 +10756,7 @@ createNoaaModelControl().addTo(map);
    const flToken=tokens.find(t=>/^F\d{3}$/.test(t))||'';
    const windIndex=tokens.findIndex(t=>/^\d{3}\/\d{2,3}(?:KT)?$/.test(t));
    const windToken=windIndex>=0?tokens[windIndex]:'';
-   const wind=windToken?(windToken.endsWith('KT')?windToken.replace(/KT$/,' KT'):(tokens[windIndex+1]||'')==='KT'?windToken+' KT':''):'';
+   const wind=windToken?(windToken.endsWith('KT')?windToken.replace(/KT$/,' KT'):(tokens[windIndex+1]||'')==='KT'?windToken+' KT':compactReport?windToken:''):'';
    const temp=tokens.find(t=>/^(?:MS|PS)\d{2}$/.test(t))||'';
    const registration=tokens.find(t=>/^N[0-9]{1,5}[A-Z]{0,2}$/.test(t))||'';
    // Universal ARP section parsing: recognize group keys, rather than matching
@@ -10774,14 +10776,14 @@ createNoaaModelControl().addTo(map);
      }
      if(values.length && !Object.prototype.hasOwnProperty.call(groups,key))groups[key]=values.join(' ');
    }
-   return {flight:tokens[1]||'',points,flToken,wind,temp,registration,tb:groups.TB||'',sk:groups.SK||'',ic:groups.IC||'',wx:groups.WX||''};
+   return {flight:tokens[hasArpPrefix?1:0]||'',points,flToken,wind,temp,registration,tb:groups.TB||'',sk:groups.SK||'',ic:groups.IC||'',wx:groups.WX||''};
  }
  function wxArpTurbulence(value){return wxReportWeatherText('TB',value)}
  function wxArpIcing(value){return wxReportWeatherText('IC',value)}
  function wxArpSky(value){return wxReportWeatherText('SK',value)}
  function wxArpWindDisplay(wind){
-   const m=String(wind||'').match(/^(\d{3})\/(\d{2,3}) KT$/);
-   return m?Number(m[1])+'° / '+Number(m[2])+' KT':String(wind||'');
+   const m=String(wind||'').match(/^(\d{3})\/(\d{2,3})( KT)?$/);
+   return m?Number(m[1])+'° / '+Number(m[2])+(m[3]||''):String(wind||'');
  }
  function wxArpTemperature(temp){
    const m=String(temp||'').match(/^(MS|PS)(\d{2})$/);
@@ -10803,7 +10805,7 @@ createNoaaModelControl().addTo(map);
    const title=String(r.type||'PIREP/AIREP');
    const reportHeader=raw.toUpperCase().match(/^\s*([A-Z]{3,4})\s+(UUA|UA)\b/);
    const reportingStation=reportHeader?reportHeader[1]:'';
-   const reportType=reportHeader?(reportHeader[2]==='UA'?'Routine Pilot Report':'Urgent Pilot Report'):arp?'AIREP (ARP format)':'';
+   const reportType=reportHeader?(reportHeader[2]==='UA'?'Routine Pilot Report':'Urgent Pilot Report'):arp?'AIREP':'';
    const location=f.OV?f.OV:arp?.points[0]?.point || (Number.isFinite(Number(r.lat))&&Number.isFinite(Number(r.lon))?Number(r.lat).toFixed(2)+', '+Number(r.lon).toFixed(2):'');
    const arpAlt=arp?.flToken && /^F(\d{3})$/.test(arp.flToken) ? (Number(arp.flToken.slice(1))*100).toLocaleString('en-US')+' FT' : '';
    const alt=arp ? (arpAlt||arp?.flToken||'') : wxPirepDecodedAlt(r,f);
@@ -11263,6 +11265,70 @@ createNoaaModelControl().addTo(map);
       return !poly.slice(1).some(hole=>advisoryRingContains(hole,latlng));
     });
   }
+  const wxPirepHitEntries=new WeakMap();
+
+  function wxPointLayerHit(layer,point){
+    if(typeof layer.getLatLng!=='function')return false;
+    if(typeof layer.getRadius==='function'){
+      const center=map.latLngToContainerPoint(layer.getLatLng());
+      const stroke=layer.options.stroke===false?0:(layer.options.weight||0)/2;
+      return center.distanceTo(point)<=layer.getRadius()+stroke;
+    }
+    const icon=layer.getElement?.();
+    if(!icon)return false;
+    const rect=icon.getBoundingClientRect();
+    const container=map.getContainer();
+    const bounds=container.getBoundingClientRect();
+    const scaleX=bounds.width/container.offsetWidth||1;
+    const scaleY=bounds.height/container.offsetHeight||1;
+    const x=bounds.left+(point.x+container.clientLeft)*scaleX;
+    const y=bounds.top+(point.y+container.clientTop)*scaleY;
+    return x>=rect.left&&x<=rect.right&&y>=rect.top&&y<=rect.bottom;
+  }
+
+  function showCombinedWeatherChoices(event,clicked,clickedKind){
+    try{
+      const mouse=event.originalEvent;
+      const point=mouse&&Number.isFinite(mouse.clientX)&&Number.isFinite(mouse.clientY)
+        ?map.mouseEventToContainerPoint(mouse):map.latLngToContainerPoint(event.latlng);
+      const latlng=map.containerPointToLatLng(point);
+      const choices=[];
+      const seen=new Set();
+      function add(entry,kind){
+        if(!entry||!map.hasLayer(entry.layer))return;
+        const key=kind+'|'+entry.key;
+        if(seen.has(key))return;
+        seen.add(key);
+        choices.push({entry,kind});
+      }
+      add(clicked,clickedKind);
+      for(const entry of sigmetHitLayers){
+        if(map.hasLayer(entry.layer)&&(sigmetPolygonContains(entry.layer,latlng)||wxPointLayerHit(entry.layer,point)))add(entry,'sigmet');
+      }
+      for(const entry of advisoryHitLayers){
+        if(map.hasLayer(entry.layer)&&advisoryPolygonContains(entry.layer,latlng))add(entry,'advisory');
+      }
+      if(map.hasLayer(pirepLayer)){
+        pirepLayer.eachLayer(layer=>{
+          if(map.hasLayer(layer)&&wxPointLayerHit(layer,point))add(wxPirepHitEntries.get(layer),'pirep');
+        });
+      }
+      if(new Set(choices.map(choice=>choice.kind)).size<2 &&
+        !(clickedKind==='pirep'&&choices.length>1))return false;
+      const html='<div class="wx-advisory-group wx-pirep-group">'+
+        '<div class="wx-group-header">'+choices.length+'건 · 이 위치의 기상정보</div>'+
+        choices.map(({entry},i)=>{
+          const detail=typeof entry.detail==='function'?entry.detail():entry.detailNoTitle||entry.detail;
+          return '<details'+(i===0?' open':'')+'><summary>'+esc(entry.label)+'</summary>'+detail+'</details>';
+        }).join('')+'</div>';
+      L.popup({maxWidth:390,maxHeight:490,autoPan:true}).setLatLng(latlng).setContent(html).openOn(map);
+      return true;
+    }catch(err){
+      console.error('[Weather] overlap click error',err);
+      return false;
+    }
+  }
+
   function showAdvisoryChoices(event,clicked){
     try{
       const hit=advisoryHitLayers.filter(entry=>advisoryPolygonContains(entry.layer,event.latlng));
@@ -11350,11 +11416,9 @@ createNoaaModelControl().addTo(map);
             g.eachLayer(shape=>{
               const entry={layer:shape,key,label,detail,detailNoTitle};
               hitLayers.push(entry);
-              // A built-in fallback popup avoids a blank click on any overlap error.
-              shape.bindPopup(detail,{maxWidth:390});
               shape.on('click',e=>{
                 if(e.originalEvent)L.DomEvent.stopPropagation(e.originalEvent);
-                showAdvisoryChoices(e,entry);
+                if(!showCombinedWeatherChoices(e,entry,'advisory'))showAdvisoryChoices(e,entry);
               });
             });
             g.addTo(layer);
@@ -11427,7 +11491,21 @@ createNoaaModelControl().addTo(map);
          marker=L.circleMarker([r.lat,wrappedLon],{radius:6,color:'#fff',weight:1,
            fillColor:hasIcing?'#0ea5e9':hasTurb?'#f97316':'#a855f7',fillOpacity:.9});
        }
-       marker.bindPopup(popup,{maxWidth:390,maxHeight:480}).addTo(nextPireps);
+       const entry={
+         layer:marker,
+         key:r.lat+'|'+r.lon,
+         label:'PIREP/AIREP · '+wxPirepTimeUtc(r.time,r.raw)+(reports.length>1?' · '+reports.length+'건':''),
+         detail:popup
+       };
+       wxPirepHitEntries.set(marker,entry);
+       const singlePopup=L.popup({maxWidth:390,maxHeight:480},marker).setContent(popup);
+       marker.on('click',e=>{
+         if(e.originalEvent)L.DomEvent.stopPropagation(e.originalEvent);
+         if(!showCombinedWeatherChoices(e,entry,'pirep')){
+           if(singlePopup.isOpen())singlePopup.remove();
+           else singlePopup.setLatLng(marker.getLatLng()).openOn(map);
+         }
+       }).on('remove',()=>singlePopup.remove()).addTo(nextPireps);
        n+=reports.length;
      });pirepLayer.clearLayers();nextPireps.eachLayer(marker=>pirepLayer.addLayer(marker));pirepLayer.addTo(map);lines.push(`PIREP/AIREP ${n}건`+(data.truncated?' (일부 데이터 제한)':''));
     }catch(e){if(id!==pSeq)return;lines.push('PIREP: '+(e.message||e));}
@@ -11455,7 +11533,7 @@ createNoaaModelControl().addTo(map);
          nextHits.push(entry);
          shape.on('click',e=>{
            if(e.originalEvent)L.DomEvent.stopPropagation(e.originalEvent);
-           showSigmetChoices(e,entry);
+           if(!showCombinedWeatherChoices(e,entry,'sigmet'))showSigmetChoices(e,entry);
          });
        });
        g.addTo(nextSigmet);
@@ -11468,7 +11546,16 @@ createNoaaModelControl().addTo(map);
            html:`<span class="wx-volcano-badge" aria-label="VA ERUPTION"><svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 27 12 10c1.5-2.5 6.5-2.5 8 0l9 17Z" fill="#8b8fa2" stroke="#505769" stroke-width="1.4" stroke-linejoin="round"/><path d="M10 13 13 8l3 3 3-3 3 5-4 5-2-3-2 3Z" fill="#ff9791" stroke="#f36d73" stroke-width="1"/><path d="M13 11c-3-5 2-5 1-8 4 3 4 5 2 8" fill="#ffc46b"/><circle cx="12" cy="21" r="1.25" fill="#202c3d"/><circle cx="20" cy="21" r="1.25" fill="#202c3d"/><path d="M14 24q2 2 4 0" fill="none" stroke="#202c3d" stroke-width="1.3" stroke-linecap="round"/></svg></span>`,
            iconSize:[19,19],iconAnchor:[9.5,9.5],popupAnchor:[0,-10]
          }),keyboard:true});
-         vaBadge.bindPopup(txt());vaBadge.on('popupopen',()=>vaBadge.setPopupContent(txt()));
+         const badgeEntry={layer:vaBadge,key:sigmetKey,label:sigmetLabel,detail:txt};
+         nextHits.push(badgeEntry);
+         const badgePopup=L.popup({},vaBadge);
+         vaBadge.on('click',e=>{
+           if(e.originalEvent)L.DomEvent.stopPropagation(e.originalEvent);
+           if(!showCombinedWeatherChoices(e,badgeEntry,'sigmet')){
+             if(badgePopup.isOpen())badgePopup.remove();
+             else badgePopup.setLatLng(centre).setContent(txt()).openOn(map);
+           }
+         }).on('remove',()=>badgePopup.remove());
          g.addLayer(vaBadge);
        }if(Number.isFinite(expiry))nextExpiry.push({layer:g,expires:expiry});n++;}catch(e){console.warn('SIGMET draw failed',item.name,e);undrawn.push((item.name||'Unknown')+' — '+String(e.message||e))}
      });sigmetLayer.clearLayers();sigmetHitLayers=nextHits;sigmetExpiryLayers.length=0;nextSigmet.eachLayer(g=>sigmetLayer.addLayer(g));sigmetExpiryLayers.push(...nextExpiry);sigmetLayer.addTo(map);const missingEl=el.querySelector('.wx-undrawn');missingEl.style.display=undrawn.length?'block':'none';missingEl.textContent=undrawn.length?'Unmapped SIGMET ('+undrawn.length+'): '+undrawn.join(' | '):'';const d=data.diagnostics||{};lines.push(`SIGMET ${n}개 영역 / 수신 ${d.received??'?'}건 · 만료 ${d.expired??'?'} · 도형 누락 ${d.missingGeometry??'?'} · 좌표 복구 ${d.geometryRecovered??'?'} · 미표시 ${d.unsupportedGeometry??'?'}`+(data.truncated?' (일부 제한)':''));
