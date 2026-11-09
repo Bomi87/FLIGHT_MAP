@@ -11313,6 +11313,7 @@ function wxMulti(g){return g.type==='Polygon'?[g.coordinates]:g.coordinates}
           if(map.hasLayer(layer)&&wxPointLayerHit(layer,point))add(wxPirepHitEntries.get(layer),'pirep');
         });
       }
+      if(clickedKind==='waypoint'&&!choices.some(choice=>choice.kind==='pirep'))return false;
       if(new Set(choices.map(choice=>choice.kind)).size<2 &&
         !(clickedKind==='pirep'&&choices.length>1))return false;
       const html='<div class="wx-advisory-group wx-pirep-group">'+
@@ -11328,6 +11329,10 @@ function wxMulti(g){return g.type==='Polygon'?[g.coordinates]:g.coordinates}
       return false;
     }
   }
+
+  map.on('wx:waypointclick',({request})=>{
+    request.handled=showCombinedWeatherChoices(request.event,request.entry,'waypoint');
+  });
 
   function showAdvisoryChoices(event,clicked){
     try{
@@ -12975,7 +12980,18 @@ if (label) {
         if(points.length>1)L.polyline(points,{color:routeColor,weight:3,opacity:.95}).bindPopup(esc(record.name)+'<br>'+esc(route.name)).addTo(layer);
         route.points.forEach((p,i)=>{
           const marker=L.circleMarker(points[i],{pane:'privateFilePoints',renderer:privatePointRenderer,radius:isDesktopView()?4:2.5,color:routeColor,weight:isDesktopView()?2:1,fillColor:waypointFill,fillOpacity:1}).addTo(layer);
-          marker.bindPopup('<strong>'+esc(p.name||'waypoint '+(i+1))+'</strong><br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6));
+          const label=p.name||'waypoint '+(i+1);
+          const detail='<strong>'+esc(label)+'</strong><br>'+p.lat.toFixed(6)+', '+p.lon.toFixed(6);
+          const singlePopup=L.popup({},marker).setContent(detail);
+          const entry={layer:marker,key:L.stamp(marker),label,detail};
+          marker.on('click',event=>{
+            L.DomEvent.stopPropagation(event);
+            const request={event,entry,handled:false};
+            map.fire('wx:waypointclick',{request});
+            if(request.handled)return;
+            if(singlePopup.isOpen())singlePopup.remove();
+            else singlePopup.setLatLng(marker.getLatLng()).openOn(map);
+          }).on('remove',()=>singlePopup.remove());
           if(p.name){const before=waypointLabelRegistry.length;registerWaypointLabel(marker,{type:'Point',name:p.name,description:''},{minZoom:ROUTE_LABEL_MIN_ZOOM,prevPoint:path[i-1]||null,currPoint:path[i],nextPoint:path[i+1]||null,renderContext:{referenceLon:centre},sequence:i,targetLayer:layer});for(let j=before;j<waypointLabelRegistry.length;j++){waypointLabelRegistry[j].privateGpx=true;waypointLabelRegistry[j].privateFileId=record.id;}}
         });
       }
